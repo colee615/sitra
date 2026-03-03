@@ -26,7 +26,7 @@ class SqlServerSearchService
                 "
                 SELECT
                     mi.MAILITM_PID,
-                    RTRIM(LTRIM(mi.MAILITM_FID)) AS MAILITM_FID,
+                    mi.MAILITM_FID AS MAILITM_FID,
                     RTRIM(LTRIM(mi.MAILITM_LOCAL_ID)) AS MAILITM_LOCAL_ID,
                     mi.MAILITM_WEIGHT,
                     mi.MAILITM_VALUE,
@@ -73,15 +73,16 @@ class SqlServerSearchService
             $trackingRowsLocal = collect(DB::connection('sqlsrv')->select(
                 "
                 SELECT
-                    RTRIM(LTRIM(mi.MAILITM_FID)) AS MAILITM_FID,
+                    e.MAILITM_PID,
+                    mi.MAILITM_FID AS MAILITM_FID,
                     RTRIM(LTRIM(mi.MAILITM_LOCAL_ID)) AS MAILITM_LOCAL_ID,
                     e.EVENT_GMT_DT,
                     e.EVENT_TYPE_CD,
                     CASE
                         WHEN e.EVENT_TYPE_CD = 32 THEN 'Paquete recibido en oficina de entrega(Listo para entregar).'
                         WHEN e.EVENT_TYPE_CD = 13 THEN 'Paquete incluido en la saca nacional.'
-                        WHEN e.EVENT_TYPE_CD = 35 THEN 'Paquete en camino a ubicaciÃ³n nacional.'
-                        WHEN e.EVENT_TYPE_CD = 30 THEN 'Paquete recibido en oficina de trÃ¡nsito.'
+                        WHEN e.EVENT_TYPE_CD = 35 THEN 'Paquete en camino a ubicación nacional.'
+                        WHEN e.EVENT_TYPE_CD = 30 THEN 'Paquete recibido en oficina de tránsito.'
                         ELSE COALESCE(ct.LOCAL_EVENT_TYPE_NM, c.EVENT_TYPE_NM)
                     END AS EVENT_TYPE_NM_ES,
                     e.USER_PID,
@@ -93,10 +94,10 @@ class SqlServerSearchService
                     nof.OFFICE_NM,
                     nof_next.OFFICE_FCD AS NEXT_OFFICE_FCD,
                     nof_next.OFFICE_NM AS NEXT_OFFICE_NM,
-                    CONCAT(RTRIM(COALESCE(u.USER_DOMAIN,'')), '-', RTRIM(COALESCE(u.USER_FID,''))) AS SCANNED_TXT,
+                    CONCAT(COALESCE(u.USER_DOMAIN,''), '-', RTRIM(COALESCE(u.USER_FID,''))) AS SCANNED_TXT,
                     CONCAT(RTRIM(COALESCE(w.WORKSTATION_FID,'')), '-', RTRIM(COALESCE(w.WORKSTATION_DOMAIN,''))) AS WORKSTATION_TXT,
                     CASE
-                        WHEN e.CONDITION_CD = 30 THEN 'EnvÃ­o recibido en buen estado'
+                        WHEN e.CONDITION_CD = 30 THEN 'Envío recibido en buen estado'
                         ELSE COALESCE(ic.ITEM_CONDITION_NM, '')
                     END AS CONDITION_TXT,
                     CAST('' AS varchar(200)) AS DETAIL_TXT,
@@ -122,14 +123,15 @@ class SqlServerSearchService
             $trackingRowsEdi = collect(DB::connection('sqlsrv')->select(
                 "
                 SELECT
+                    nee.MAILITM_PID,
                     CAST('' AS varchar(40)) AS MAILITM_FID,
                     CAST('' AS varchar(40)) AS MAILITM_LOCAL_ID,
                     COALESCE(nee.CAPTURE_GMT_DT, CAST(nee.EVENT_LOCAL_DT AS datetime)) AS EVENT_GMT_DT,
                     nee.EVENT_TYPE_CD,
                     CASE
                         WHEN nee.EVENT_TYPE_CD = 12 THEN 'Paquete enviado al extranjero.'
-                        WHEN nee.EVENT_TYPE_CD = 8 THEN 'Paquete incluido en la saca de envÃ­o.'
-                        WHEN nee.EVENT_TYPE_CD = 3 THEN 'Paquete recibido en oficina de trÃ¡nsito.'
+                        WHEN nee.EVENT_TYPE_CD = 8 THEN 'Paquete incluido en la saca de envío.'
+                        WHEN nee.EVENT_TYPE_CD = 3 THEN 'Paquete recibido en oficina de tránsito.'
                         WHEN nee.EVENT_TYPE_CD = 1 THEN 'Paquete recibido del cliente.'
                         ELSE COALESCE(ct.LOCAL_EVENT_TYPE_NM, c.EVENT_TYPE_NM)
                     END AS EVENT_TYPE_NM_ES,
@@ -145,7 +147,7 @@ class SqlServerSearchService
                     CAST('' AS varchar(200)) AS SCANNED_TXT,
                     CAST('' AS varchar(200)) AS WORKSTATION_TXT,
                     CASE
-                        WHEN nee.CONDITION_CD = 30 THEN 'EnvÃ­o recibido en buen estado'
+                        WHEN nee.CONDITION_CD = 30 THEN 'Envío recibido en buen estado'
                         ELSE COALESCE(ic.ITEM_CONDITION_NM, '')
                     END AS CONDITION_TXT,
                     CONCAT('PaÃ­s Origen: ', COALESCE(co.COUNTRY_NM, nee.PLACE_OF_ORIGIN_OFFICE_CD, '')) AS DETAIL_TXT,
