@@ -295,7 +295,7 @@ class SqlServerSearchController extends Controller
     {
         $codigo = strtoupper(trim($codigo));
 
-        if (str_starts_with($codigo, 'RE')) {
+        if (str_starts_with($codigo, 'R')) {
             return 'certificadas';
         }
 
