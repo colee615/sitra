@@ -34,15 +34,7 @@ class SqlServerSearchController extends Controller
 
         try {
             $result = $searchService->search($codigo);
-            $primerPaquete = collect($result['packageRows'] ?? [])->first();
-            $tipoServicio = '';
-
-            if ($primerPaquete) {
-                $tipoServicio = (string) ($primerPaquete->MAIL_CLASS_NM
-                    ?? $primerPaquete->PRODUCT_TYPE_NM
-                    ?? $primerPaquete->MAIL_CLASS_CD
-                    ?? '');
-            }
+            $tipoServicio = $this->inferTipoServicioPorCodigo($result['codigo']);
 
             $eventosExternos = collect($result['trackingRows'])
                 ->map(function ($row) {
@@ -297,5 +289,28 @@ class SqlServerSearchController extends Controller
             ['Envío', 'envío', 'ubicación', 'tránsito', 'devolución', 'información', 'País'],
             $value
         );
+    }
+
+    private function inferTipoServicioPorCodigo(string $codigo): string
+    {
+        $codigo = strtoupper(trim($codigo));
+
+        if (str_starts_with($codigo, 'RE')) {
+            return 'certificadas';
+        }
+
+        if (str_starts_with($codigo, 'O') || str_starts_with($codigo, 'L')) {
+            return 'ordinarias';
+        }
+
+        if (str_starts_with($codigo, 'C')) {
+            return 'encomiendas';
+        }
+
+        if (str_starts_with($codigo, 'E')) {
+            return 'ems';
+        }
+
+        return '';
     }
 }
