@@ -34,6 +34,15 @@ class SqlServerSearchController extends Controller
 
         try {
             $result = $searchService->search($codigo);
+            $primerPaquete = collect($result['packageRows'] ?? [])->first();
+            $tipoServicio = '';
+
+            if ($primerPaquete) {
+                $tipoServicio = (string) ($primerPaquete->MAIL_CLASS_NM
+                    ?? $primerPaquete->PRODUCT_TYPE_NM
+                    ?? $primerPaquete->MAIL_CLASS_CD
+                    ?? '');
+            }
 
             $eventosExternos = collect($result['trackingRows'])
                 ->map(function ($row) {
@@ -84,6 +93,7 @@ class SqlServerSearchController extends Controller
 
             return response()->json([
                 'codigo' => $result['codigo'],
+                'tipo_servicio' => $tipoServicio,
                 'packages' => [],
                 'eventos_locales' => [],
                 'eventos_externos' => $eventosExternos,
@@ -96,6 +106,7 @@ class SqlServerSearchController extends Controller
 
             return response()->json([
                 'codigo' => strtoupper(trim($codigo)),
+                'tipo_servicio' => '',
                 'packages' => [],
                 'eventos_locales' => [],
                 'eventos_externos' => [],
