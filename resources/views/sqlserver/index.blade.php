@@ -13,6 +13,17 @@
 
 @section('content')
     <div class="container-fluid">
+        @php
+            $mainPackage = $packageRows[0] ?? null;
+            $latestEvent = $trackingRows[0] ?? null;
+            $sender = collect($customerRows)->firstWhere('SENDER_PAYEE_IND', 'S');
+            $recipient = collect($customerRows)->firstWhere('SENDER_PAYEE_IND', 'P') ?? collect($customerRows)->firstWhere('SENDER_PAYEE_IND', 'R');
+            $latestDelivery = $deliveryRows[0] ?? null;
+            $latestLogistic = $logisticRows[0] ?? null;
+            $latestManifest = $manifestRows[0] ?? null;
+            $latestEdi = $ediRows[0] ?? null;
+        @endphp
+
         <div class="row">
             <div class="col-12">
                 <div class="card card-primary card-outline">
@@ -47,6 +58,63 @@
         </div>
 
         @if($codigo !== '')
+            <div class="row">
+                <div class="col-12">
+                    <div class="card card-outline card-primary">
+                        <div class="card-header">
+                            <h3 class="card-title">Resumen ejecutivo del paquete</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6 col-12 mb-3">
+                                    <h5>1. Identificacion</h5>
+                                    <p class="mb-1"><strong>Codigo consultado:</strong> {{ $codigo }}</p>
+                                    <p class="mb-1"><strong>Codigo S10:</strong> {{ $mainPackage->MAILITM_FID ?? '-' }}</p>
+                                    <p class="mb-1"><strong>Codigo local:</strong> {{ $mainPackage->MAILITM_LOCAL_ID ?? '-' }}</p>
+                                    <p class="mb-1"><strong>Tipo de envio:</strong> {{ $mainPackage ? (($mainPackage->MAIL_CLASS_NM ?: '-') . ($mainPackage->PRODUCT_TYPE_NM ? ' / ' . $mainPackage->PRODUCT_TYPE_NM : '')) : '-' }}</p>
+                                    <p class="mb-0"><strong>Contenido declarado:</strong> {{ $mainPackage->MAILITM_CONTENT_NM ?? '-' }}</p>
+                                </div>
+                                <div class="col-md-6 col-12 mb-3">
+                                    <h5>2. Estado actual</h5>
+                                    <p class="mb-1"><strong>Estado postal:</strong> {{ $mainPackage->POSTAL_STATUS_NM ?? '-' }}</p>
+                                    <p class="mb-1"><strong>Ultimo evento registrado:</strong> {{ $latestEvent->EVENT_TYPE_NM_ES ?? ($mainPackage->EVT_TYPE_NM_ES ?? '-') }}</p>
+                                    <p class="mb-1"><strong>Ultima fecha relevante:</strong> {{ $latestEvent->EVENT_GMT_DT ?? ($mainPackage->EVT_GMT_DT ?? '-') }}</p>
+                                    <p class="mb-0"><strong>Ultima oficina:</strong> {{ $latestEvent ? (($latestEvent->OFFICE_FCD ? $latestEvent->OFFICE_FCD . ' - ' : '') . ($latestEvent->OFFICE_NM ?: '-')) : (($mainPackage && $mainPackage->EVT_OFFICE_NM) ? (($mainPackage->EVT_OFFICE_FCD ? $mainPackage->EVT_OFFICE_FCD . ' - ' : '') . $mainPackage->EVT_OFFICE_NM) : '-') }}</p>
+                                </div>
+                                <div class="col-md-6 col-12 mb-3">
+                                    <h5>3. Partes involucradas</h5>
+                                    <p class="mb-1"><strong>Remitente:</strong> {{ $sender ? trim(($sender->CUSTOMER_NAME ?: '') . ' ' . ($sender->CUSTOMER_FORENAME ?: '')) : '-' }}</p>
+                                    <p class="mb-1"><strong>Pais origen:</strong> {{ $mainPackage->ORIG_COUNTRY_NM ?? '-' }}</p>
+                                    <p class="mb-1"><strong>Destinatario:</strong> {{ $recipient ? trim(($recipient->CUSTOMER_NAME ?: '') . ' ' . ($recipient->CUSTOMER_FORENAME ?: '')) : '-' }}</p>
+                                    <p class="mb-0"><strong>Pais destino:</strong> {{ $mainPackage->DEST_COUNTRY_NM ?? '-' }}</p>
+                                </div>
+                                <div class="col-md-6 col-12 mb-3">
+                                    <h5>4. Situacion de entrega</h5>
+                                    <p class="mb-1"><strong>Ultimo dato de entrega:</strong> {{ $latestDelivery->EVENT_TYPE_NM_ES ?? 'Sin registro de entrega' }}</p>
+                                    <p class="mb-1"><strong>Firmante:</strong> {{ $latestDelivery->SIGNATORY_NM ?? '-' }}</p>
+                                    <p class="mb-1"><strong>Lugar:</strong> {{ $latestDelivery->DELIV_LOCATION ?? '-' }}</p>
+                                    <p class="mb-0"><strong>Observacion de no entrega:</strong> {{ $latestDelivery ? (($latestDelivery->NON_DELIVERY_REASON_CD ?: '-') . ' / ' . ($latestDelivery->NON_DELIVERY_MEASURE_CD ?: '-')) : '-' }}</p>
+                                </div>
+                                <div class="col-md-6 col-12">
+                                    <h5>5. Movimiento logistico</h5>
+                                    <p class="mb-1"><strong>Saca o receptaculo:</strong> {{ $latestLogistic->RECPTCL_FID ?? '-' }}</p>
+                                    <p class="mb-1"><strong>Despacho:</strong> {{ $latestLogistic->DESPTCH_FID ?? '-' }}</p>
+                                    <p class="mb-1"><strong>Ruta:</strong> {{ $latestLogistic ? (($latestLogistic->ORIG_OFFICE_FCD ?: '-') . ' -> ' . ($latestLogistic->DEST_OFFICE_FCD ?: '-')) : '-' }}</p>
+                                    <p class="mb-0"><strong>Salida registrada:</strong> {{ $latestLogistic->DESPTCH_DEPARTURE_DT ?? '-' }}</p>
+                                </div>
+                                <div class="col-md-6 col-12">
+                                    <h5>6. Soporte documental y externo</h5>
+                                    <p class="mb-1"><strong>Manifiesto mas reciente:</strong> {{ $latestManifest->MANIFEST_LIST_ID ?? '-' }}</p>
+                                    <p class="mb-1"><strong>Oficina del manifiesto:</strong> {{ $latestManifest ? (($latestManifest->OFFICE_FCD ? $latestManifest->OFFICE_FCD . ' - ' : '') . ($latestManifest->OFFICE_NM ?: '-')) : '-' }}</p>
+                                    <p class="mb-1"><strong>Ultimo evento EDI:</strong> {{ $latestEdi->EVENT_TYPE_NM_ES ?? '-' }}</p>
+                                    <p class="mb-0"><strong>Ultima captura EDI:</strong> {{ $latestEdi->CAPTURE_GMT_DT ?? '-' }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="row">
                 <div class="col-md-3 col-12">
                     <div class="small-box bg-info">
@@ -88,8 +156,19 @@
 
             <div class="row">
                 <div class="col-12">
+                    <div class="callout callout-info">
+                        <h5>Como leer esta pantalla</h5>
+                        <p class="mb-1">Primero revise el resumen ejecutivo para conocer la situacion general del paquete.</p>
+                        <p class="mb-1">Despues use la ficha, la entrega, la logistica y los manifiestos para validar el detalle operativo.</p>
+                        <p class="mb-0">La timeline completa muestra el recorrido cronologico del envio desde el evento mas reciente hasta el mas antiguo.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-12">
                     <div class="card card-outline card-primary">
-                        <div class="card-header"><h3 class="card-title">Ficha del paquete (cabecera)</h3></div>
+                        <div class="card-header"><h3 class="card-title">Detalle de identificacion y estado del paquete</h3></div>
                         <div class="card-body p-0">
                             <div class="table-responsive">
                                 <table class="table table-sm table-striped mb-0">
@@ -141,7 +220,7 @@
             <div class="row">
                 <div class="col-md-6 col-12">
                     <div class="card card-outline card-info">
-                        <div class="card-header"><h3 class="card-title">Clientes (remitente/destinatario)</h3></div>
+                        <div class="card-header"><h3 class="card-title">Partes involucradas: remitente y destinatario</h3></div>
                         <div class="card-body p-0">
                             <div class="table-responsive">
                                 <table class="table table-sm table-striped mb-0">
@@ -171,7 +250,7 @@
                 </div>
                 <div class="col-md-6 col-12">
                     <div class="card card-outline card-warning">
-                        <div class="card-header"><h3 class="card-title">Entrega</h3></div>
+                        <div class="card-header"><h3 class="card-title">Situacion de entrega</h3></div>
                         <div class="card-body p-0">
                             <div class="table-responsive">
                                 <table class="table table-sm table-striped mb-0">
@@ -203,7 +282,7 @@
             <div class="row">
                 <div class="col-md-6 col-12">
                     <div class="card card-outline card-secondary">
-                        <div class="card-header"><h3 class="card-title">Logistica (saca y despacho)</h3></div>
+                        <div class="card-header"><h3 class="card-title">Movimiento logistico: saca y despacho</h3></div>
                         <div class="card-body p-0">
                             <div class="table-responsive">
                                 <table class="table table-sm table-striped mb-0">
@@ -234,7 +313,7 @@
                 </div>
                 <div class="col-md-6 col-12">
                     <div class="card card-outline card-dark">
-                        <div class="card-header"><h3 class="card-title">Manifiestos</h3></div>
+                        <div class="card-header"><h3 class="card-title">Soporte documental: manifiestos</h3></div>
                         <div class="card-body p-0">
                             <div class="table-responsive">
                                 <table class="table table-sm table-striped mb-0">
@@ -265,7 +344,7 @@
             <div class="row">
                 <div class="col-12">
                     <div class="card card-outline card-success">
-                        <div class="card-header"><h3 class="card-title">Eventos EDI</h3></div>
+                        <div class="card-header"><h3 class="card-title">Intercambio externo: eventos EDI</h3></div>
                         <div class="card-body p-0">
                             <div class="table-responsive">
                                 <table class="table table-sm table-striped mb-0">
@@ -299,7 +378,7 @@
             <div class="row">
                 <div class="col-12">
                     <div class="card card-outline card-primary">
-                        <div class="card-header"><h3 class="card-title">Timeline completa (mas reciente a mas antiguo)</h3></div>
+                        <div class="card-header"><h3 class="card-title">Recorrido completo del paquete (del evento mas reciente al mas antiguo)</h3></div>
                         <div class="card-body p-0">
                             <div class="table-responsive">
                                 <table class="table table-striped table-hover table-sm mb-0">
@@ -348,7 +427,7 @@
                 <div class="col-12">
                     <div class="card card-outline card-info">
                         <div class="card-header">
-                            <h3 class="card-title">Tablas participantes y atributos clave</h3>
+                            <h3 class="card-title">Origen tecnico de la informacion</h3>
                         </div>
                         <div class="card-body p-0">
                             <div class="table-responsive">
