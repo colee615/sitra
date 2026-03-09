@@ -38,6 +38,7 @@ class SqlServerExternalSearchSafeController extends Controller
 
             return response()->json([
                 'codigo' => $result['codigo'] ?? strtoupper(trim($codigo)),
+                'tipo_servicio' => $this->resolveServiceType($result['codigo'] ?? $codigo),
                 'eventos_externos' => $this->transformExternalEvents($result['trackingRows'] ?? [], $originCountry),
             ]);
         } catch (Throwable $e) {
@@ -48,6 +49,7 @@ class SqlServerExternalSearchSafeController extends Controller
 
             return response()->json([
                 'codigo' => strtoupper(trim($codigo)),
+                'tipo_servicio' => $this->resolveServiceType($codigo),
                 'eventos_externos' => [],
             ], 500);
         }
@@ -237,6 +239,19 @@ class SqlServerExternalSearchSafeController extends Controller
         ];
 
         return $countries[$countryCode] ?? '';
+    }
+
+    private function resolveServiceType(string $codigo): string
+    {
+        $prefix = strtoupper(substr(trim($codigo), 0, 1));
+
+        return match ($prefix) {
+            'E' => 'EMS',
+            'C' => 'Encomiendas',
+            'R' => 'Certificadas',
+            'U', 'L' => 'Ordinarias',
+            default => '',
+        };
     }
 
     private function cleanLabel(string $value): string
