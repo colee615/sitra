@@ -164,8 +164,11 @@ class SqlServerSearchService
                 [$codigo]
             ));
 
+            $trackingRowsIndirect = $this->indirectTrackingRows($packageRows, $codigo);
+
             $trackingRows = $trackingRowsLocal
                 ->concat($trackingRowsEdi)
+                ->concat($trackingRowsIndirect)
                 ->sortByDesc('EVENT_GMT_DT')
                 ->values();
 
@@ -314,8 +317,176 @@ class SqlServerSearchService
             ['table' => 'L_MANIFEST_LISTS', 'purpose' => 'Cabecera del manifiesto.', 'attrs' => 'MANIFEST_LIST_ID, CREATION_LCL_DT, OWN_OFFICE_CD, MANIF_TYPE_ID'],
             ['table' => 'N_EDI_MAILITMS', 'purpose' => 'Representacion EDI del item.', 'attrs' => 'MAILITM_PID, MAILITM_FID, EVENT_TYPE_CD, DEST_COUNTRY_CD, RECPTCL_PID'],
             ['table' => 'N_EDI_MAILITM_EVENTS', 'purpose' => 'Eventos EDI transmitidos/registrados.', 'attrs' => 'MAILITM_PID, EVENT_TYPE_CD, EVENT_LOCAL_DT, CAPTURE_GMT_DT, LOCATION_ID, DESPATCH_NUMBER'],
+            ['table' => 'L_DOMESTIC_RECPTCLS_MAILITMS', 'purpose' => 'Vinculo paquete-envase nacional.', 'attrs' => 'MAILITM_PID, DOM_REC_PID'],
+            ['table' => 'L_DOMESTIC_RECPTCL_EVENTS', 'purpose' => 'Eventos del envase nacional relacionado.', 'attrs' => 'DOM_REC_PID, EVENT_TYPE_CD, EVENT_GMT_DT, OWN_OFFICE_CD, USER_PID'],
+            ['table' => 'L_DOMESTIC_DESPTCH_EVENTS', 'purpose' => 'Eventos del despacho nacional vinculado al envase.', 'attrs' => 'DOM_DESPTCH_PID, EVENT_TYPE_CD, EVENT_GMT_DT, OWN_OFFICE_CD, USER_PID'],
+            ['table' => 'L_RECPTCL_EVENTS', 'purpose' => 'Eventos del receptaculo internacional vinculado.', 'attrs' => 'RECPTCL_PID, EVENT_TYPE_CD, EVENT_GMT_DT, EVENT_OFFICE_CD, USER_PID'],
             ['table' => 'N_OWN_OFFICES', 'purpose' => 'Catalogo de oficinas.', 'attrs' => 'OWN_OFFICE_CD, OFFICE_FCD, OFFICE_NM'],
             ['table' => 'L_USERS', 'purpose' => 'Usuario operador del evento.', 'attrs' => 'USER_PID, USER_FID, USER_NM'],
         ];
+    }
+
+    private function indirectTrackingRows($packageRows, string $codigo)
+    {
+        $packagePids = collect($packageRows)
+            ->pluck('MAILITM_PID')
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($packagePids->isEmpty()) {
+            return collect();
+        }
+
+        $placeholders = implode(',', array_fill(0, $packagePids->count(), '?'));
+        $bindings = $packagePids->all();
+
+        $domesticReceptacleRows = collect(DB::connection('sqlsrv')->select(
+            "
+            SELECT
+                dm.MAILITM_PID,
+                RTRIM(LTRIM(mi.MAILITM_FID)) AS MAILITM_FID,
+                RTRIM(LTRIM(mi.MAILITM_LOCAL_ID)) AS MAILITM_LOCAL_ID,
+                dre.EVENT_GMT_DT,
+                dre.EVENT_TYPE_CD,
+                CONCAT(COALESCE(ct.LOCAL_EVENT_TYPE_NM, c.EVENT_TYPE_NM), ' [Indirecto: envase nacional]') AS EVENT_TYPE_NM_ES,
+                dre.USER_PID,
+                u.USER_FID,
+                u.USER_NM,
+                u.USER_DOMAIN,
+                dre.OWN_OFFICE_CD AS EVENT_OFFICE_CD,
+                nof.OFFICE_FCD,
+                nof.OFFICE_NM,
+                nof_next.OFFICE_FCD AS NEXT_OFFICE_FCD,
+                nof_next.OFFICE_NM AS NEXT_OFFICE_NM,
+                CONCAT(COALESCE(u.USER_DOMAIN,''), '-', RTRIM(COALESCE(u.USER_FID,''))) AS SCANNED_TXT,
+                CONCAT(RTRIM(COALESCE(w.WORKSTATION_FID,'')), '-', RTRIM(COALESCE(w.WORKSTATION_DOMAIN,''))) AS WORKSTATION_TXT,
+                CAST('' AS varchar(200)) AS CONDITION_TXT,
+                CONCAT(
+                    'Envase nacional: ',
+                    RTRIM(LTRIM(dr.DOM_REC_FID)),
+                    ' | Ruta: ',
+                    COALESCE(nof_orig.OFFICE_FCD, '-'),
+                    ' -> ',
+                    COALESCE(nof_dest.OFFICE_FCD, '-')
+                ) AS DETAIL_TXT,
+                'IPS5Db-DOM-RECPTCL' AS SOURCE_DB
+            FROM dbo.L_DOMESTIC_RECPTCLS_MAILITMS dm
+            INNER JOIN dbo.L_MAILITMS mi ON mi.MAILITM_PID = dm.MAILITM_PID
+            INNER JOIN dbo.L_DOMESTIC_RECPTCLS dr ON dr.DOM_REC_PID = dm.DOM_REC_PID
+            INNER JOIN dbo.L_DOMESTIC_RECPTCL_EVENTS dre ON dre.DOM_REC_PID = dr.DOM_REC_PID
+            LEFT JOIN dbo.C_EVENT_TYPES c ON c.EVENT_TYPE_CD = dre.EVENT_TYPE_CD
+            LEFT JOIN dbo.CT_EVENT_TYPES ct ON ct.EVENT_TYPE_CD = dre.EVENT_TYPE_CD AND ct.LANGUAGE_CD = 'ES'
+            LEFT JOIN dbo.N_OWN_OFFICES nof ON nof.OWN_OFFICE_CD = dre.OWN_OFFICE_CD
+            LEFT JOIN dbo.N_OWN_OFFICES nof_next ON nof_next.OWN_OFFICE_CD = dre.NEXT_OFFICE_CD
+            LEFT JOIN dbo.N_OWN_OFFICES nof_orig ON nof_orig.OWN_OFFICE_CD = dr.ORIG_OWN_OFFICE_CD
+            LEFT JOIN dbo.N_OWN_OFFICES nof_dest ON nof_dest.OWN_OFFICE_CD = dr.DEST_OWN_OFFICE_CD
+            LEFT JOIN dbo.L_USERS u ON u.USER_PID = dre.USER_PID
+            LEFT JOIN dbo.L_WORKSTATIONS w ON w.WORKSTATION_PID = dre.WORKSTATION_PID
+            WHERE dm.MAILITM_PID IN ($placeholders)
+            ",
+            $bindings
+        ));
+
+        $domesticDespatchRows = collect(DB::connection('sqlsrv')->select(
+            "
+            SELECT
+                dm.MAILITM_PID,
+                RTRIM(LTRIM(mi.MAILITM_FID)) AS MAILITM_FID,
+                RTRIM(LTRIM(mi.MAILITM_LOCAL_ID)) AS MAILITM_LOCAL_ID,
+                dde.EVENT_GMT_DT,
+                dde.EVENT_TYPE_CD,
+                CONCAT(COALESCE(ct.LOCAL_EVENT_TYPE_NM, c.EVENT_TYPE_NM), ' [Indirecto: despacho nacional]') AS EVENT_TYPE_NM_ES,
+                dde.USER_PID,
+                u.USER_FID,
+                u.USER_NM,
+                u.USER_DOMAIN,
+                dde.OWN_OFFICE_CD AS EVENT_OFFICE_CD,
+                nof.OFFICE_FCD,
+                nof.OFFICE_NM,
+                CAST(NULL AS varchar(30)) AS NEXT_OFFICE_FCD,
+                CAST(NULL AS varchar(150)) AS NEXT_OFFICE_NM,
+                CONCAT(COALESCE(u.USER_DOMAIN,''), '-', RTRIM(COALESCE(u.USER_FID,''))) AS SCANNED_TXT,
+                CONCAT(RTRIM(COALESCE(w.WORKSTATION_FID,'')), '-', RTRIM(COALESCE(w.WORKSTATION_DOMAIN,''))) AS WORKSTATION_TXT,
+                CAST('' AS varchar(200)) AS CONDITION_TXT,
+                CONCAT('Despacho nacional: ', RTRIM(LTRIM(dd.DOM_DESPTCH_FID))) AS DETAIL_TXT,
+                'IPS5Db-DOM-DESPTCH' AS SOURCE_DB
+            FROM dbo.L_DOMESTIC_RECPTCLS_MAILITMS dm
+            INNER JOIN dbo.L_MAILITMS mi ON mi.MAILITM_PID = dm.MAILITM_PID
+            INNER JOIN dbo.L_DOMESTIC_RECPTCLS dr ON dr.DOM_REC_PID = dm.DOM_REC_PID
+            INNER JOIN dbo.L_DOMESTIC_DESPTCHS dd ON dd.DOM_DESPTCH_PID = dr.DOM_DESPTCH_PID
+            INNER JOIN dbo.L_DOMESTIC_DESPTCH_EVENTS dde ON dde.DOM_DESPTCH_PID = dd.DOM_DESPTCH_PID
+            LEFT JOIN dbo.C_EVENT_TYPES c ON c.EVENT_TYPE_CD = dde.EVENT_TYPE_CD
+            LEFT JOIN dbo.CT_EVENT_TYPES ct ON ct.EVENT_TYPE_CD = dde.EVENT_TYPE_CD AND ct.LANGUAGE_CD = 'ES'
+            LEFT JOIN dbo.N_OWN_OFFICES nof ON nof.OWN_OFFICE_CD = dde.OWN_OFFICE_CD
+            LEFT JOIN dbo.L_USERS u ON u.USER_PID = dde.USER_PID
+            LEFT JOIN dbo.L_WORKSTATIONS w ON w.WORKSTATION_PID = dde.WORKSTATION_PID
+            WHERE dm.MAILITM_PID IN ($placeholders)
+            ",
+            $bindings
+        ));
+
+        $receptacleRows = collect(DB::connection('sqlsrv')->select(
+            "
+            SELECT
+                src.MAILITM_PID,
+                RTRIM(LTRIM(mi.MAILITM_FID)) AS MAILITM_FID,
+                RTRIM(LTRIM(mi.MAILITM_LOCAL_ID)) AS MAILITM_LOCAL_ID,
+                re.EVENT_GMT_DT,
+                re.EVENT_TYPE_CD,
+                CONCAT(COALESCE(ct.LOCAL_EVENT_TYPE_NM, c.EVENT_TYPE_NM), ' [Indirecto: receptaculo]') AS EVENT_TYPE_NM_ES,
+                re.USER_PID,
+                u.USER_FID,
+                u.USER_NM,
+                u.USER_DOMAIN,
+                re.EVENT_OFFICE_CD AS EVENT_OFFICE_CD,
+                nof.OFFICE_FCD,
+                nof.OFFICE_NM,
+                nof_next.OFFICE_FCD AS NEXT_OFFICE_FCD,
+                nof_next.OFFICE_NM AS NEXT_OFFICE_NM,
+                CONCAT(COALESCE(u.USER_DOMAIN,''), '-', RTRIM(COALESCE(u.USER_FID,''))) AS SCANNED_TXT,
+                CONCAT(RTRIM(COALESCE(w.WORKSTATION_FID,'')), '-', RTRIM(COALESCE(w.WORKSTATION_DOMAIN,''))) AS WORKSTATION_TXT,
+                CASE
+                    WHEN re.CONDITION_CD = 30 THEN 'Envio recibido en buen estado'
+                    ELSE COALESCE(ic.ITEM_CONDITION_NM, '')
+                END AS CONDITION_TXT,
+                CONCAT('Receptaculo: ', RTRIM(LTRIM(r.RECPTCL_FID))) AS DETAIL_TXT,
+                'IPS5Db-RECPTCL' AS SOURCE_DB
+            FROM (
+                SELECT DISTINCT e.MAILITM_PID, e.RECPTCL_PID
+                FROM dbo.L_MAILITM_EVENTS e
+                WHERE e.MAILITM_PID IN ($placeholders) AND e.RECPTCL_PID IS NOT NULL
+                UNION
+                SELECT DISTINCT ne.MAILITM_PID, ne.RECPTCL_PID
+                FROM dbo.N_EDI_MAILITMS ne
+                WHERE ne.MAILITM_PID IN ($placeholders) AND ne.RECPTCL_PID IS NOT NULL
+            ) src
+            INNER JOIN dbo.L_MAILITMS mi ON mi.MAILITM_PID = src.MAILITM_PID
+            INNER JOIN dbo.L_RECPTCLS r ON r.RECPTCL_PID = src.RECPTCL_PID
+            INNER JOIN dbo.L_RECPTCL_EVENTS re ON re.RECPTCL_PID = src.RECPTCL_PID
+            LEFT JOIN dbo.C_EVENT_TYPES c ON c.EVENT_TYPE_CD = re.EVENT_TYPE_CD
+            LEFT JOIN dbo.CT_EVENT_TYPES ct ON ct.EVENT_TYPE_CD = re.EVENT_TYPE_CD AND ct.LANGUAGE_CD = 'ES'
+            LEFT JOIN dbo.N_OWN_OFFICES nof ON nof.OWN_OFFICE_CD = re.EVENT_OFFICE_CD
+            LEFT JOIN dbo.N_OWN_OFFICES nof_next ON nof_next.OWN_OFFICE_CD = re.NEXT_OFFICE_CD
+            LEFT JOIN dbo.L_USERS u ON u.USER_PID = re.USER_PID
+            LEFT JOIN dbo.L_WORKSTATIONS w ON w.WORKSTATION_PID = re.WORKSTATION_PID
+            LEFT JOIN dbo.C_ITEM_CONDITIONS ic ON ic.ITEM_CONDITION_CD = re.CONDITION_CD
+            ",
+            array_merge($bindings, $bindings)
+        ));
+
+        return $domesticReceptacleRows
+            ->concat($domesticDespatchRows)
+            ->concat($receptacleRows)
+            ->unique(function ($row) {
+                return implode('|', [
+                    $row->SOURCE_DB ?? '',
+                    $row->MAILITM_PID ?? '',
+                    $row->EVENT_GMT_DT ?? '',
+                    $row->EVENT_TYPE_CD ?? '',
+                    $row->DETAIL_TXT ?? '',
+                ]);
+            })
+            ->values();
     }
 }
