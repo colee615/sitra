@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Services\SqlServerSearchService;
+use App\Services\TrackingSearchCacheService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -12,7 +12,7 @@ use Throwable;
 
 class SqlServerExternalSearchSafeController extends Controller
 {
-    public function __invoke(Request $request, SqlServerSearchService $searchService): JsonResponse
+    public function __invoke(Request $request, TrackingSearchCacheService $searchService): JsonResponse
     {
         if (!$request->user() || !$request->user()->hasRole('admin')) {
             return response()->json([
@@ -33,14 +33,18 @@ class SqlServerExternalSearchSafeController extends Controller
         $codigo = $validated['codigo'];
 
         try {
-            $result = $searchService->search($codigo);
+            $lookup = $searchService->search($codigo);
+            $result = $lookup['data'];
             $originCountry = $this->resolveOriginCountry($result['packageRows'] ?? [], $result['codigo'] ?? $codigo);
 
             return response()->json([
                 'codigo' => $result['codigo'] ?? strtoupper(trim($codigo)),
                 'tipo_servicio' => $this->resolveServiceType($result['codigo'] ?? $codigo),
                 'eventos_externos' => $this->transformExternalEvents($result['trackingRows'] ?? [], $originCountry),
-            ]);
+            ])
+                ->header('X-Tracking-Cache', (string) ($lookup['cache_status'] ?? 'unknown'))
+                ->header('X-Tracking-Backend', 'sqlsrv')
+                ->header('X-Tracking-Stale', !empty($lookup['stale_fallback']) ? 'true' : 'false');
         } catch (Throwable $e) {
             Log::error('Error consultando SQL Server API', [
                 'codigo' => strtoupper(trim($codigo)),

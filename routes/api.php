@@ -3,4 +3,10 @@
 use App\Http\Controllers\Api\SqlServerExternalSearchSafeController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['auth:sanctum', 'throttle:30,1'])->get('/sqlserver/busqueda', SqlServerExternalSearchSafeController::class);
+Route::middleware(['auth:sanctum', 'throttle:30,1'])->group(function () {
+    // Ruta canonica de negocio: no expone el backend tecnico en la URL.
+    Route::get('/tracking/eventos', SqlServerExternalSearchSafeController::class);
+
+    // Alias legado para no romper consumidores actuales.
+    Route::get('/sqlserver/busqueda', SqlServerExternalSearchSafeController::class);
+});
