@@ -1,0 +1,99 @@
+:root {
+  --sitra-cyan: #0ea5c6;
+  --sitra-cyan-strong: #0891b2;
+  --sitra-navy: #111c4e;
+  --sitra-bg: #dce3ea;
+}
+
+body {
+  background: var(--sitra-bg) !important;
+}
+
+.content-wrapper {
+  background: transparent !important;
+}
+
+.main-sidebar {
+  background: linear-gradient(180deg, #172554 0%, #0f1b46 70%, #0b173e 100%) !important;
+}
+
+.main-sidebar .brand-link {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+
+.main-sidebar .brand-text,
+.main-sidebar .nav-sidebar .nav-link,
+.main-sidebar .sidebar a {
+  color: #dbeafe !important;
+}
+
+.nav-sidebar .nav-link.active {
+  background: linear-gradient(90deg, var(--sitra-cyan-strong), var(--sitra-cyan)) !important;
+  color: #fff !important;
+  border-radius: 10px;
+  box-shadow: 0 8px 18px rgba(8, 145, 178, 0.35);
+}
+
+.nav-sidebar .nav-link:hover {
+  background: rgba(14, 165, 198, 0.16) !important;
+  border-radius: 10px;
+}
+
+.main-header.navbar {
+  background: #ffffff !important;
+  border-bottom: 1px solid #c9d5e3 !important;
+}
+
+.content-header h1,
+.card-title,
+h1,
+h2,
+h3,
+h4,
+h5 {
+  color: #0f172a;
+}
+
+.card {
+  border: 1px solid #c9d5e3 !important;
+  border-radius: 16px !important;
+  box-shadow: 0 16px 35px rgba(15, 23, 42, 0.12) !important;
+  overflow: hidden;
+}
+
+.card-header {
+  background: linear-gradient(90deg, #f8fbff, #edf7fb) !important;
+  border-bottom: 1px solid #d6e2ef !important;
+}
+
+.btn-primary {
+  background: linear-gradient(90deg, var(--sitra-cyan-strong), var(--sitra-cyan)) !important;
+  border: none !important;
+  border-radius: 10px !important;
+  box-shadow: 0 8px 18px rgba(8, 145, 178, 0.28) !important;
+}
+
+.btn-primary:hover {
+  filter: brightness(1.05);
+}
+
+.form-control {
+  border-radius: 10px !important;
+  border-color: #b9c9dc !important;
+}
+
+.form-control:focus {
+  border-color: var(--sitra-cyan) !important;
+  box-shadow: 0 0 0 0.2rem rgba(14, 165, 198, 0.2) !important;
+}
+
+label {
+  color: #1f2f46;
+  font-weight: 700;
+}
+
+.table thead th {
+  background: #eff8fc;
+  border-bottom: 1px solid #cfe2ef;
+  color: #14324a;
+}

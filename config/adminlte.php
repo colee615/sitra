@@ -410,6 +410,16 @@ return [
     */
 
     'plugins' => [
+        'SitraTheme' => [
+            'active' => true,
+            'files' => [
+                [
+                    'type' => 'css',
+                    'asset' => true,
+                    'location' => 'css/sitra-admin.css',
+                ],
+            ],
+        ],
         'Datatables' => [
             'active' => false,
             'files' => [
@@ -529,3 +539,4 @@ return [
 
     'livewire' => false,
 ];
+
