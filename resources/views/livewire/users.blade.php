@@ -52,8 +52,6 @@
                                     <th>Nombre Completo</th>
                                     <th>Email</th>
                                     <th>Contraseña</th>
-                                    <th>Regional</th>
-                                    <th>Carnet Identidad</th>
                                     <th>Estado</th>
                                     <th>Nivel de Usuario</th>
                                     <th>Acciones</th>
@@ -66,8 +64,6 @@
                                         <td>{{ $user->name }}</td>
                                         <td>{{ $user->email }}</td>
                                         <td>{{ str_repeat('*', min(12, strlen($user->password))) }}</td>
-                                        <td>{{ $user->ciudad }}</td>
-                                        <td>{{ $user->ci }}</td>
                                         <td><span class="badge {{ $user->trashed() ? 'badge-danger' : 'badge-info' }}">
                                                 {{ $user->trashed() ? 'Inactivo' : 'Activo' }}
                                             </span></td>

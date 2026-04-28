@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Role;
 
 class UserController extends Controller
@@ -39,9 +40,16 @@ class UserController extends Controller
         $user->password = bcrypt($request->password);
         $user->save();
 
-        if ($request->filled('roles')) {
-            $roleNames = Role::whereIn('id', $request->roles)->pluck('name')->toArray();
-            $user->syncRoles($roleNames);
+        $roleIds = $request->input('roles', []);
+        foreach ($roleIds as $roleId) {
+            DB::table('model_has_roles')->updateOrInsert(
+                [
+                    'role_id' => (int) $roleId,
+                    'model_id' => $user->id,
+                    'model_type' => User::class,
+                ],
+                []
+            );
         }
 
         return redirect()->route('users.index')
@@ -82,10 +90,22 @@ class UserController extends Controller
 
         $user->save();
 
-        $roleNames = $request->filled('roles')
-            ? Role::whereIn('id', $request->roles)->pluck('name')->toArray()
-            : [];
-        $user->syncRoles($roleNames);
+        DB::table('model_has_roles')
+            ->where('model_id', $user->id)
+            ->where('model_type', User::class)
+            ->delete();
+
+        $roleIds = $request->input('roles', []);
+        foreach ($roleIds as $roleId) {
+            DB::table('model_has_roles')->updateOrInsert(
+                [
+                    'role_id' => (int) $roleId,
+                    'model_id' => $user->id,
+                    'model_type' => User::class,
+                ],
+                []
+            );
+        }
 
         return redirect()->route('users.index')
             ->with('success', 'Usuario actualizado correctamente');

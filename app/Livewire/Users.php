@@ -57,6 +57,24 @@ class Users extends Component
         $this->dispatch('closeModal');
     }
 
+    public function delete($userId)
+    {
+        $user = User::find($userId);
+        if ($user) {
+            $user->delete();
+            session()->flash('success', 'Usuario dado de baja correctamente.');
+        }
+    }
+
+    public function restore($userId)
+    {
+        $user = User::withTrashed()->find($userId);
+        if ($user) {
+            $user->restore();
+            session()->flash('success', 'Usuario reactivado correctamente.');
+        }
+    }
+
     public function render()
     {
         // Obtener los usuarios con paginación y filtrados por el campo de búsqueda

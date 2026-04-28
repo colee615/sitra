@@ -1,99 +1,137 @@
 :root {
-  --sitra-cyan: #0ea5c6;
-  --sitra-cyan-strong: #0891b2;
-  --sitra-navy: #111c4e;
-  --sitra-bg: #dce3ea;
+  --sitra-accent: #0ea5c6;
+  --sitra-accent-dark: #0b88a4;
+  --sitra-sidebar: #0f172a;
+  --sitra-sidebar-soft: #1e293b;
+  --sitra-bg: #f3f6fb;
+  --sitra-text: #0f172a;
+  --sitra-muted: #64748b;
+  --sitra-border: #dbe3ee;
 }
 
 body {
   background: var(--sitra-bg) !important;
+  color: var(--sitra-text);
 }
 
 .content-wrapper {
-  background: transparent !important;
-}
-
-.main-sidebar {
-  background: linear-gradient(180deg, #172554 0%, #0f1b46 70%, #0b173e 100%) !important;
-}
-
-.main-sidebar .brand-link {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12) !important;
-}
-
-.main-sidebar .brand-text,
-.main-sidebar .nav-sidebar .nav-link,
-.main-sidebar .sidebar a {
-  color: #dbeafe !important;
-}
-
-.nav-sidebar .nav-link.active {
-  background: linear-gradient(90deg, var(--sitra-cyan-strong), var(--sitra-cyan)) !important;
-  color: #fff !important;
-  border-radius: 10px;
-  box-shadow: 0 8px 18px rgba(8, 145, 178, 0.35);
-}
-
-.nav-sidebar .nav-link:hover {
-  background: rgba(14, 165, 198, 0.16) !important;
-  border-radius: 10px;
+  background: var(--sitra-bg) !important;
 }
 
 .main-header.navbar {
   background: #ffffff !important;
-  border-bottom: 1px solid #c9d5e3 !important;
+  border-bottom: 1px solid var(--sitra-border) !important;
+}
+
+.main-sidebar {
+  background: linear-gradient(180deg, var(--sitra-sidebar) 0%, #0b1225 100%) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.main-sidebar .brand-link {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.main-sidebar .brand-text,
+.main-sidebar .sidebar a,
+.main-sidebar .nav-header,
+.main-sidebar .nav-icon,
+.main-sidebar .nav-sidebar .nav-link {
+  color: #dbe6ff !important;
+}
+
+.nav-sidebar .nav-link {
+  border-radius: 10px;
+  margin: 3px 8px;
+  padding: 10px 14px;
+}
+
+.nav-sidebar .nav-link:hover {
+  background: rgba(148, 163, 184, 0.16) !important;
+}
+
+.nav-sidebar .nav-link.active {
+  background: #0f3b53 !important;
+  color: #e6f8ff !important;
+  box-shadow: inset 3px 0 0 0 var(--sitra-accent);
 }
 
 .content-header h1,
 .card-title,
-h1,
-h2,
-h3,
-h4,
-h5 {
-  color: #0f172a;
+h1,h2,h3,h4,h5 {
+  color: var(--sitra-text);
 }
 
 .card {
-  border: 1px solid #c9d5e3 !important;
-  border-radius: 16px !important;
-  box-shadow: 0 16px 35px rgba(15, 23, 42, 0.12) !important;
+  border: 1px solid var(--sitra-border) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06) !important;
   overflow: hidden;
+  background: #fff;
 }
 
 .card-header {
-  background: linear-gradient(90deg, #f8fbff, #edf7fb) !important;
-  border-bottom: 1px solid #d6e2ef !important;
+  background: #ffffff !important;
+  border-bottom: 1px solid var(--sitra-border) !important;
 }
 
-.btn-primary {
-  background: linear-gradient(90deg, var(--sitra-cyan-strong), var(--sitra-cyan)) !important;
-  border: none !important;
-  border-radius: 10px !important;
-  box-shadow: 0 8px 18px rgba(8, 145, 178, 0.28) !important;
-}
-
-.btn-primary:hover {
-  filter: brightness(1.05);
-}
-
-.form-control {
-  border-radius: 10px !important;
-  border-color: #b9c9dc !important;
-}
-
-.form-control:focus {
-  border-color: var(--sitra-cyan) !important;
-  box-shadow: 0 0 0 0.2rem rgba(14, 165, 198, 0.2) !important;
-}
-
-label {
-  color: #1f2f46;
+.card-header .card-title {
   font-weight: 700;
 }
 
+.btn {
+  border-radius: 10px !important;
+  font-weight: 600;
+}
+
+.btn-primary {
+  background: var(--sitra-accent) !important;
+  border-color: var(--sitra-accent) !important;
+  box-shadow: none !important;
+}
+
+.btn-primary:hover {
+  background: var(--sitra-accent-dark) !important;
+  border-color: var(--sitra-accent-dark) !important;
+}
+
+.btn-success, .btn-danger, .btn-warning {
+  box-shadow: none !important;
+}
+
+.form-control {
+  border: 1px solid #cdd8e6 !important;
+  border-radius: 10px !important;
+  background: #fff;
+}
+
+.form-control:focus {
+  border-color: var(--sitra-accent) !important;
+  box-shadow: 0 0 0 0.18rem rgba(14, 165, 198, 0.14) !important;
+}
+
+.table {
+  margin-bottom: 0;
+}
+
 .table thead th {
-  background: #eff8fc;
-  border-bottom: 1px solid #cfe2ef;
-  color: #14324a;
+  background: #f8fbff;
+  border-bottom: 1px solid var(--sitra-border);
+  color: #223248;
+  font-weight: 700;
+}
+
+.table td {
+  border-top: 1px solid #edf2f7;
+}
+
+.badge {
+  border-radius: 999px;
+  font-weight: 600;
+  padding: 0.35em 0.65em;
+}
+
+.content-wrapper .container-fluid,
+.content-wrapper .container {
+  padding-top: 12px;
 }
