@@ -35,6 +35,12 @@
             $oldRoles = old('roles', null);
         @endphp
 
+        @if($roles->isEmpty())
+            <div class="alert alert-warning mt-2">
+                No hay roles creados. Crea al menos un rol para poder asignarlo al usuario.
+            </div>
+        @endif
+
         @foreach ($roles as $role)
             @php
                 $checked = false;

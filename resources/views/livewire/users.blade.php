@@ -79,7 +79,7 @@
                                                     <i class="fa fa-arrow-up"></i> {{ __('Alta') }}
                                                 </button>
                                             @else
-                                                <button wire:click="delete({{ $user->id }})"
+                                                <button wire:click="deactivateUser({{ $user->id }})"
                                                     class="btn btn-sm btn-warning">
                                                     <i class="fa fa-arrow-down"></i> {{ __('Baja') }}
                                                 </button>

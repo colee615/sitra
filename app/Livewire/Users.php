@@ -57,7 +57,7 @@ class Users extends Component
         $this->dispatch('closeModal');
     }
 
-    public function delete($userId)
+    public function deactivateUser($userId)
     {
         $user = User::find($userId);
         if ($user) {
