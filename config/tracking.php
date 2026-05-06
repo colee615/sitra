@@ -22,4 +22,14 @@ return [
         'wait_milliseconds' => (int) env('TRACKING_CACHE_WAIT_MILLISECONDS', 1500),
         'wait_interval_milliseconds' => (int) env('TRACKING_CACHE_WAIT_INTERVAL_MILLISECONDS', 150),
     ],
+    'sqlserver' => [
+    'host' => env('TRACKING_SQLSERVER_HOST', '127.0.0.1'),
+    'port' => (int) env('TRACKING_SQLSERVER_PORT', 1433),
+    'database' => env('TRACKING_SQLSERVER_DATABASE', 'master'),
+    'username' => env('TRACKING_SQLSERVER_USERNAME', ''),
+    'password' => env('TRACKING_SQLSERVER_PASSWORD', ''),
+    'encrypt' => env('TRACKING_SQLSERVER_ENCRYPT', 'yes'),
+    'trust_server_certificate' => filter_var(env('TRACKING_SQLSERVER_TRUST_SERVER_CERTIFICATE', true), FILTER_VALIDATE_BOOL),
+],
+
 ];
