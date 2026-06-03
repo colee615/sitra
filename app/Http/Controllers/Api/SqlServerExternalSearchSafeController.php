@@ -36,10 +36,23 @@ class SqlServerExternalSearchSafeController extends Controller
             $lookup = $searchService->search($codigo);
             $result = $lookup['data'];
             $originCountry = $this->resolveOriginCountry($result['packageRows'] ?? [], $result['codigo'] ?? $codigo);
+            $packageMeta = $this->resolvePackageMeta($result['packageRows'] ?? []);
 
             return response()->json([
                 'codigo' => $result['codigo'] ?? strtoupper(trim($codigo)),
                 'tipo_servicio' => $this->resolveServiceType($result['codigo'] ?? $codigo),
+                'origen' => $packageMeta['origin_country_name'],
+                'destino' => $packageMeta['destination_country_name'],
+                'pais_destino' => $packageMeta['destination_country_name'],
+                'country_destino' => $packageMeta['destination_country_name'],
+                'meta' => [
+                    'origin_country_code' => $packageMeta['origin_country_code'],
+                    'origin_country_name' => $packageMeta['origin_country_name'],
+                    'destination_country_code' => $packageMeta['destination_country_code'],
+                    'destination_country_name' => $packageMeta['destination_country_name'],
+                    'destino' => $packageMeta['destination_country_name'],
+                    'pais_destino' => $packageMeta['destination_country_name'],
+                ],
                 'eventos_externos' => $this->transformExternalEvents($result['trackingRows'] ?? [], $originCountry),
             ])
                 ->header('X-Tracking-Cache', (string) ($lookup['cache_status'] ?? 'unknown'))
@@ -213,6 +226,31 @@ class SqlServerExternalSearchSafeController extends Controller
         $countryName = $this->countryNameFromS10($countryCode);
 
         return $countryName !== '' ? $countryCode . ' - ' . $countryName : $countryCode;
+    }
+
+    private function resolvePackageMeta(iterable $packageRows): array
+    {
+        $package = collect($packageRows)->first();
+
+        $originCountryCode = isset($package->ORIG_COUNTRY_CD) ? trim((string) $package->ORIG_COUNTRY_CD) : '';
+        $originCountryName = $this->normalizeText(isset($package->ORIG_COUNTRY_NM) ? (string) $package->ORIG_COUNTRY_NM : '');
+        $destinationCountryCode = isset($package->DEST_COUNTRY_CD) ? trim((string) $package->DEST_COUNTRY_CD) : '';
+        $destinationCountryName = $this->normalizeText(isset($package->DEST_COUNTRY_NM) ? (string) $package->DEST_COUNTRY_NM : '');
+
+        if ($originCountryName === '' && $originCountryCode !== '') {
+            $originCountryName = $this->countryNameFromS10($originCountryCode);
+        }
+
+        if ($destinationCountryName === '' && $destinationCountryCode !== '') {
+            $destinationCountryName = $this->countryNameFromS10($destinationCountryCode);
+        }
+
+        return [
+            'origin_country_code' => $originCountryCode !== '' ? strtoupper($originCountryCode) : null,
+            'origin_country_name' => $originCountryName !== '' ? $originCountryName : null,
+            'destination_country_code' => $destinationCountryCode !== '' ? strtoupper($destinationCountryCode) : null,
+            'destination_country_name' => $destinationCountryName !== '' ? $destinationCountryName : null,
+        ];
     }
 
     private function countryNameFromS10(string $countryCode): string

@@ -6,9 +6,15 @@ use Illuminate\Support\Facades\DB;
 
 class SqlServerSearchService
 {
+    private function connectionName(): string
+    {
+        return (string) config('tracking.sqlserver.connection', 'sqlsrv');
+    }
+
     public function search(string $codigo): array
     {
         $codigo = strtoupper(trim($codigo));
+        $connection = $this->connectionName();
 
         $trackingRows = collect();
         $packageRows = collect();
@@ -17,12 +23,14 @@ class SqlServerSearchService
         $logisticRows = collect();
         $manifestRows = collect();
         $ediRows = collect();
+        $customsRows = collect();
+        $contentPieceRows = collect();
         $tableMap = $this->tableMap();
 
         if ($codigo !== '') {
             $params = [$codigo, $codigo];
 
-            $packageRows = collect(DB::connection('sqlsrv')->select(
+            $packageRows = collect(DB::connection($connection)->select(
                 "
                 SELECT
                     mi.MAILITM_PID,
@@ -70,7 +78,7 @@ class SqlServerSearchService
                 $params
             ));
 
-            $trackingRowsLocal = collect(DB::connection('sqlsrv')->select(
+            $trackingRowsLocal = collect(DB::connection($connection)->select(
                 "
                 SELECT
                     e.MAILITM_PID,
@@ -120,7 +128,7 @@ class SqlServerSearchService
                 $params
             ));
 
-            $trackingRowsEdi = collect(DB::connection('sqlsrv')->select(
+            $trackingRowsEdi = collect(DB::connection($connection)->select(
                 "
                 SELECT
                     nee.MAILITM_PID,
@@ -172,7 +180,7 @@ class SqlServerSearchService
                 ->sortByDesc('EVENT_GMT_DT')
                 ->values();
 
-            $customerRows = collect(DB::connection('sqlsrv')->select(
+            $customerRows = collect(DB::connection($connection)->select(
                 "
                 SELECT
                     mc.MAILITM_PID,
@@ -196,7 +204,7 @@ class SqlServerSearchService
                 $params
             ));
 
-            $deliveryRows = collect(DB::connection('sqlsrv')->select(
+            $deliveryRows = collect(DB::connection($connection)->select(
                 "
                 SELECT
                     di.MAILITM_PID,
@@ -219,7 +227,7 @@ class SqlServerSearchService
                 $params
             ));
 
-            $logisticRows = collect(DB::connection('sqlsrv')->select(
+            $logisticRows = collect(DB::connection($connection)->select(
                 "
                 SELECT DISTINCT
                     r.RECPTCL_PID,
@@ -243,7 +251,7 @@ class SqlServerSearchService
                 $params
             ));
 
-            $manifestRows = collect(DB::connection('sqlsrv')->select(
+            $manifestRows = collect(DB::connection($connection)->select(
                 "
                 SELECT DISTINCT
                     ml.MANIFEST_LIST_ID,
@@ -263,7 +271,7 @@ class SqlServerSearchService
                 $params
             ));
 
-            $ediRows = collect(DB::connection('sqlsrv')->select(
+            $ediRows = collect(DB::connection($connection)->select(
                 "
                 SELECT TOP 200
                     RTRIM(LTRIM(mi.MAILITM_FID)) AS MAILITM_FID,
@@ -287,6 +295,41 @@ class SqlServerSearchService
                 ",
                 $params
             ));
+
+            $customsRows = collect(DB::connection($connection)->select(
+                "
+                SELECT
+                    cti.CUSTOMS_TAX_PID,
+                    cti.DECLARED_GROSS_WEIGHT,
+                    cti.SENDER_CUSTOMS_REFERENCE_NO,
+                    cti.RECIPIENT_CUSTOMS_REFERENCE_NO
+                FROM dbo.L_MAILITMS mi
+                INNER JOIN dbo.L_CUSTOMS_TAX_INFORMATION cti ON cti.CUSTOMS_TAX_PID = mi.CUSTOMS_TAX_PID
+                WHERE UPPER(RTRIM(LTRIM(mi.MAILITM_FID))) = ?
+                   OR UPPER(RTRIM(LTRIM(mi.MAILITM_LOCAL_ID))) = ?
+                ",
+                $params
+            ));
+
+            $contentPieceRows = collect(DB::connection($connection)->select(
+                "
+                SELECT TOP 200
+                    cp.IDENTIFIER,
+                    cp.NUMBER_OF_UNITS,
+                    cp.DESCRIPTION,
+                    cp.DECLARED_VALUE,
+                    cp.DECLARED_VALUE_CURRENCY_CD,
+                    cp.NET_WEIGHT,
+                    cp.ORIGIN_LOCATION,
+                    cp.TARIFF_HEADING
+                FROM dbo.L_MAILITMS mi
+                INNER JOIN dbo.L_CONTENT_PIECES cp ON cp.CUSTOMS_TAX_INFORMATION = mi.CUSTOMS_TAX_PID
+                WHERE UPPER(RTRIM(LTRIM(mi.MAILITM_FID))) = ?
+                   OR UPPER(RTRIM(LTRIM(mi.MAILITM_LOCAL_ID))) = ?
+                ORDER BY cp.IDENTIFIER
+                ",
+                $params
+            ));
         }
 
         return [
@@ -298,8 +341,56 @@ class SqlServerSearchService
             'logisticRows' => $logisticRows,
             'manifestRows' => $manifestRows,
             'ediRows' => $ediRows,
+            'customsRows' => $customsRows,
+            'contentPieceRows' => $contentPieceRows,
             'tableMap' => $tableMap,
+            'similarCodes' => $this->similarCodes($codigo),
         ];
+    }
+
+    private function similarCodes(string $codigo)
+    {
+        $codigo = strtoupper(trim($codigo));
+        if ($codigo === '' || strlen($codigo) < 3) {
+            return collect();
+        }
+
+        $connection = $this->connectionName();
+        $prefix = substr($codigo, 0, 3);
+
+        return collect(DB::connection($connection)->select(
+            "
+            SELECT TOP 12
+                UPPER(RTRIM(LTRIM(mi.MAILITM_FID))) AS MAILITM_FID,
+                UPPER(RTRIM(LTRIM(mi.MAILITM_LOCAL_ID))) AS MAILITM_LOCAL_ID,
+                mi.EVT_GMT_DT
+            FROM dbo.L_MAILITMS mi
+            WHERE (
+                    UPPER(RTRIM(LTRIM(mi.MAILITM_FID))) LIKE ?
+                    OR UPPER(RTRIM(LTRIM(mi.MAILITM_LOCAL_ID))) LIKE ?
+                )
+                AND UPPER(RTRIM(LTRIM(mi.MAILITM_FID))) <> ?
+                AND UPPER(RTRIM(LTRIM(mi.MAILITM_LOCAL_ID))) <> ?
+            ORDER BY mi.EVT_GMT_DT DESC
+            ",
+            [
+                "{$prefix}%",
+                "{$prefix}%",
+                $codigo,
+                $codigo,
+            ]
+        ))
+            ->map(function ($row) {
+                return (object) [
+                    'codigo' => $row->MAILITM_FID ?: $row->MAILITM_LOCAL_ID,
+                    's10' => $row->MAILITM_FID ?: '-',
+                    'local' => $row->MAILITM_LOCAL_ID ?: '-',
+                    'fecha' => $row->EVT_GMT_DT,
+                ];
+            })
+            ->filter(fn ($row) => !empty($row->codigo))
+            ->unique('codigo')
+            ->values();
     }
 
     private function tableMap(): array
@@ -328,6 +419,7 @@ class SqlServerSearchService
 
     private function indirectTrackingRows($packageRows, string $codigo)
     {
+        $connection = $this->connectionName();
         $packagePids = collect($packageRows)
             ->pluck('MAILITM_PID')
             ->filter()
@@ -341,7 +433,7 @@ class SqlServerSearchService
         $placeholders = implode(',', array_fill(0, $packagePids->count(), '?'));
         $bindings = $packagePids->all();
 
-        $domesticReceptacleRows = collect(DB::connection('sqlsrv')->select(
+        $domesticReceptacleRows = collect(DB::connection($connection)->select(
             "
             SELECT
                 dm.MAILITM_PID,
@@ -388,7 +480,7 @@ class SqlServerSearchService
             $bindings
         ));
 
-        $domesticDespatchRows = collect(DB::connection('sqlsrv')->select(
+        $domesticDespatchRows = collect(DB::connection($connection)->select(
             "
             SELECT
                 dm.MAILITM_PID,
@@ -426,7 +518,7 @@ class SqlServerSearchService
             $bindings
         ));
 
-        $receptacleRows = collect(DB::connection('sqlsrv')->select(
+        $receptacleRows = collect(DB::connection($connection)->select(
             "
             SELECT
                 src.MAILITM_PID,
@@ -490,3 +582,4 @@ class SqlServerSearchService
             ->values();
     }
 }
+

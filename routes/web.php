@@ -6,6 +6,7 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\RoleHasPermissionController;
 use App\Http\Controllers\SqlServerDataController;
+use App\Http\Controllers\CdsDbDataController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -27,6 +28,7 @@ Route::get('/dashboard', function () {
 
 Route::middleware('auth')->group(function () {
         Route::get('/sqlserver/datos', [SqlServerDataController::class, 'index'])->name('sqlserver.datos');
+        Route::get('/cds/datos', [CdsDbDataController::class, 'index'])->name('cds.datos');
 
         Route::get('/users', [UserController::class, 'index'])->name('users.index');
         Route::get('/users/create', [UserController::class, 'create'])->name('users.create');

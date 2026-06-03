@@ -22,7 +22,8 @@ return [
         'wait_milliseconds' => (int) env('TRACKING_CACHE_WAIT_MILLISECONDS', 1500),
         'wait_interval_milliseconds' => (int) env('TRACKING_CACHE_WAIT_INTERVAL_MILLISECONDS', 150),
     ],
-    'sqlserver' => [
+'sqlserver' => [
+    'connection' => env('TRACKING_SQLSERVER_CONNECTION', 'sqlsrv'),
     'host' => env('TRACKING_SQLSERVER_HOST', '127.0.0.1'),
     'port' => (int) env('TRACKING_SQLSERVER_PORT', 1433),
     'database' => env('TRACKING_SQLSERVER_DATABASE', 'master'),

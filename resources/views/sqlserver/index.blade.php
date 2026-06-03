@@ -17,6 +17,7 @@
 @section('content')
     <div class="container-fluid">
         @php
+            $similarCodes = $similarCodes ?? collect();
             $mainPackage = $packageRows[0] ?? null;
             $latestEvent = $trackingRows[0] ?? null;
             $sender = collect($customerRows)->firstWhere('SENDER_PAYEE_IND', 'S');
@@ -156,6 +157,12 @@
                         <div class="alert alert-warning">
                             <h5 class="mb-1"><i class="fas fa-exclamation-triangle mr-1"></i> Sin coincidencias para {{ $codigo }}</h5>
                             <p class="mb-0">No se encontraron registros en IPS5Db para ese codigo. Prueba con el S10 completo o con el codigo local exacto.</p>
+                            @if(count($similarCodes) > 0)
+                                <hr>
+                                <button type="button" class="btn btn-outline-primary btn-sm" data-toggle="modal" data-target="#similarCodesModal">
+                                    Ver codigos similares ({{ count($similarCodes) }})
+                                </button>
+                            @endif
                         </div>
                     </div>
                 </div>
@@ -515,6 +522,67 @@
 
             <div class="row">
                 <div class="col-md-6 col-12">
+                    <div class="card card-outline card-warning">
+                        <div class="card-header"><h3 class="card-title">Declaración aduanera</h3></div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-sm table-striped mb-0">
+                                    <thead class="thead-light">
+                                        <tr>
+                                            <th>Customs PID</th><th>Peso bruto declarado</th><th>Ref. remitente</th><th>Ref. destinatario</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @forelse($customsRows as $cr)
+                                            <tr>
+                                                <td>{{ $cr->CUSTOMS_TAX_PID ?? '-' }}</td>
+                                                <td>{{ $cr->DECLARED_GROSS_WEIGHT ?? '-' }}</td>
+                                                <td>{{ $cr->SENDER_CUSTOMS_REFERENCE_NO ?? '-' }}</td>
+                                                <td>{{ $cr->RECIPIENT_CUSTOMS_REFERENCE_NO ?? '-' }}</td>
+                                            </tr>
+                                        @empty
+                                            <tr><td colspan="4" class="text-center text-muted">Sin datos aduaneros.</td></tr>
+                                        @endforelse
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 col-12">
+                    <div class="card card-outline card-success">
+                        <div class="card-header"><h3 class="card-title">Piezas declaradas</h3></div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-sm table-striped mb-0">
+                                    <thead class="thead-light">
+                                        <tr>
+                                            <th>Nro</th><th>Descripción</th><th>HS</th><th>Peso</th><th>Valor</th><th>Moneda</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @forelse($contentPieceRows as $cp)
+                                            <tr>
+                                                <td>{{ $cp->IDENTIFIER ?? '-' }}</td>
+                                                <td>{{ $cp->DESCRIPTION ?? '-' }}</td>
+                                                <td>{{ $cp->TARIFF_HEADING ?? '-' }}</td>
+                                                <td>{{ $cp->NET_WEIGHT ?? '-' }}</td>
+                                                <td>{{ $cp->DECLARED_VALUE ?? '-' }}</td>
+                                                <td>{{ $cp->DECLARED_VALUE_CURRENCY_CD ?? '-' }}</td>
+                                            </tr>
+                                        @empty
+                                            <tr><td colspan="6" class="text-center text-muted">Sin piezas declaradas.</td></tr>
+                                        @endforelse
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 col-12">
                     <div class="card card-outline card-info">
                         <div class="card-header"><h3 class="card-title">Partes involucradas: remitente y destinatario</h3></div>
                         <div class="card-body p-0">
@@ -755,6 +823,51 @@
             @endif
         @endif
     </div>
+
+    @if($codigo !== '' && !$hasResults && !$error && count($similarCodes) > 0)
+        <div class="modal fade" id="similarCodesModal" tabindex="-1" role="dialog" aria-labelledby="similarCodesModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="similarCodesModalLabel">Codigos similares para "{{ $codigo }}"</h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover mb-0">
+                                <thead class="thead-light">
+                                    <tr>
+                                        <th>Codigo sugerido</th>
+                                        <th>S10</th>
+                                        <th>Local</th>
+                                        <th>Ultimo evento</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($similarCodes as $item)
+                                        <tr>
+                                            <td><strong>{{ $item->codigo }}</strong></td>
+                                            <td>{{ $item->s10 }}</td>
+                                            <td>{{ $item->local }}</td>
+                                            <td>{{ $item->fecha ?: '-' }}</td>
+                                            <td class="text-right">
+                                                <a href="{{ route('sqlserver.datos', ['codigo' => $item->codigo]) }}" class="btn btn-primary btn-sm">
+                                                    Seleccionar
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
 @stop
 
 @section('css')
@@ -922,3 +1035,14 @@
         }
     </style>
 @stop
+
+@section('js')
+    @if($codigo !== '' && !$hasResults && !$error && count($similarCodes) > 0)
+        <script>
+            $(function () {
+                $('#similarCodesModal').modal('show');
+            });
+        </script>
+    @endif
+@stop
+

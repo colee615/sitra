@@ -31,7 +31,10 @@ class SqlServerDataController extends Controller
                 'logisticRows' => collect(),
                 'manifestRows' => collect(),
                 'ediRows' => collect(),
+                'customsRows' => collect(),
+                'contentPieceRows' => collect(),
                 'tableMap' => [],
+                'similarCodes' => collect(),
                 'error' => $e->getMessage(),
             ]);
         }

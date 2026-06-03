@@ -26,6 +26,24 @@
                 @endcan
             </div>
         </div>
+        <div class="col-lg-4 col-12">
+            <div class="small-box bg-success">
+                <div class="inner">
+                    <h4>Consultas CDS</h4>
+                    <p>Conexion y busqueda en CDSDb</p>
+                </div>
+                <div class="icon">
+                    <i class="fas fa-search-location"></i>
+                </div>
+                @can('admin-only')
+                    <a href="{{ route('cds.datos') }}" class="small-box-footer">
+                        Ingresar <i class="fas fa-arrow-circle-right"></i>
+                    </a>
+                @else
+                    <span class="small-box-footer">Solo administradores</span>
+                @endcan
+            </div>
+        </div>
     </div>
     @include('footer')
 @stop

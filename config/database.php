@@ -110,6 +110,22 @@ return [
             'prefix_indexes' => true,
             'encrypt' => env('SQLSRV_ENCRYPT', 'yes'),
             'trust_server_certificate' => env('SQLSRV_TRUST_SERVER_CERTIFICATE', 'false'),
+            'odbc_driver' => env('SQLSRV_ODBC_DRIVER', 'ODBC Driver 18 for SQL Server'),
+        ],
+
+        'sqlsrv2' => [
+            'driver' => 'sqlsrv',
+            'url' => env('SQLSRV2_URL'),
+            'host' => env('SQLSRV2_HOST', '127.0.0.1'),
+            'port' => env('SQLSRV2_PORT', '1433'),
+            'database' => env('SQLSRV2_DATABASE', 'master'),
+            'username' => env('SQLSRV2_USERNAME', 'sa'),
+            'password' => env('SQLSRV2_PASSWORD', ''),
+            'charset' => env('SQLSRV2_CHARSET', 'utf8'),
+            'prefix' => env('SQLSRV2_PREFIX', ''),
+            'prefix_indexes' => true,
+            'encrypt' => env('SQLSRV2_ENCRYPT', 'yes'),
+            'trust_server_certificate' => env('SQLSRV2_TRUST_SERVER_CERTIFICATE', 'false'),
         ],
 
     ],
