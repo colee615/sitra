@@ -7,6 +7,7 @@ use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\RoleHasPermissionController;
 use App\Http\Controllers\SqlServerDataController;
 use App\Http\Controllers\CdsDbDataController;
+use App\Http\Controllers\PostalIntelligenceController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -27,6 +28,7 @@ Route::get('/dashboard', function () {
 })->middleware(['auth', 'verified'])->name('dashboard');
 
 Route::middleware('auth')->group(function () {
+        Route::get('/consultas', [PostalIntelligenceController::class, 'index'])->name('consultas.index');
         Route::get('/sqlserver/datos', [SqlServerDataController::class, 'index'])->name('sqlserver.datos');
         Route::get('/cds/datos', [CdsDbDataController::class, 'index'])->name('cds.datos');
 

@@ -310,11 +310,17 @@ return [
             'type' => 'sidebar-menu-search',
             'text' => 'search',
         ],
-        ['header' => 'SISTEMA DE INFORMACION'],
+        ['header' => 'CENTRO DE CONSULTAS'],
         [
-            'text' => 'Dashboard',
+            'text' => 'Centro de Consultas',
             'url' => '/dashboard',
-            'icon' => 'fas fa-user',
+            'icon' => 'fas fa-compass',
+        ],
+        [
+            'text' => 'Consulta Unificada',
+            'url' => '/consultas',
+            'icon' => 'fas fa-search',
+            'can' => 'admin-only',
         ],
         [
             'text' => 'Gestion Usuarios',
@@ -344,19 +350,20 @@ return [
             ],
         ],
         [
-            'text' => 'Consultas Informacion',
-            'icon' => 'fas fa-users',
-            // 'can'  => 'users.index',
+            'text' => 'Detalles Técnicos',
+            'icon' => 'fas fa-layer-group',
+            'can' => 'admin-only',
             'submenu' => [
                 [
-                    'text' => 'Consulta Correspondencia',
-                    'url' => '',
-                    'icon' => 'fas fa-user',
-                ],
-                [
-                    'text' => 'Consulta SQL Server',
+                    'text' => 'Detalle IPS',
                     'url' => '/sqlserver/datos',
                     'icon' => 'fas fa-database',
+                    'can' => 'admin-only',
+                ],
+                [
+                    'text' => 'Detalle CDS',
+                    'url' => '/cds/datos',
+                    'icon' => 'fas fa-broadcast-tower',
                     'can' => 'admin-only',
                 ],
             ],
