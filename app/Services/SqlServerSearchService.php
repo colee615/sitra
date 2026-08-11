@@ -134,7 +134,7 @@ class SqlServerSearchService
                     nee.MAILITM_PID,
                     CAST('' AS varchar(40)) AS MAILITM_FID,
                     CAST('' AS varchar(40)) AS MAILITM_LOCAL_ID,
-                    COALESCE(nee.CAPTURE_GMT_DT, CAST(nee.EVENT_LOCAL_DT AS datetime)) AS EVENT_GMT_DT,
+                    COALESCE(CAST(nee.EVENT_LOCAL_DT AS datetime), nee.CAPTURE_GMT_DT) AS EVENT_GMT_DT,
                     nee.EVENT_TYPE_CD,
                     CASE
                         WHEN nee.EVENT_TYPE_CD = 12 THEN 'Paquete enviado al extranjero.'
@@ -167,7 +167,7 @@ class SqlServerSearchService
                 LEFT JOIN dbo.C_ITEM_CONDITIONS ic ON ic.ITEM_CONDITION_CD = nee.CONDITION_CD
                 LEFT JOIN dbo.C_COUNTRIES co ON co.COUNTRY_CD = LEFT(ne.ORIG_COUNTRY_CD, 2)
                 WHERE UPPER(RTRIM(LTRIM(ne.MAILITM_FID))) = ?
-                ORDER BY COALESCE(nee.CAPTURE_GMT_DT, CAST(nee.EVENT_LOCAL_DT AS datetime)) DESC
+                ORDER BY COALESCE(CAST(nee.EVENT_LOCAL_DT AS datetime), nee.CAPTURE_GMT_DT) DESC
                 ",
                 [$codigo]
             ));
@@ -291,7 +291,7 @@ class SqlServerSearchService
                 LEFT JOIN dbo.CT_EVENT_TYPES ct ON ct.EVENT_TYPE_CD = ne.EVENT_TYPE_CD AND ct.LANGUAGE_CD = 'ES'
                 WHERE UPPER(RTRIM(LTRIM(mi.MAILITM_FID))) = ?
                    OR UPPER(RTRIM(LTRIM(mi.MAILITM_LOCAL_ID))) = ?
-                ORDER BY COALESCE(nee.CAPTURE_GMT_DT, CAST(nee.EVENT_LOCAL_DT AS datetime)) DESC
+                ORDER BY COALESCE(CAST(nee.EVENT_LOCAL_DT AS datetime), nee.CAPTURE_GMT_DT) DESC
                 ",
                 $params
             ));
