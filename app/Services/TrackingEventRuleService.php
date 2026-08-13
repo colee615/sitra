@@ -114,14 +114,20 @@ class TrackingEventRuleService
     public function normalizeText(string $value): string
     {
         $value = str_replace(
-            ['EnvÃƒÆ’Ã‚Â­o', 'envÃƒÆ’Ã‚Â­o', 'ubicaciÃƒÆ’Ã‚Â³n', 'trÃƒÆ’Ã‚Â¡nsito', 'devoluciÃƒÆ’Ã‚Â³n', 'informaciÃƒÆ’Ã‚Â³n', 'PaÃƒÆ’Ã‚Â­s'],
-            ['EnvÃ­o', 'envÃ­o', 'ubicaciÃ³n', 'trÃ¡nsito', 'devoluciÃ³n', 'informaciÃ³n', 'PaÃ­s'],
+            ['EnvÃƒÂ­o', 'envÃƒÂ­o', 'ubicaciÃƒÂ³n', 'trÃƒÂ¡nsito', 'devoluciÃƒÂ³n', 'informaciÃƒÂ³n', 'PaÃƒÂ­s'],
+            ['Envío', 'envío', 'ubicación', 'tránsito', 'devolución', 'información', 'País'],
             $value
         );
 
         $value = str_replace(
-            ['EnvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­o', 'envÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­o', 'ubicaciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n', 'trÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡nsito', 'devoluciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n', 'informaciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n', 'PaÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­s'],
-            ['EnvÃ­o', 'envÃ­o', 'ubicaciÃ³n', 'trÃ¡nsito', 'devoluciÃ³n', 'informaciÃ³n', 'PaÃ­s'],
+            ['EnvÃƒÆ’Ã‚Â­o', 'envÃƒÆ’Ã‚Â­o', 'ubicaciÃƒÆ’Ã‚Â³n', 'trÃƒÆ’Ã‚Â¡nsito', 'devoluciÃƒÆ’Ã‚Â³n', 'informaciÃƒÆ’Ã‚Â³n', 'PaÃƒÆ’Ã‚Â­s'],
+            ['Envío', 'envío', 'ubicación', 'tránsito', 'devolución', 'información', 'País'],
+            $value
+        );
+
+        $value = str_replace(
+            ['Ã¡', 'Ã©', 'Ã­', 'Ã³', 'Ãº', 'Ã±', 'Ã', 'Ã‰', 'Ã', 'Ã“', 'Ãš', 'Ã‘', 'PaÃ­s', 'trÃ¡nsito', 'ubicaciÃ³n', 'devoluciÃ³n', 'informaciÃ³n'],
+            ['á', 'é', 'í', 'ó', 'ú', 'ñ', 'Á', 'É', 'Í', 'Ó', 'Ú', 'Ñ', 'País', 'tránsito', 'ubicación', 'devolución', 'información'],
             $value
         );
 
