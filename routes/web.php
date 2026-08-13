@@ -8,6 +8,7 @@ use App\Http\Controllers\RoleHasPermissionController;
 use App\Http\Controllers\SqlServerDataController;
 use App\Http\Controllers\CdsDbDataController;
 use App\Http\Controllers\PostalIntelligenceController;
+use App\Http\Controllers\TrackingEventRuleController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -31,6 +32,14 @@ Route::middleware('auth')->group(function () {
         Route::get('/consultas', [PostalIntelligenceController::class, 'index'])->name('consultas.index');
         Route::get('/sqlserver/datos', [SqlServerDataController::class, 'index'])->name('sqlserver.datos');
         Route::get('/cds/datos', [CdsDbDataController::class, 'index'])->name('cds.datos');
+        Route::get('/tracking-event-rules', [TrackingEventRuleController::class, 'index'])->name('tracking-event-rules.index');
+        Route::get('/tracking-event-rules/create', [TrackingEventRuleController::class, 'create'])->name('tracking-event-rules.create');
+        Route::post('/tracking-event-rules', [TrackingEventRuleController::class, 'store'])->name('tracking-event-rules.store');
+        Route::post('/tracking-event-rules/sync', [TrackingEventRuleController::class, 'sync'])->name('tracking-event-rules.sync');
+        Route::get('/tracking-event-rules/{trackingEventRule}/edit', [TrackingEventRuleController::class, 'edit'])->name('tracking-event-rules.edit');
+        Route::patch('/tracking-event-rules/{trackingEventRule}/toggle-visibility', [TrackingEventRuleController::class, 'toggleVisibility'])->name('tracking-event-rules.toggle-visibility');
+        Route::put('/tracking-event-rules/{trackingEventRule}', [TrackingEventRuleController::class, 'update'])->name('tracking-event-rules.update');
+        Route::delete('/tracking-event-rules/{trackingEventRule}', [TrackingEventRuleController::class, 'destroy'])->name('tracking-event-rules.destroy');
 
         Route::get('/users', [UserController::class, 'index'])->name('users.index');
         Route::get('/users/create', [UserController::class, 'create'])->name('users.create');

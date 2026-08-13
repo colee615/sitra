@@ -366,6 +366,12 @@ return [
                     'icon' => 'fas fa-broadcast-tower',
                     'can' => 'admin-only',
                 ],
+                [
+                    'text' => 'Eventos API',
+                    'url' => '/tracking-event-rules',
+                    'icon' => 'fas fa-stream',
+                    'can' => 'admin-only',
+                ],
             ],
         ],
         [

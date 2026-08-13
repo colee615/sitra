@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\TrackingEventRuleService;
 use App\Services\TrackingSearchCacheService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -12,8 +13,11 @@ use Throwable;
 
 class SqlServerExternalSearchSafeController extends Controller
 {
-    public function __invoke(Request $request, TrackingSearchCacheService $searchService): JsonResponse
-    {
+    public function __invoke(
+        Request $request,
+        TrackingSearchCacheService $searchService,
+        TrackingEventRuleService $eventRuleService
+    ): JsonResponse {
         if (!$request->user() || !$request->user()->hasRole('admin')) {
             return response()->json([
                 'message' => 'No autorizado para consultar este recurso.',
@@ -53,7 +57,11 @@ class SqlServerExternalSearchSafeController extends Controller
                     'destino' => $packageMeta['destination_country_name'],
                     'pais_destino' => $packageMeta['destination_country_name'],
                 ],
-                'eventos_externos' => $this->transformExternalEvents($result['trackingRows'] ?? [], $originCountry),
+                'eventos_externos' => $this->transformExternalEvents(
+                    $result['trackingRows'] ?? [],
+                    $originCountry,
+                    $eventRuleService
+                ),
             ])
                 ->header('X-Tracking-Cache', (string) ($lookup['cache_status'] ?? 'unknown'))
                 ->header('X-Tracking-Backend', 'sqlsrv')
@@ -72,18 +80,29 @@ class SqlServerExternalSearchSafeController extends Controller
         }
     }
 
-    private function transformExternalEvents(iterable $trackingRows, string $originCountry)
-    {
+    private function transformExternalEvents(
+        iterable $trackingRows,
+        string $originCountry,
+        TrackingEventRuleService $eventRuleService
+    ) {
         return collect($trackingRows)
-            ->map(function ($row) use ($originCountry) {
-                $eventType = $this->normalizeText(isset($row->EVENT_TYPE_NM_ES) ? (string) $row->EVENT_TYPE_NM_ES : '');
-                $condition = $this->normalizeText(isset($row->CONDITION_TXT) ? (string) $row->CONDITION_TXT : '');
-                $detail = $this->normalizeText(isset($row->DETAIL_TXT) ? (string) $row->DETAIL_TXT : '');
+            ->map(function ($row) use ($originCountry, $eventRuleService) {
+                $eventType = $eventRuleService->present(
+                    isset($row->EVENT_TYPE_NM_ES) ? (string) $row->EVENT_TYPE_NM_ES : '',
+                    isset($row->SOURCE_DB) ? (string) $row->SOURCE_DB : '',
+                    $row->EVENT_TYPE_CD ?? null
+                );
+                $condition = $eventRuleService->normalizeText(isset($row->CONDITION_TXT) ? (string) $row->CONDITION_TXT : '');
+                $detail = $eventRuleService->normalizeText(isset($row->DETAIL_TXT) ? (string) $row->DETAIL_TXT : '');
+
+                if ($eventType === null) {
+                    return null;
+                }
 
                 return [
                     'mailitM_PID' => isset($row->MAILITM_PID) ? strtolower(trim((string) $row->MAILITM_PID)) : '',
                     'mailitM_FID' => $this->resolveMailItemFid($row),
-                    'eventType' => $this->mapEventType($eventType),
+                    'eventType' => $eventType,
                     'eventDate' => $this->formatEventDate($row->EVENT_GMT_DT ?? null),
                     'office' => $this->buildOffice($row, $originCountry, $detail),
                     'scanned' => $this->cleanLabel(isset($row->SCANNED_TXT) ? (string) $row->SCANNED_TXT : ''),
@@ -93,6 +112,7 @@ class SqlServerExternalSearchSafeController extends Controller
                     'detail' => $detail,
                 ];
             })
+            ->filter()
             ->filter(fn (array $evento) => $evento['eventType'] !== '' || $evento['eventDate'] !== '')
             ->unique(fn (array $evento) => implode('|', [
                 $evento['mailitM_PID'],
@@ -148,72 +168,14 @@ class SqlServerExternalSearchSafeController extends Controller
         return isset($row->MAILITM_FID) ? trim((string) $row->MAILITM_FID) : '';
     }
 
-    private function mapEventType(string $eventType): string
-    {
-        $eventMappings = [
-            'Recibir envío del cliente (salida)' => 'Paquete recibido del cliente.',
-            'Enviar envío a ubicación nacional (salida)' => 'Paquete en camino a ubicación nacional.',
-            'Recibir envío en oficina de cambio (salida)' => 'Paquete recibido en oficina origen de tránsito.',
-            'Enviar envío a aduana (salida)' => 'Paquete enviado a aduana.',
-            'Recibir envío en ubicación (salida)' => 'Paquete recibido en centro de procesamiento.',
-            'Registrar motivo de retención de envío por parte de aduana (Sal)' => 'Paquete retenido en aduana.',
-            'Devolver envío desde aduana (salida)' => 'Paquete en devolución desde la aduana.',
-            'Insertar envío en saca (salida)' => 'Paquete incluido en la saca de envío.',
-            'Eliminar envío de saca (salida)' => 'Paquete eliminado del la saca de envío.',
-            'Registrar detalles del envío (salida)' => 'Detalles del paquete registrados.',
-            'Registrar detalles del envío en oficina de cambio (salida)' => 'Detalles del paquete registrados en oficina de tránsito.',
-            'Enviar envío al extranjero (recibido por EDI)' => 'Paquete enviado al extranjero.',
-            'Insertar envío en saca nacional' => 'Paquete incluido en la saca nacional.',
-            'Eliminar envío de saca nacional' => 'Paquete eliminado de la saca nacional.',
-            'Cancelar exportación de envío' => 'Exportación del paquete cancelada.',
-            'Recibir envío en oficina de cambio (entrada)' => 'Paquete recibido en oficina destino de tránsito.',
-            'Enviar envío a aduana (entrada)' => 'Paquete en camino a aduana.',
-            'Recibir envío en oficina de entrega (entrada)' => 'Paquete recibido en oficina de entrega(Listo para entregar).',
-            'Recibir envío en ubicación (entrada)' => 'Paquete recibido en ubicación específica.',
-            'Registrar información de aduanas sobre el envío (entrada)' => 'Información de aduana del paquete registrada.',
-            'Enviar envío a ubicación nacional (entrada)' => 'Paquete en camino a ubicación nacional.',
-            'Intento fallido de entrega de envío (entrada)' => 'Intento fallido de entrega del paquete.',
-            'Entregar envío (entrada)' => 'Paquete entregado exitosamente.',
-            'Devolver envío desde aduana (entrada)' => 'Paquete en devolución desde aduana.',
-            'Transferir envío al agente de entrega (entrada)' => 'Paquete transferido al agente de entrega.',
-            'Recibir envío desde el extranjero (recibido por EDI)' => 'Paquete recibido desde el extranjero.',
-            'Registrar información del destinatario (entrada)' => 'Información del destinatario del paquete registrada.',
-            'Recibir envío en oficina de cambio (entrada-int.-recon.)' => 'Paquete recibido en oficina de tránsito internacional.',
-            'Recibir envío en oficina de cambio (entrada-nac.-recon.)' => 'Paquete recibido en oficina de tránsito nacional.',
-            'Recepción automatizada de envío en oficina de cambio (entrada)' => 'Paquete recibido automáticamente en oficina de tránsito.',
-            'Creación automática de envío faltante (entrada)' => 'Paquete creado automáticamente.',
-            'Actualizar envío (salida)' => 'Paquete actualizado',
-            'Actualizar envío (entrada)' => 'Paquete actualizado',
-            'Rectificar acontecimiento de PSD de envío (salida)' => 'Corrección de datos del paquete',
-            'Rectificar acontecimiento de PSD de envío (entrada)' => 'Corrección de datos del paquete',
-            'Envío de manifiesto enviado a ubicación (entrada)' => 'Saca registrado en ubicación.',
-            'Envío de manifiesto enviado a aduana (entrada)' => 'Saca enviado a aduana para revisión.',
-            'Envío de manifiesto recibido en ubicación (entrada)' => 'Saca recibido en ubicación.',
-            'Envío de manifiesto transferido a agente de entrega (entrada)' => 'Saca transferido al agente de entrega.',
-            'Recepción automática de envío: sin digitalización' => 'Paquete recibido automáticamente: pendiente de digitalización.',
-            'Retener envío en oficina de cambio (salida)' => 'Paquete retenido en oficina de tránsitos.',
-            'Retener envío en oficina de cambio (entrada)' => 'Paquete retenido en oficina de tránsito.',
-            'Recibir envío en centro de clasificación (entrada)' => 'Paquete recibido en centro de clasificación.',
-            'Enviar envío desde centro de clasificación (entrada)' => 'Paquete procesado en centro de clasificación.',
-            'Retener envío en punto de entrega (entrada)' => 'Paquete retenido en punto de entrega.',
-            'Enviar envío para entrega física (entrada)' => 'Paquete en camino para entrega física.',
-            'Recibir envío en punto de recogida (entrada)' => 'Paquete recibido en punto de recogida.',
-            'Detener importación de envío (entrada)' => 'Importación del paquete detenida.',
-            'Recibido por EDI' => 'Paquete: datos recibidos por EDI.',
-        ];
-
-        return $eventMappings[$eventType] ?? $eventType;
-    }
-
     private function resolveOriginCountry(iterable $packageRows, string $codigo): string
     {
         $package = collect($packageRows)->first();
+        $originCountryCode = isset($package->ORIG_COUNTRY_CD) ? trim((string) $package->ORIG_COUNTRY_CD) : '';
+        $originCountryName = $this->normalizeText(isset($package->ORIG_COUNTRY_NM) ? (string) $package->ORIG_COUNTRY_NM : '');
 
-        $countryCode = isset($package->ORIG_COUNTRY_CD) ? trim((string) $package->ORIG_COUNTRY_CD) : '';
-        $countryName = $this->normalizeText(isset($package->ORIG_COUNTRY_NM) ? (string) $package->ORIG_COUNTRY_NM : '');
-
-        if ($countryName !== '') {
-            return $countryCode !== '' ? $countryCode . ' - ' . $countryName : $countryName;
+        if ($originCountryName !== '') {
+            return $originCountryCode !== '' ? $originCountryCode . ' - ' . $originCountryName : $originCountryName;
         }
 
         $s10Code = strtoupper(trim($codigo));
@@ -261,71 +223,73 @@ class SqlServerExternalSearchSafeController extends Controller
             'BO' => 'Bolivia',
             'BR' => 'Brasil',
             'CA' => 'Canada',
+            'CH' => 'Suiza',
             'CL' => 'Chile',
             'CN' => 'China',
             'CO' => 'Colombia',
             'DE' => 'Alemania',
+            'DO' => 'Republica Dominicana',
+            'EC' => 'Ecuador',
             'ES' => 'Espana',
             'FR' => 'Francia',
             'GB' => 'Reino Unido',
             'IT' => 'Italia',
             'JP' => 'Japon',
+            'KR' => 'Corea del Sur',
             'MX' => 'Mexico',
             'NL' => 'Paises Bajos',
             'PE' => 'Peru',
             'PT' => 'Portugal',
             'PY' => 'Paraguay',
+            'SE' => 'Suecia',
             'US' => 'Estados Unidos',
             'UY' => 'Uruguay',
             'VE' => 'Venezuela',
         ];
 
-        return $countries[$countryCode] ?? '';
+        return $countries[strtoupper(trim($countryCode))] ?? '';
     }
 
     private function resolveServiceType(string $codigo): string
     {
-        $prefix = strtoupper(substr(trim($codigo), 0, 1));
+        $codigo = strtoupper(trim($codigo));
 
-        return match ($prefix) {
-            'E' => 'EMS',
-            'C' => 'Encomiendas',
-            'R' => 'Certificadas',
-            'U', 'L' => 'Ordinarias',
-            default => '',
-        };
-    }
+        if (str_starts_with($codigo, 'R')) {
+            return 'certificadas';
+        }
 
-    private function cleanLabel(string $value): string
-    {
-        $value = $this->normalizeText($value);
-        $value = preg_replace('/\s+/', ' ', trim($value));
+        if (str_starts_with($codigo, 'O') || str_starts_with($codigo, 'L')) {
+            return 'ordinarias';
+        }
 
-        return $value ?? '';
+        if (str_starts_with($codigo, 'C')) {
+            return 'encomiendas';
+        }
+
+        if (str_starts_with($codigo, 'E')) {
+            return 'ems';
+        }
+
+        return '';
     }
 
     private function normalizeText(string $value): string
     {
-        $value = trim($value);
-
-        if ($value === '') {
-            return '';
-        }
-
-        return str_replace(
-            [
-                'EnvÃ­o', 'envÃ­o', 'ubicaciÃ³n', 'trÃ¡nsito', 'devoluciÃ³n', 'informaciÃ³n', 'PaÃ­s',
-                'RecepciÃ³n', 'CreaciÃ³n', 'electrÃ³nicamente', 'clasificaciÃ³n', 'fÃ­sica', 'artÃ­culo',
-                'bÃ¡scula', 'ComprobaciÃ³n', 'declaraciÃ³n', 'especificaciÃ³n', 'automÃ¡ticamente',
-                'aÃ±adida', 'ExpediciÃ³n',
-            ],
-            [
-                'Envío', 'envío', 'ubicación', 'tránsito', 'devolución', 'información', 'País',
-                'Recepción', 'Creación', 'electrónicamente', 'clasificación', 'física', 'artículo',
-                'báscula', 'Comprobación', 'declaración', 'especificación', 'automáticamente',
-                'añadida', 'Expedición',
-            ],
+        $value = str_replace(
+            ['EnvÃƒÂ­o', 'envÃƒÂ­o', 'ubicaciÃƒÂ³n', 'trÃƒÂ¡nsito', 'devoluciÃƒÂ³n', 'informaciÃƒÂ³n', 'PaÃƒÂ­s'],
+            ['Envío', 'envío', 'ubicación', 'tránsito', 'devolución', 'información', 'País'],
             $value
         );
+
+        return str_replace(
+            ['EnvÃƒÆ’Ã‚Â­o', 'envÃƒÆ’Ã‚Â­o', 'ubicaciÃƒÆ’Ã‚Â³n', 'trÃƒÆ’Ã‚Â¡nsito', 'devoluciÃƒÆ’Ã‚Â³n', 'informaciÃƒÆ’Ã‚Â³n', 'PaÃƒÆ’Ã‚Â­s'],
+            ['Envío', 'envío', 'ubicación', 'tránsito', 'devolución', 'información', 'País'],
+            $value
+        );
+    }
+
+    private function cleanLabel(string $value): string
+    {
+        return trim(preg_replace('/\s+/', ' ', $this->normalizeText($value)) ?? '');
     }
 }
