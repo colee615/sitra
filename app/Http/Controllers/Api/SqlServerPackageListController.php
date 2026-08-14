@@ -164,6 +164,8 @@ class SqlServerPackageListController extends Controller
             'mailitm_pid' => isset($row->MAILITM_PID) ? (int) $row->MAILITM_PID : null,
             'codigo' => $codigo,
             'codigo_s10' => $this->nullableString($row->MAILITM_FID ?? null),
+            'fecha_registro' => $this->formatDate($row->FIRST_EVENT_GMT_DT ?? null),
+            'numero_despacho' => $this->nullableString($row->DESPTCH_FID ?? null),
             'tipo_servicio' => $this->resolveServiceType($codigo),
             'peso' => $this->toFloat($row->MAILITM_WEIGHT ?? null),
             'clase_correo' => $this->cleanText($row->MAIL_CLASS_NM ?? ''),

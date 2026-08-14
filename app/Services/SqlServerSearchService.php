@@ -508,6 +508,22 @@ class SqlServerSearchService
                 COALESCE(cte.LOCAL_EVENT_TYPE_NM, ce.EVENT_TYPE_NM) AS EVT_TYPE_NM_ES,
                 nof.OFFICE_FCD AS EVT_OFFICE_FCD,
                 nof.OFFICE_NM AS EVT_OFFICE_NM
+                ,
+                (
+                    SELECT MIN(e.EVENT_GMT_DT)
+                    FROM dbo.L_MAILITM_EVENTS e
+                    WHERE e.MAILITM_PID = mi.MAILITM_PID
+                ) AS FIRST_EVENT_GMT_DT
+                ,
+                (
+                    SELECT TOP 1 RTRIM(LTRIM(d.DESPTCH_FID))
+                    FROM dbo.L_MAILITM_EVENTS e
+                    INNER JOIN dbo.L_RECPTCLS r ON r.RECPTCL_PID = e.RECPTCL_PID
+                    INNER JOIN dbo.L_DESPTCHS d ON d.DESPTCH_PID = r.DESPTCH_PID
+                    WHERE e.MAILITM_PID = mi.MAILITM_PID
+                      AND e.RECPTCL_PID IS NOT NULL
+                    ORDER BY e.EVENT_GMT_DT DESC
+                ) AS DESPTCH_FID
             FROM dbo.L_MAILITMS mi
             LEFT JOIN dbo.C_MAIL_CLASSES mc ON mc.MAIL_CLASS_CD = mi.MAIL_CLASS_CD
             LEFT JOIN dbo.C_MAILITM_CONTENTS mcon ON mcon.MAILITM_CONTENT_CD = mi.MAILITM_CONTENT_CD
