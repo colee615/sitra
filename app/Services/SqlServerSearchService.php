@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class SqlServerSearchService
@@ -345,6 +346,202 @@ class SqlServerSearchService
             'contentPieceRows' => $contentPieceRows,
             'tableMap' => $tableMap,
             'similarCodes' => $this->similarCodes($codigo),
+        ];
+    }
+
+    public function listPackages(?int $page = 1, ?int $perPage = 50, ?string $search = null): array
+    {
+        $page = $page !== null ? max(1, $page) : null;
+        $perPage = $perPage !== null ? max(1, min(200, $perPage)) : null;
+        $search = strtoupper(trim((string) $search));
+        $offset = ($page !== null && $perPage !== null) ? (($page - 1) * $perPage) : 0;
+        $rows = $perPage !== null
+            ? $this->fetchPackageRowsLight($offset, $perPage, $search)
+            : collect();
+
+        return [
+            'page' => $page,
+            'per_page' => $perPage,
+            'all' => $page === null || $perPage === null,
+            'rows' => $rows,
+        ];
+    }
+
+    public function countPackages(?string $search = null): int
+    {
+        [$whereSql, $bindings] = $this->packageListFilters($search);
+        $connection = $this->connectionName();
+
+        $totalRow = DB::connection($connection)->selectOne(
+            "
+            SELECT COUNT(*) AS total
+            FROM dbo.L_MAILITMS mi
+            {$whereSql}
+            ",
+            $bindings
+        );
+
+        return isset($totalRow->total) ? (int) $totalRow->total : 0;
+    }
+
+    public function iteratePackagesByChunk(?string $search = null, int $chunkSize = 500): \Generator
+    {
+        $search = strtoupper(trim((string) $search));
+        $chunkSize = max(1, min(1000, $chunkSize));
+        $offset = 0;
+
+        while (true) {
+            $rows = $this->fetchPackageRowsLight($offset, $chunkSize, $search);
+
+            if ($rows->isEmpty()) {
+                break;
+            }
+
+            foreach ($rows as $row) {
+                yield $row;
+            }
+
+            $offset += $chunkSize;
+        }
+    }
+
+    private function fetchPackageRows(int $offset, int $limit, ?string $search = null): Collection
+    {
+        [$whereSql, $bindings] = $this->packageListFilters($search);
+        $connection = $this->connectionName();
+
+        return collect(DB::connection($connection)->select(
+            "
+            SELECT
+                mi.MAILITM_PID,
+                RTRIM(LTRIM(mi.MAILITM_FID)) AS MAILITM_FID,
+                RTRIM(LTRIM(mi.MAILITM_LOCAL_ID)) AS MAILITM_LOCAL_ID,
+                mi.MAILITM_WEIGHT,
+                mi.MAILITM_VALUE,
+                mi.DUTIES_AMOUNT,
+                mi.CUSTOMS_NO,
+                mi.MAIL_CLASS_CD,
+                mc.MAIL_CLASS_NM,
+                mi.MAILITM_CONTENT_CD,
+                mcon.MAILITM_CONTENT_NM,
+                mi.PRODUCT_TYPE_CD,
+                pt.PRODUCT_TYPE_NM,
+                mi.POSTAL_STATUS_CD,
+                ps.POSTAL_STATUS_NM,
+                mi.ORIG_COUNTRY_CD,
+                coo.COUNTRY_NM AS ORIG_COUNTRY_NM,
+                mi.DEST_COUNTRY_CD,
+                cod.COUNTRY_NM AS DEST_COUNTRY_NM,
+                mi.CURRENCY_CD,
+                cur.CURRENCY_NM,
+                mi.EVT_GMT_DT,
+                mi.EVT_TYPE_CD,
+                COALESCE(cte.LOCAL_EVENT_TYPE_NM, ce.EVENT_TYPE_NM) AS EVT_TYPE_NM_ES,
+                nof.OFFICE_FCD AS EVT_OFFICE_FCD,
+                nof.OFFICE_NM AS EVT_OFFICE_NM,
+                (
+                    SELECT COUNT(*)
+                    FROM dbo.L_MAILITM_EVENTS e
+                    WHERE e.MAILITM_PID = mi.MAILITM_PID
+                ) AS EVENTS_COUNT,
+                (
+                    SELECT TOP 1 RTRIM(LTRIM(r.RECPTCL_FID))
+                    FROM dbo.L_MAILITM_EVENTS e
+                    INNER JOIN dbo.L_RECPTCLS r ON r.RECPTCL_PID = e.RECPTCL_PID
+                    WHERE e.MAILITM_PID = mi.MAILITM_PID
+                      AND e.RECPTCL_PID IS NOT NULL
+                    ORDER BY e.EVENT_GMT_DT DESC
+                ) AS LAST_RECPTCL_FID,
+                (
+                    SELECT TOP 1 RTRIM(LTRIM(d.DESPTCH_FID))
+                    FROM dbo.L_MAILITM_EVENTS e
+                    INNER JOIN dbo.L_RECPTCLS r ON r.RECPTCL_PID = e.RECPTCL_PID
+                    INNER JOIN dbo.L_DESPTCHS d ON d.DESPTCH_PID = r.DESPTCH_PID
+                    WHERE e.MAILITM_PID = mi.MAILITM_PID
+                      AND e.RECPTCL_PID IS NOT NULL
+                    ORDER BY e.EVENT_GMT_DT DESC
+                ) AS LAST_DESPTCH_FID
+            FROM dbo.L_MAILITMS mi
+            LEFT JOIN dbo.C_MAIL_CLASSES mc ON mc.MAIL_CLASS_CD = mi.MAIL_CLASS_CD
+            LEFT JOIN dbo.C_MAILITM_CONTENTS mcon ON mcon.MAILITM_CONTENT_CD = mi.MAILITM_CONTENT_CD
+            LEFT JOIN dbo.C_PRODUCT_TYPES pt ON pt.PRODUCT_TYPE_CD = mi.PRODUCT_TYPE_CD
+            LEFT JOIN dbo.C_POSTAL_STATUSES ps ON ps.POSTAL_STATUS_CD = mi.POSTAL_STATUS_CD
+            LEFT JOIN dbo.C_COUNTRIES coo ON coo.COUNTRY_CD = mi.ORIG_COUNTRY_CD
+            LEFT JOIN dbo.C_COUNTRIES cod ON cod.COUNTRY_CD = mi.DEST_COUNTRY_CD
+            LEFT JOIN dbo.C_CURRENCIES cur ON cur.CURRENCY_CD = mi.CURRENCY_CD
+            LEFT JOIN dbo.C_EVENT_TYPES ce ON ce.EVENT_TYPE_CD = mi.EVT_TYPE_CD
+            LEFT JOIN dbo.CT_EVENT_TYPES cte ON cte.EVENT_TYPE_CD = mi.EVT_TYPE_CD AND cte.LANGUAGE_CD = 'ES'
+            LEFT JOIN dbo.N_OWN_OFFICES nof ON nof.OWN_OFFICE_CD = mi.EVT_OFFICE_CD
+            {$whereSql}
+            ORDER BY mi.EVT_GMT_DT DESC, mi.MAILITM_PID DESC
+            OFFSET {$offset} ROWS FETCH NEXT {$limit} ROWS ONLY
+            ",
+            $bindings
+        ));
+    }
+
+    private function fetchPackageRowsLight(int $offset, int $limit, ?string $search = null): Collection
+    {
+        [$whereSql, $bindings] = $this->packageListFilters($search);
+        $connection = $this->connectionName();
+
+        return collect(DB::connection($connection)->select(
+            "
+            SELECT
+                mi.MAILITM_PID,
+                RTRIM(LTRIM(mi.MAILITM_FID)) AS MAILITM_FID,
+                RTRIM(LTRIM(mi.MAILITM_LOCAL_ID)) AS MAILITM_LOCAL_ID,
+                mi.MAILITM_WEIGHT,
+                mi.MAILITM_VALUE,
+                mi.DUTIES_AMOUNT,
+                mi.CUSTOMS_NO,
+                mc.MAIL_CLASS_NM,
+                mcon.MAILITM_CONTENT_NM,
+                pt.PRODUCT_TYPE_NM,
+                ps.POSTAL_STATUS_NM,
+                mi.ORIG_COUNTRY_CD,
+                coo.COUNTRY_NM AS ORIG_COUNTRY_NM,
+                mi.DEST_COUNTRY_CD,
+                cod.COUNTRY_NM AS DEST_COUNTRY_NM,
+                mi.EVT_GMT_DT,
+                mi.EVT_TYPE_CD,
+                COALESCE(cte.LOCAL_EVENT_TYPE_NM, ce.EVENT_TYPE_NM) AS EVT_TYPE_NM_ES,
+                nof.OFFICE_FCD AS EVT_OFFICE_FCD,
+                nof.OFFICE_NM AS EVT_OFFICE_NM
+            FROM dbo.L_MAILITMS mi
+            LEFT JOIN dbo.C_MAIL_CLASSES mc ON mc.MAIL_CLASS_CD = mi.MAIL_CLASS_CD
+            LEFT JOIN dbo.C_MAILITM_CONTENTS mcon ON mcon.MAILITM_CONTENT_CD = mi.MAILITM_CONTENT_CD
+            LEFT JOIN dbo.C_PRODUCT_TYPES pt ON pt.PRODUCT_TYPE_CD = mi.PRODUCT_TYPE_CD
+            LEFT JOIN dbo.C_POSTAL_STATUSES ps ON ps.POSTAL_STATUS_CD = mi.POSTAL_STATUS_CD
+            LEFT JOIN dbo.C_COUNTRIES coo ON coo.COUNTRY_CD = mi.ORIG_COUNTRY_CD
+            LEFT JOIN dbo.C_COUNTRIES cod ON cod.COUNTRY_CD = mi.DEST_COUNTRY_CD
+            LEFT JOIN dbo.C_EVENT_TYPES ce ON ce.EVENT_TYPE_CD = mi.EVT_TYPE_CD
+            LEFT JOIN dbo.CT_EVENT_TYPES cte ON cte.EVENT_TYPE_CD = mi.EVT_TYPE_CD AND cte.LANGUAGE_CD = 'ES'
+            LEFT JOIN dbo.N_OWN_OFFICES nof ON nof.OWN_OFFICE_CD = mi.EVT_OFFICE_CD
+            {$whereSql}
+            ORDER BY mi.EVT_GMT_DT DESC, mi.MAILITM_PID DESC
+            OFFSET {$offset} ROWS FETCH NEXT {$limit} ROWS ONLY
+            ",
+            $bindings
+        ));
+    }
+
+    private function packageListFilters(?string $search = null): array
+    {
+        $search = strtoupper(trim((string) $search));
+
+        if ($search === '') {
+            return ['', []];
+        }
+
+        $like = "%{$search}%";
+
+        return [
+            "
+                WHERE UPPER(RTRIM(LTRIM(mi.MAILITM_FID))) LIKE ?
+                   OR UPPER(RTRIM(LTRIM(mi.MAILITM_LOCAL_ID))) LIKE ?
+            ",
+            [$like, $like],
         ];
     }
 
