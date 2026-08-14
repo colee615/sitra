@@ -34,7 +34,8 @@ class TrackingEventRuleController extends Controller
             $query->where('source_db', $source);
         }
 
-        if ($visibility = $request->query('visible')) {
+        $visibility = $request->query('visible');
+        if (in_array((string) $visibility, ['0', '1'], true)) {
             $query->where('is_visible', $visibility === '1');
         }
 

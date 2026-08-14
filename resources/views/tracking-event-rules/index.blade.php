@@ -117,11 +117,12 @@
                                 @endforeach
                             </select>
                         </div>
+                        @php($visibleFilter = (string) request()->query('visible', ''))
                         <div class="col-md-2">
                             <select name="visible" class="form-control">
                                 <option value="">Todos</option>
-                                <option value="1" @selected(request('visible') === '1')>Visibles</option>
-                                <option value="0" @selected(request('visible') === '0')>Ocultos</option>
+                                <option value="1" @selected($visibleFilter === '1')>Visibles</option>
+                                <option value="0" @selected($visibleFilter === '0')>Ocultos</option>
                             </select>
                         </div>
                         <div class="col-md-2">
