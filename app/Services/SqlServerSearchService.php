@@ -367,6 +367,117 @@ class SqlServerSearchService
         ];
     }
 
+    public function trackingRowsForPackageRows(iterable $packageRows): Collection
+    {
+        $packageRows = collect($packageRows);
+        $packagePids = $this->packagePids($packageRows);
+
+        if ($packagePids->isEmpty()) {
+            return collect();
+        }
+
+        $connection = $this->connectionName();
+        $placeholders = implode(',', array_fill(0, $packagePids->count(), '?'));
+        $bindings = $packagePids->all();
+
+        $trackingRowsLocal = collect(DB::connection($connection)->select(
+            "
+            SELECT
+                e.MAILITM_PID,
+                mi.MAILITM_FID AS MAILITM_FID,
+                RTRIM(LTRIM(mi.MAILITM_LOCAL_ID)) AS MAILITM_LOCAL_ID,
+                e.EVENT_GMT_DT,
+                e.EVENT_TYPE_CD,
+                CASE
+                    WHEN e.EVENT_TYPE_CD = 32 THEN 'Paquete recibido en oficina de entrega(Listo para entregar).'
+                    WHEN e.EVENT_TYPE_CD = 13 THEN 'Paquete incluido en la saca nacional.'
+                    WHEN e.EVENT_TYPE_CD = 35 THEN 'Paquete en camino a ubicaciÃ³n nacional.'
+                    WHEN e.EVENT_TYPE_CD = 30 THEN 'Paquete recibido en oficina de trÃ¡nsito.'
+                    ELSE COALESCE(ct.LOCAL_EVENT_TYPE_NM, c.EVENT_TYPE_NM)
+                END AS EVENT_TYPE_NM_ES,
+                e.USER_PID,
+                u.USER_FID,
+                u.USER_NM,
+                u.USER_DOMAIN,
+                e.EVENT_OFFICE_CD,
+                nof.OFFICE_FCD,
+                nof.OFFICE_NM,
+                nof_next.OFFICE_FCD AS NEXT_OFFICE_FCD,
+                nof_next.OFFICE_NM AS NEXT_OFFICE_NM,
+                CONCAT(COALESCE(u.USER_DOMAIN,''), '-', RTRIM(COALESCE(u.USER_FID,''))) AS SCANNED_TXT,
+                CONCAT(RTRIM(COALESCE(w.WORKSTATION_FID,'')), '-', RTRIM(COALESCE(w.WORKSTATION_DOMAIN,''))) AS WORKSTATION_TXT,
+                CASE
+                    WHEN e.CONDITION_CD = 30 THEN 'EnvÃ­o recibido en buen estado'
+                    ELSE COALESCE(ic.ITEM_CONDITION_NM, '')
+                END AS CONDITION_TXT,
+                CAST('' AS varchar(200)) AS DETAIL_TXT,
+                'IPS5Db' AS SOURCE_DB
+            FROM dbo.L_MAILITM_EVENTS e
+            INNER JOIN dbo.L_MAILITMS mi ON mi.MAILITM_PID = e.MAILITM_PID
+            LEFT JOIN dbo.C_EVENT_TYPES c ON c.EVENT_TYPE_CD = e.EVENT_TYPE_CD
+            LEFT JOIN dbo.CT_EVENT_TYPES ct ON ct.EVENT_TYPE_CD = e.EVENT_TYPE_CD AND ct.LANGUAGE_CD = 'ES'
+            LEFT JOIN dbo.N_OWN_OFFICES nof ON nof.OWN_OFFICE_CD = e.EVENT_OFFICE_CD
+            LEFT JOIN dbo.N_OWN_OFFICES nof_next ON nof_next.OWN_OFFICE_CD = e.NEXT_OFFICE_CD
+            LEFT JOIN dbo.L_USERS u ON u.USER_PID = e.USER_PID
+            LEFT JOIN dbo.L_WORKSTATIONS w ON w.WORKSTATION_PID = e.WORKSTATION_PID
+            LEFT JOIN dbo.C_ITEM_CONDITIONS ic ON ic.ITEM_CONDITION_CD = e.CONDITION_CD
+            WHERE e.MAILITM_PID IN ($placeholders)
+            ",
+            $bindings
+        ));
+
+        $trackingRowsEdi = collect(DB::connection($connection)->select(
+            "
+            SELECT
+                nee.MAILITM_PID,
+                CAST('' AS varchar(40)) AS MAILITM_FID,
+                CAST('' AS varchar(40)) AS MAILITM_LOCAL_ID,
+                COALESCE(CAST(nee.EVENT_LOCAL_DT AS datetime), nee.CAPTURE_GMT_DT) AS EVENT_GMT_DT,
+                nee.EVENT_TYPE_CD,
+                CASE
+                    WHEN nee.EVENT_TYPE_CD = 12 THEN 'Paquete enviado al extranjero.'
+                    WHEN nee.EVENT_TYPE_CD = 8 THEN 'Paquete incluido en la saca de envÃ­o.'
+                    WHEN nee.EVENT_TYPE_CD = 3 THEN 'Paquete recibido en oficina de trÃ¡nsito.'
+                    WHEN nee.EVENT_TYPE_CD = 1 THEN 'Paquete recibido del cliente.'
+                    ELSE COALESCE(ct.LOCAL_EVENT_TYPE_NM, c.EVENT_TYPE_NM)
+                END AS EVENT_TYPE_NM_ES,
+                CAST(NULL AS int) AS USER_PID,
+                CAST(NULL AS varchar(100)) AS USER_FID,
+                CAST(NULL AS varchar(200)) AS USER_NM,
+                CAST(NULL AS varchar(100)) AS USER_DOMAIN,
+                CAST(NULL AS int) AS EVENT_OFFICE_CD,
+                CAST(NULL AS varchar(30)) AS OFFICE_FCD,
+                CAST(NULL AS varchar(150)) AS OFFICE_NM,
+                nee.NEXT_POINT_ID AS NEXT_OFFICE_FCD,
+                CAST(NULL AS varchar(150)) AS NEXT_OFFICE_NM,
+                CAST('' AS varchar(200)) AS SCANNED_TXT,
+                CAST('' AS varchar(200)) AS WORKSTATION_TXT,
+                CASE
+                    WHEN nee.CONDITION_CD = 30 THEN 'EnvÃ­o recibido en buen estado'
+                    ELSE COALESCE(ic.ITEM_CONDITION_NM, '')
+                END AS CONDITION_TXT,
+                CONCAT('PaÃƒÂ­s Origen: ', COALESCE(co.COUNTRY_NM, nee.PLACE_OF_ORIGIN_OFFICE_CD, '')) AS DETAIL_TXT,
+                'IPS5Db-EDI' AS SOURCE_DB
+            FROM dbo.N_EDI_MAILITM_EVENTS nee
+            INNER JOIN dbo.N_EDI_MAILITMS ne ON ne.MAILITM_PID = nee.MAILITM_PID
+            LEFT JOIN dbo.C_EVENT_TYPES c ON c.EVENT_TYPE_CD = nee.EVENT_TYPE_CD
+            LEFT JOIN dbo.CT_EVENT_TYPES ct ON ct.EVENT_TYPE_CD = nee.EVENT_TYPE_CD AND ct.LANGUAGE_CD = 'ES'
+            LEFT JOIN dbo.C_ITEM_CONDITIONS ic ON ic.ITEM_CONDITION_CD = nee.CONDITION_CD
+            LEFT JOIN dbo.C_COUNTRIES co ON co.COUNTRY_CD = LEFT(ne.ORIG_COUNTRY_CD, 2)
+            WHERE nee.MAILITM_PID IN ($placeholders)
+            ",
+            $bindings
+        ));
+
+        $trackingRowsIndirect = $this->indirectTrackingRows($packageRows, '');
+
+        return $trackingRowsLocal
+            ->concat($trackingRowsEdi)
+            ->concat($trackingRowsIndirect)
+            ->sortByDesc('EVENT_GMT_DT')
+            ->values();
+    }
+
     public function countPackages(?string $search = null): int
     {
         [$whereSql, $bindings] = $this->packageListFilters($search);
@@ -633,11 +744,7 @@ class SqlServerSearchService
     private function indirectTrackingRows($packageRows, string $codigo)
     {
         $connection = $this->connectionName();
-        $packagePids = collect($packageRows)
-            ->pluck('MAILITM_PID')
-            ->filter()
-            ->unique()
-            ->values();
+        $packagePids = $this->packagePids($packageRows);
 
         if ($packagePids->isEmpty()) {
             return collect();
@@ -792,6 +899,16 @@ class SqlServerSearchService
                     $row->DETAIL_TXT ?? '',
                 ]);
             })
+            ->values();
+    }
+
+    private function packagePids(iterable $packageRows): Collection
+    {
+        return collect($packageRows)
+            ->pluck('MAILITM_PID')
+            ->filter(fn ($pid) => $pid !== null && $pid !== '')
+            ->map(fn ($pid) => trim((string) $pid))
+            ->unique()
             ->values();
     }
 }

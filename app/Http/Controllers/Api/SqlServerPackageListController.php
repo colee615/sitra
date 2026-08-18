@@ -42,9 +42,11 @@ class SqlServerPackageListController extends Controller
 
         try {
             $result = $searchService->listPackages($page, $perPage, $search);
+            $trackingRows = $searchService->trackingRowsForPackageRows($result['rows'] ?? []);
+            $eventsByPackage = $this->transformPackageEvents($trackingRows, $eventRuleService)->groupBy('mailitm_pid');
 
             $items = collect($result['rows'] ?? [])
-                ->map(fn ($row) => $this->transformRow($row, $eventRuleService))
+                ->map(fn ($row) => $this->transformRow($row, $eventsByPackage->get(trim((string) ($row->MAILITM_PID ?? '')), collect())))
                 ->values();
 
             return response()->json([
@@ -154,14 +156,12 @@ class SqlServerPackageListController extends Controller
         return !empty($parts) ? implode(' - ', $parts) : null;
     }
 
-    private function transformRow(object $row, TrackingEventRuleService $eventRuleService): array
+    private function transformRow(object $row, mixed $events): array
     {
-        $rawEvent = isset($row->EVT_TYPE_NM_ES) ? (string) $row->EVT_TYPE_NM_ES : '';
         $codigo = trim((string) ($row->MAILITM_FID ?: $row->MAILITM_LOCAL_ID));
-        $hasHeavyFields = property_exists($row, 'EVENTS_COUNT');
 
         return [
-            'mailitm_pid' => isset($row->MAILITM_PID) ? (int) $row->MAILITM_PID : null,
+            'mailitm_pid' => $this->nullableString($row->MAILITM_PID ?? null),
             'codigo' => $codigo,
             'codigo_s10' => $this->nullableString($row->MAILITM_FID ?? null),
             'fecha_registro' => $this->formatDate($row->FIRST_EVENT_GMT_DT ?? null),
@@ -179,6 +179,119 @@ class SqlServerPackageListController extends Controller
                 'codigo' => $this->nullableString($row->DEST_COUNTRY_CD ?? null),
                 'nombre' => $this->cleanText($row->DEST_COUNTRY_NM ?? ''),
             ],
+            'eventos' => $this->filterBoliviaBoundaryEvents(collect($events), $row)->values()->all(),
         ];
+    }
+
+    private function transformPackageEvents(iterable $trackingRows, TrackingEventRuleService $eventRuleService)
+    {
+        return collect($trackingRows)
+            ->map(function ($row) use ($eventRuleService) {
+                $rawEvent = $this->cleanText($row->EVENT_TYPE_NM_ES ?? '');
+                $apiEvent = $eventRuleService->present(
+                    isset($row->EVENT_TYPE_NM_ES) ? (string) $row->EVENT_TYPE_NM_ES : '',
+                    isset($row->SOURCE_DB) ? (string) $row->SOURCE_DB : '',
+                    $row->EVENT_TYPE_CD ?? null
+                );
+
+                return [
+                    'mailitm_pid' => trim((string) ($row->MAILITM_PID ?? '')),
+                    'fecha' => $this->formatDate($row->EVENT_GMT_DT ?? null),
+                    'codigo_evento' => isset($row->EVENT_TYPE_CD) ? (int) $row->EVENT_TYPE_CD : null,
+                    'evento_original' => $rawEvent,
+                    'evento_api' => $apiEvent !== null ? trim((string) $apiEvent) : null,
+                    'visible_api' => $apiEvent !== null,
+                    'fuente' => $this->nullableString($row->SOURCE_DB ?? null),
+                    'oficina' => $this->joinParts([
+                        $row->OFFICE_FCD ?? null,
+                        $row->OFFICE_NM ?? null,
+                    ]),
+                    'siguiente_oficina' => $this->joinParts([
+                        $row->NEXT_OFFICE_FCD ?? null,
+                        $row->NEXT_OFFICE_NM ?? null,
+                    ]),
+                    'detalle' => $this->cleanText($row->DETAIL_TXT ?? ''),
+                    'condicion' => $this->cleanText($row->CONDITION_TXT ?? ''),
+                ];
+            })
+            ->filter(fn (array $event) => $event['fecha'] !== null)
+            ->sortByDesc(fn (array $event) => strtotime($event['fecha'] ?: '1970-01-01 00:00:00') ?: 0)
+            ->values();
+    }
+
+    private function filterBoliviaBoundaryEvents($events, object $row)
+    {
+        $originCode = strtoupper(trim((string) ($row->ORIG_COUNTRY_CD ?? '')));
+        $destinationCode = strtoupper(trim((string) ($row->DEST_COUNTRY_CD ?? '')));
+
+        return collect($events)
+            ->map(function (array $event) use ($originCode, $destinationCode) {
+                $eventText = $this->comparableText(implode(' ', array_filter([
+                    $event['evento_original'] ?? '',
+                    $event['evento_api'] ?? '',
+                    $event['detalle'] ?? '',
+                ])));
+
+                $movement = null;
+
+                if ($originCode === 'BO' && $this->isBoliviaDepartureEvent($eventText)) {
+                    $movement = 'salida_bolivia';
+                }
+
+                if ($destinationCode === 'BO' && $this->isBoliviaArrivalEvent($eventText)) {
+                    $movement = 'entrada_bolivia';
+                }
+
+                if ($movement === null) {
+                    return null;
+                }
+
+                $event['movimiento_bolivia'] = $movement;
+
+                return $event;
+            })
+            ->filter()
+            ->values();
+    }
+
+    private function isBoliviaArrivalEvent(string $eventText): bool
+    {
+        foreach ([
+            'recibir envio en oficina de cambio (entrada)',
+            'recibir envio desde el extranjero',
+            'recibir envase desde el extranjero',
+            'recibir despacho desde el extranjero',
+        ] as $pattern) {
+            if (str_contains($eventText, $pattern)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function isBoliviaDepartureEvent(string $eventText): bool
+    {
+        foreach ([
+            'enviar envio al extranjero',
+            'paquete enviado al extranjero',
+            'enviar envase al extranjero',
+            'despacho enviado al extranjero',
+            'enviar despacho al extranjero',
+        ] as $pattern) {
+            if (str_contains($eventText, $pattern)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function comparableText(string $value): string
+    {
+        $value = $this->cleanText($value) ?? '';
+        $value = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value) ?: $value;
+
+        return mb_strtolower($value);
     }
 }
