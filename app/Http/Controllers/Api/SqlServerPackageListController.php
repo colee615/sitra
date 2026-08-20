@@ -171,6 +171,11 @@ class SqlServerPackageListController extends Controller
             'clase_correo' => $this->cleanText($row->MAIL_CLASS_NM ?? ''),
             'contenido' => $this->cleanText($row->MAILITM_CONTENT_NM ?? ''),
             'estado_postal' => $this->cleanText($row->POSTAL_STATUS_NM ?? ''),
+            'telefono' => $this->nullableString($row->ADDRESSEE_PHONE_NO ?? $row->SENDER_PHONE_NO ?? null),
+            'telefonos' => [
+                'remitente' => $this->nullableString($row->SENDER_PHONE_NO ?? null),
+                'destinatario' => $this->nullableString($row->ADDRESSEE_PHONE_NO ?? null),
+            ],
             'origen' => [
                 'codigo' => $this->nullableString($row->ORIG_COUNTRY_CD ?? null),
                 'nombre' => $this->cleanText($row->ORIG_COUNTRY_NM ?? ''),

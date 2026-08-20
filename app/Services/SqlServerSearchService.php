@@ -635,6 +635,26 @@ class SqlServerSearchService
                       AND e.RECPTCL_PID IS NOT NULL
                     ORDER BY e.EVENT_GMT_DT DESC
                 ) AS DESPTCH_FID
+                ,
+                (
+                    SELECT TOP 1 RTRIM(LTRIM(mc.CUSTOMER_PHONE_NO))
+                    FROM dbo.L_MAILITM_CUSTOMERS mc
+                    WHERE mc.MAILITM_PID = mi.MAILITM_PID
+                      AND mc.SENDER_PAYEE_IND = 'S'
+                      AND mc.CUSTOMER_PHONE_NO IS NOT NULL
+                      AND LTRIM(RTRIM(mc.CUSTOMER_PHONE_NO)) <> ''
+                    ORDER BY mc.CUSTOMER_NAME
+                ) AS SENDER_PHONE_NO
+                ,
+                (
+                    SELECT TOP 1 RTRIM(LTRIM(mc.CUSTOMER_PHONE_NO))
+                    FROM dbo.L_MAILITM_CUSTOMERS mc
+                    WHERE mc.MAILITM_PID = mi.MAILITM_PID
+                      AND mc.SENDER_PAYEE_IND <> 'S'
+                      AND mc.CUSTOMER_PHONE_NO IS NOT NULL
+                      AND LTRIM(RTRIM(mc.CUSTOMER_PHONE_NO)) <> ''
+                    ORDER BY mc.CUSTOMER_NAME
+                ) AS ADDRESSEE_PHONE_NO
             FROM dbo.L_MAILITMS mi
             LEFT JOIN dbo.C_MAIL_CLASSES mc ON mc.MAIL_CLASS_CD = mi.MAIL_CLASS_CD
             LEFT JOIN dbo.C_MAILITM_CONTENTS mcon ON mcon.MAILITM_CONTENT_CD = mi.MAILITM_CONTENT_CD
