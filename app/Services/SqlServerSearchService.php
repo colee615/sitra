@@ -149,8 +149,9 @@ class SqlServerSearchService
                     CAST(NULL AS varchar(200)) AS USER_NM,
                     CAST(NULL AS varchar(100)) AS USER_DOMAIN,
                     CAST(NULL AS int) AS EVENT_OFFICE_CD,
-                    CAST(NULL AS varchar(30)) AS OFFICE_FCD,
-                    CAST(NULL AS varchar(150)) AS OFFICE_NM,
+                    RTRIM(LTRIM(nee.LOCATION_ID)) AS OFFICE_FCD,
+                    co_loc.COUNTRY_NM AS OFFICE_NM,
+                    RTRIM(LTRIM(nee.LOCATION_ID)) AS LOCATION_ID,
                     nee.NEXT_POINT_ID AS NEXT_OFFICE_FCD,
                     CAST(NULL AS varchar(150)) AS NEXT_OFFICE_NM,
                     CAST('' AS varchar(200)) AS SCANNED_TXT,
@@ -167,6 +168,7 @@ class SqlServerSearchService
                 LEFT JOIN dbo.CT_EVENT_TYPES ct ON ct.EVENT_TYPE_CD = nee.EVENT_TYPE_CD AND ct.LANGUAGE_CD = 'ES'
                 LEFT JOIN dbo.C_ITEM_CONDITIONS ic ON ic.ITEM_CONDITION_CD = nee.CONDITION_CD
                 LEFT JOIN dbo.C_COUNTRIES co ON co.COUNTRY_CD = LEFT(ne.ORIG_COUNTRY_CD, 2)
+                LEFT JOIN dbo.C_COUNTRIES co_loc ON co_loc.COUNTRY_CD = LEFT(nee.LOCATION_ID, 2)
                 WHERE UPPER(RTRIM(LTRIM(ne.MAILITM_FID))) = ?
                 ORDER BY COALESCE(CAST(nee.EVENT_LOCAL_DT AS datetime), nee.CAPTURE_GMT_DT) DESC
                 ",
@@ -446,8 +448,9 @@ class SqlServerSearchService
                 CAST(NULL AS varchar(200)) AS USER_NM,
                 CAST(NULL AS varchar(100)) AS USER_DOMAIN,
                 CAST(NULL AS int) AS EVENT_OFFICE_CD,
-                CAST(NULL AS varchar(30)) AS OFFICE_FCD,
-                CAST(NULL AS varchar(150)) AS OFFICE_NM,
+                RTRIM(LTRIM(nee.LOCATION_ID)) AS OFFICE_FCD,
+                co_loc.COUNTRY_NM AS OFFICE_NM,
+                RTRIM(LTRIM(nee.LOCATION_ID)) AS LOCATION_ID,
                 nee.NEXT_POINT_ID AS NEXT_OFFICE_FCD,
                 CAST(NULL AS varchar(150)) AS NEXT_OFFICE_NM,
                 CAST('' AS varchar(200)) AS SCANNED_TXT,
@@ -464,6 +467,7 @@ class SqlServerSearchService
             LEFT JOIN dbo.CT_EVENT_TYPES ct ON ct.EVENT_TYPE_CD = nee.EVENT_TYPE_CD AND ct.LANGUAGE_CD = 'ES'
             LEFT JOIN dbo.C_ITEM_CONDITIONS ic ON ic.ITEM_CONDITION_CD = nee.CONDITION_CD
             LEFT JOIN dbo.C_COUNTRIES co ON co.COUNTRY_CD = LEFT(ne.ORIG_COUNTRY_CD, 2)
+            LEFT JOIN dbo.C_COUNTRIES co_loc ON co_loc.COUNTRY_CD = LEFT(nee.LOCATION_ID, 2)
             WHERE nee.MAILITM_PID IN ($placeholders)
             ",
             $bindings

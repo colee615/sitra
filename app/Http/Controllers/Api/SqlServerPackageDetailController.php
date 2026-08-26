@@ -52,7 +52,7 @@ class SqlServerPackageDetailController extends Controller
             $contentPieceRows = collect($result['contentPieceRows'] ?? []);
 
             $eventos = $this->transformEvents($trackingRows, $eventRuleService);
-            $paquete = $this->buildPackageSummary($packageRows, $customsRows);
+            $paquete = $this->buildPackageSummary($packageRows, $customsRows, $trackingRows);
 
             return response()->json([
                 'codigo' => $result['codigo'] ?? strtoupper(trim($codigo)),
@@ -98,10 +98,11 @@ class SqlServerPackageDetailController extends Controller
         }
     }
 
-    private function buildPackageSummary(Collection $packageRows, Collection $customsRows): array
+    private function buildPackageSummary(Collection $packageRows, Collection $customsRows, Collection $trackingRows): array
     {
         $package = $packageRows->first();
         $customs = $customsRows->first();
+        $transito = $this->inferTransitSummary($trackingRows, $packageRows);
 
         return [
             'mailitm_pid' => $package ? (int) ($package->MAILITM_PID ?? 0) : null,
@@ -138,6 +139,7 @@ class SqlServerPackageDetailController extends Controller
                 $package?->EVT_OFFICE_FCD ?? null,
                 $package?->EVT_OFFICE_NM ?? null,
             ]),
+            'transito' => $transito,
         ];
     }
 
@@ -158,6 +160,7 @@ class SqlServerPackageDetailController extends Controller
                     'direccion' => $this->inferDirection($rawEventName),
                     'alcance' => $this->inferScope((string) ($row->SOURCE_DB ?? '')),
                     'source_db' => $this->nullableString($row->SOURCE_DB ?? null),
+                    'codigo_ubicacion' => $this->nullableString($row->LOCATION_ID ?? $row->OFFICE_FCD ?? null),
                     'nombre_original_bd' => $rawEventName !== '' ? $rawEventName : null,
                     'nombre_api' => $eventApiName !== null && trim($eventApiName) !== '' ? trim($eventApiName) : null,
                     'visible_api' => $eventApiName !== null,
@@ -188,6 +191,52 @@ class SqlServerPackageDetailController extends Controller
             ]))
             ->sortByDesc(fn (array $item) => strtotime($item['fecha'] ?: '1970-01-01 00:00:00') ?: 0)
             ->values();
+    }
+
+    private function inferTransitSummary(Collection $trackingRows, Collection $packageRows): ?array
+    {
+        $package = $packageRows->first();
+        $originCode = strtoupper(trim((string) ($package->ORIG_COUNTRY_CD ?? '')));
+        $destinationCode = strtoupper(trim((string) ($package->DEST_COUNTRY_CD ?? '')));
+
+        $transits = $trackingRows
+            ->filter(fn ($row) => ($row->SOURCE_DB ?? '') === 'IPS5Db-EDI')
+            ->map(function ($row) {
+                $locationCode = strtoupper(trim((string) ($row->LOCATION_ID ?? $row->OFFICE_FCD ?? '')));
+
+                return [
+                    'country_code' => substr($locationCode, 0, 2),
+                    'country_name' => $this->cleanText($row->OFFICE_NM ?? ''),
+                    'location_code' => $locationCode,
+                    'event_date' => $this->formatDate($row->EVENT_GMT_DT ?? null),
+                ];
+            })
+            ->filter(fn (array $item) => strlen($item['country_code']) === 2 && $item['location_code'] !== '')
+            ->reject(fn (array $item) => in_array($item['country_code'], [$originCode, $destinationCode], true))
+            ->groupBy('country_code')
+            ->map(function (Collection $rows, string $countryCode) {
+                $rows = $rows->sortByDesc('event_date')->values();
+                $latest = $rows->first();
+
+                return [
+                    'codigo' => $countryCode,
+                    'nombre' => $latest['country_name'] !== '' ? $latest['country_name'] : $countryCode,
+                    'cantidad_eventos' => $rows->count(),
+                    'ultimo_evento_fecha' => $latest['event_date'] !== '' ? $latest['event_date'] : null,
+                    'ubicaciones' => $rows->pluck('location_code')->filter()->unique()->values()->all(),
+                ];
+            })
+            ->sortByDesc('ultimo_evento_fecha')
+            ->values();
+
+        if ($transits->isEmpty()) {
+            return null;
+        }
+
+        return [
+            'principal' => $transits->first(),
+            'paises' => $transits->all(),
+        ];
     }
 
     private function transformCustomers(Collection $customerRows, TrackingEventRuleService $eventRuleService): array

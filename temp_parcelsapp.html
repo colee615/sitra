@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang='es'>
+<head>
+<title>
+Seguimiento de envíos | Parcels
+
+</title>
+<meta content='Seguimiento del envío desde China, Gearbest, Aliexpress, Shein, Amazon, Francia, Alemania
+' name='description'>
+<meta content='#519e99' name='theme-color'>
+<link crossorigin='true' href='https://www.googletagmanager.com' rel='preconnect'>
+<link crossorigin='true' href='https://www.google-analytics.com' rel='preconnect'>
+<link href='https://stats.g.doubleclick.net/' rel='preconnect'>
+<meta name="csrf-param" content="authenticity_token" />
+<meta name="csrf-token" content="0YkeEOJ421L8kbpdc4np5ZvbUcsBnG/E3zdNR4idqe8nTt8Uqezn1wK6LfVjvZPj2zOhXb078vsWNx7MW5Dv0g==" />
+<link rel="stylesheet" media="all" href="//dvow0vltefbxy.cloudfront.net/assets/application-f1c94604301cc06275dab7637ec39214b1d7f89ba1b0e2b75e555c574e73c378.css" data-turbolinks-track="reload" />
+<meta content='false' name='uk-visitor'>
+<link as='font' crossorigin='' href='//dvow0vltefbxy.cloudfront.net/assets/fa-solid-900-cbbca7d9888b4a9eab7d479756d2924f9b067fd38dab376797029df741f96ee4.woff2' rel='preload' type='font/woff2'>
+<link as='font' crossorigin='' href='//dvow0vltefbxy.cloudfront.net/assets/muli-v11-latin-ext_latin_vietnamese-regular-23ef5be9e250e5079cd34c8156cfaca3e0a604ae0e6e3eae02ac221d196db9b6.woff2' rel='preload' type='font/woff2'>
+<!-- Google Consent Mode v2 -->
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  
+  // Check if user is from UK
+  const isUk = document.querySelector('meta[name="uk-visitor"]')?.content === "true";
+  
+  // Always set consent defaults for UK visitors
+  if (isUk) {
+    gtag('consent', 'default', {
+      ad_storage: 'denied',
+      analytics_storage: 'denied', 
+      ad_user_data: 'denied',
+      ad_personalization: 'denied',
+      wait_for_update: 500
+    });
+  } else {
+    // For non-UK visitors, you can set more permissive defaults
+    gtag('consent', 'default', {
+      ad_storage: 'granted',
+      analytics_storage: 'granted',
+      ad_user_data: 'granted', 
+      ad_personalization: 'granted'
+    });
+  }
+
+  gtag('js', new Date());
+</script>
+
+<!-- Google tag (GA-4) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-Z5RCF4F7T8"></script>
+<script>
+  /* GA-4 config */
+  gtag('config','G-Z5RCF4F7T8',{
+    anonymize_ip: true,
+    page_path: window.location.pathname
+  });
+</script>
+
+<!-- Consent Status Helper -->
+<script>
+  // Global helper functions to check consent status
+  window.hasAnalyticsConsent = function() {
+    const isUk = document.querySelector('meta[name="uk-visitor"]')?.content === "true";
+    if (!isUk) return true; // Non-UK visitors have analytics enabled by default
+    
+    // Check for Google Funding Choices cookies first
+    const cookies = document.cookie.split(';');
+    if (cookies.some(cookie => cookie.trim().startsWith('FCCDCF=')) || 
+        cookies.some(cookie => cookie.trim().startsWith('FCNEC='))) {
+      // Google Funding Choices cookies exist, Google Consent Mode should handle the actual consent state
+      return true;
+    }
+    
+    // Fallback to our custom localStorage consent
+    const status = localStorage.getItem('consent_status');
+    return status === 'accepted';
+  };
+  
+  window.hasAdvertisingConsent = function() {
+    const isUk = document.querySelector('meta[name="uk-visitor"]')?.content === "true";
+    if (!isUk) return true; // Non-UK visitors have advertising enabled by default
+    
+    // Check for Google Funding Choices cookies first
+    const cookies = document.cookie.split(';');
+    if (cookies.some(cookie => cookie.trim().startsWith('FCCDCF=')) || 
+        cookies.some(cookie => cookie.trim().startsWith('FCNEC='))) {
+      // Google Funding Choices cookies exist, Google Consent Mode should handle the actual consent state
+      return true;
+    }
+    
+    // Fallback to our custom localStorage consent
+    const status = localStorage.getItem('consent_status');
+    return status === 'accepted';
+  };
+  
+  // Enhanced analytics tracking that respects consent
+  window.trackConsentAwareEvent = function(eventName, parameters = {}) {
+    if (window.hasAnalyticsConsent() && typeof gtag !== 'undefined') {
+      gtag('event', eventName, parameters);
+    }
+  };
+  
+  // Track page views with consent awareness
+  window.trackConsentAwarePageView = function(pagePath) {
+    if (window.hasAnalyticsConsent() && typeof gtag !== 'undefined') {
+      gtag('config', 'G-Z5RCF4F7T8', {
+        page_path: pagePath || window.location.pathname,
+        anonymize_ip: true
+      });
+    }
+  };
+</script>
+
+<!-- Redirect protection - must load before ads -->
+<script src='/redirect-protection.js' type='text/javascript'></script>
+<!-- Load ad scripts in header for non-UK visitors only -->
+<!-- UK visitors get dynamic loading after consent -->
+
+      <script async src="//pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+      <script>
+        (adsbygoogle = window.adsbygoogle || []).push({
+          google_ad_client: "ca-pub-4338069701034964",
+          enable_page_level_ads: true
+        });
+      </script>
+    
+
+
+      <script data-cfasync="false" type="text/javascript">
+      document.addEventListener('DOMContentLoaded', function() {
+        (function(w, d) {
+          var s = d.createElement('script');
+          s.src = '//cdn.adpushup.com/42030/adpushup.js';
+          s.type = 'text/javascript'; s.async = true;
+          (d.getElementsByTagName('head')[0] || d.getElementsByTagName('body')[0]).appendChild(s);
+        })(window, document);
+      });
+      </script>      
+    
+<meta content='width=device-width, initial-scale=1.0' name='viewport'>
+
+<link href='/apple-touch-icon.png' rel='apple-touch-icon' sizes='180x180'>
+<link href='/favicon-32x32.png' rel='icon' sizes='32x32' type='image/png'>
+<link href='/favicon-16x16.png' rel='icon' sizes='16x16' type='image/png'>
+<link href='/manifest.json' rel='manifest'>
+<link color='#5bbad5' href='/safari-pinned-tab.svg' rel='mask-icon'>
+<meta content='#ffffff' name='theme-color'>
+<!-- Open Graph data -->
+<meta content='Seguimiento de envíos | Parcels
+' property='og:title'>
+<meta content='website' property='og:type'>
+<meta content='https://parcelsapp.com/es' property='og:url'>
+<meta content='//dvow0vltefbxy.cloudfront.net/assets/preview-617f088703dbd117a7f86a5c2df09f0ce169a0abda21791404bb43c8155d21ef.jpg' property='og:image'>
+<meta content='1200' property='og:image:width'>
+<meta content='630' property='og:image:height'>
+<meta content='Seguimiento del envío desde China, Gearbest, Aliexpress, Shein, Amazon, Francia, Alemania
+' property='og:description'>
+<meta content='Parcels' property='og:site_name'>
+</head>
+<body id='page-top'>
+
+
+<header class='carrier-header'>
+<nav class='navbar navbar-default' id='mainNav'>
+<div class='container' itemscope='itemscope' itemtype='https://schema.org/WebSite'>
+<meta content='https://parcelsapp.com/'>
+<div class='navbar-header'>
+<button class='navbar-toggle collapsed' data-target='#bs-example-navbar-collapse-1' data-toggle='collapse' type='button'>
+<span class='sr-only'>Switch navigation</span>
+<i class='fa fa-bars'></i>
+</button>
+<a class='navbar-brand page-scroll' href='/es'>
+<img width="18" height="18" src="//dvow0vltefbxy.cloudfront.net/assets/logo-c151ed396f2a7b7e0b34ba1490740dd9547013b7645c74af377b1dd60cf6aa3b.png" />
+<span>Parcels</span>
+</a>
+</div>
+<div class='collapse navbar-collapse' id='bs-example-navbar-collapse-1'>
+<ul class='nav navbar-nav navbar-right'>
+<li>
+<a href="/pro"><i class='fa fa-star'></i>
+Parcels Pro
+</a></li>
+<li>
+<a href="/es/carriers"><i class='fa fa-plane'></i>
+Servicios postales
+</a></li>
+<li>
+<div class='dropdown'>
+<button aria-expanded='true' aria-haspopup='true' class='btn btn-default dropdown-toggle' data-toggle='dropdown' id='tools-menu' type='button'>
+<span class='flags'>
+<i class='fa fa-gear'></i>
+API
+</span>
+<span class='caret'></span>
+</button>
+<ul aria-labelledby='tools-menu' class='dropdown-menu'>
+<li>
+<a href="/developers/console">API Dashboard</a>
+</li>
+<li>
+<a href="/developers/docs">Documentation</a>
+</li>
+<li>
+<a href="/developers/pricing">Pricing</a>
+</li>
+<li>
+<a href="/tracking-widget">Tracking Widget</a>
+</li>
+</ul>
+</div>
+</li>
+<li>
+<a class='page-scroll' href='#tisunov'>Contactos</a>
+</li>
+<li>
+<div class='dropdown'>
+<button aria-expanded='true' aria-haspopup='true' class='btn btn-default dropdown-toggle' data-toggle='dropdown' id='languages-menu' type='button'>
+<span class='flags'>
+<i class='fa fa-globe'></i>
+Español
+</span>
+<span class='caret'></span>
+</button>
+<ul aria-labelledby='languages-menu' class='dropdown-menu'>
+<li>
+<a href="/en">???? English</a>
+</li>
+<li>
+<a href="/de">???? Deutsch</a>
+</li>
+<li>
+<a href="/fr">???? Français</a>
+</li>
+<li>
+<a href="/it">???? Italiano</a>
+</li>
+<li>
+<a href="/es">???? Español</a>
+</li>
+<li>
+<a href="/pt">???? Português</a>
+</li>
+<li>
+<a href="/sv">???? Svenska</a>
+</li>
+<li>
+<a href="/nl">???? Nederlandse</a>
+</li>
+<li>
+<a href="/ko">???? ???</a>
+</li>
+<li>
+<a href="/id">???? Bahasa Indonesia</a>
+</li>
+<li>
+<a href="/ru">???? ???????</a>
+</li>
+</ul>
+</div>
+</li>
+</ul>
+</div>
+</div>
+</nav>
+
+<div class='container'>
+<div class='row'>
+<div class='col-md-12 col-centered text-center'>
+<h1>Seguimiento de envío universal</h1>
+<p>Track <a href="/en/carriers/usps">USPS</a>, <a href="/en/carriers/canada-post">Canada Post</a>, <a href="/en/carriers/royal-mail">Royal Mail</a>, <a href="/en/carriers/dhl">DHL</a>, <a href="/en/carriers/china-post">China Post</a>, <a href="/en/carriers/fedex">Fedex</a>, <a href="/en/carriers/ups">UPS</a>, <a href="/en/carriers/amazon-logistics">Amazon</a>, <a href="/en/carriers/deutsche-post">Deutsche Post</a>, <a href="/en/shops/aliexpress">AliExpress</a>, <a href="/en/shops/wish">Wish</a>, <a href="/en/shops/shopee">Shopee</a></p>
+</div>
+</div>
+<div class='row'>
+<div class='col-md-12 col-centered'>
+<form action='#tracking-form' data-tracking-guard='true' id='tracking-form' method='get' role='search'>
+<div class='form-group'>
+<div class='input-group input-group-lg'>
+<input autocomplete='off' class='form-control' name='tracking_id' placeholder='Ingrese el número de seguimiento' type='text' value='EE000722326BO'>
+<span class='input-group-btn'>
+<button class='btn btn-default btn-parcels' data-tracking-submit='true' type='submit'>
+<i aria-hidden='true' class='fas fa-binoculars'></i>
+<i aria-hidden='true' class='fas fa-spinner fa-spin'></i>
+<span class='hidden-xs'>
+Localizar Envío
+</span>
+</button>
+</span>
+</div>
+</div>
+</form>
+</div>
+</div>
+<div class='row'>
+<div class='col-md-12'>
+<div id='recent-ids' style='min-height: 34.3px'>
+<v-tag-list :value='tags' @update-value='updateTags'></v-tag-list>
+</div>
+</div>
+</div>
+
+</div>
+</header>
+<div class='tracking-bar-container' style='position: relative'>
+<div class='tracking-bar'>
+<div class='bar'></div>
+<div class='bar'></div>
+<div class='bar'></div>
+</div>
+</div>
+
+      <!-- Leaderboard 3 -->
+      <div style="text-align: center; min-height: 280px;">
+        <ins class="adsbygoogle"
+             style="display:block"
+             data-ad-client="ca-pub-4338069701034964"
+             data-ad-slot="8520652802"
+             data-ad-format="auto"
+             data-full-width-responsive="true"></ins>
+        <script>
+             (adsbygoogle = window.adsbygoogle || []).push({});
+        </script>
+      </div>
+    
+<section class='tracking-info empty' id='tracking-info' style='position: relative'>
+<div class='container'>
+<div class='row parcel-name'>
+<div class='col-md-12'>
+<a href='#' id='parcel-name'>
+Agregar título de envío
+</a>
+</div>
+</div>
+<div class='row parcel'></div>
+</div>
+<div class='container' id='select-country' style='display: none;'>
+<a class='btn btn-default btn-parcels' data-target='#countryModal' data-toggle='modal' href='#'>Choose country</a>
+</div>
+<div class='container' id='select-carrier' style='display: none;'>
+<h2>Seleccionar operador</h2>
+<div class='row'>
+<div class='col-md-4'>
+<input class='textfield' id='carriers-search-input' placeholder='Buscar por nombre' type='text'>
+</div>
+</div>
+<div class='row'>
+<div id='carriers-grid'></div>
+</div>
+</div>
+</section>
+<div aria-labelledby='countryModalLabel' class='modal fade' id='countryModal' role='dialog' tabindex='-1'>
+<div class='modal-dialog' role='document'>
+<div class='modal-content'>
+<div class='modal-header'>
+<button aria-label='Close' class='close' data-dismiss='modal' type='button'>
+<span aria-hidden='true'>×</span>
+</button>
+<h4 class='modal-title' id='countryModalLabel'>Choose country</h4>
+</div>
+<div class='modal-body'>
+<input id='searchInput' placeholder='Choose country' type='text'>
+<div class='grid-container' id='countriesGrid'></div>
+</div>
+</div>
+</div>
+</div>
+
+<section class='carrier-info content'>
+<div class='container'>
+<h2>Track any package, freight and shipment</h2>
+<div class='row'>
+<div class='col-md-8'>
+<div class='description'>
+<p>Having bought in the online store always want to know where the package is now? To save time checking the sites of postal companies manually, I created <strong>"Parcels"</strong> website and mobile apps which will automatically check every relevant postal, courier and logistics company website on your behalf. <p> To find out where your parcel is, you need to know only tracking number of your package.</p>
+
+      <div id="78d346f6-f266-45c4-b1e4-3bec9d1d7d11" class="_ap_apex_ad" max-height="280">
+        <script>
+          var adpushup = window.adpushup = window.adpushup || {};
+          adpushup.que = adpushup.que || [];
+          adpushup.que.push(function() {
+          adpushup.triggerAd("78d346f6-f266-45c4-b1e4-3bec9d1d7d11");
+        });
+        </script>
+      </div>      
+    
+<h2>What is a tracking number?</h2>
+<p>Tracking number or tracking code is a unique number assigned to each package, which allows you to monitor the movement of the parcel between the countries or even inside one country. <p>Tracking numbers can be international or traceable only within the country of the sender. <p> The tracking number in the format of the Universal Postal Union looks like RA123456789CN, where the first 2 letters are the type of package and the last 2 letters are the code of the country of origin. Packages with such numbers can be tracked right until delivery. <p>Other shipments can be delivered by courier, transport and logistics companies, and how tracking codes look can vary a lot: CTAFT0000160477YQ, UPAAB000000251682107, AEL10105033654UA, SGADN143797855. Such packages are not always trackable in the recipient's country, and you'll have to wait for notification from the Post Office or a call from a courier company.</p>
+<h2>Tracking eBay order</h2>
+<p>eBay sellers use multiple delivery and postal companies depending on item price and selected shipping method. Whether it's SpeedPAK, Pitney Bowes, Global Shipping Program, China Post, Winit, Yanwen or any other shipping company we've got your back. Read our extensive <a href='/en/shops/ebay'>guide to tracking eBay orders</a>.</p>
+<h2>Delivery time</h2>
+<p>Wondering how long it will take for your order to arrive to United States, UK, Canada, Australia or any other country? Wonder no more, with our state of the art delivery time estimation algorithm you'll always informed when to expect your parcel. We collect extensive delivery time statistics for each package going into each country and city and will use all of this data to get you most accurate estimated date of arrival.</p>
+</div>
+</div>
+<div class='col-md-4'>
+<!-- .app-promo -->
+<!-- =link_to &quot;https://itunes.apple.com/es/app/id1229071393?mt=8&quot;, target: &#39;_blank&#39;, alt: &#39;&#39; do -->
+<!-- =image_tag &quot;carriers/en/app-promo.jpg&quot;, class: &#39;img-responsive&#39; -->
+<!-- %a.btn.btn-default.btn-parcels{href: &quot;https://itunes.apple.com/es/app/id1229071393?mt=8&quot;, target: &#39;_blank&#39;} -->
+<!-- %span=t('carriers.download') -->
+</div>
+</div>
+<!-- .app-store-badges -->
+<!-- .row -->
+<!-- .col-md-12 -->
+<!-- %p=t(&#39;carriers.promo_text&#39;, iphone: link_to(&#39;iPhone&#39;, &quot;https://itunes.apple.com/app/id1229071393?mt=8&quot;), android:  link_to(&#39;Android&#39;, &quot;https://play.google.com/store/apps/details?id=com.brightstripe.parcels&amp;referrer=utm_source%3Dparcelsapp%26utm_medium%3Dcarrier-page&amp;hl=es&quot;)).html_safe -->
+<!-- .row -->
+<!-- .col-md-2.col-md-offset-4.col-sm-3.col-sm-offset-3.col-xs-4.col-xs-offset-2 -->
+<!-- %a.badge-link{:href => "https://itunes.apple.com/app/id1229071393?mt=8", onclick: "trackOutboundLink(https://itunes.apple.com/app/id1229071393'); return false;", target: "_blank"} -->
+<!-- =image_tag &quot;landing/es/app-store-badge.svg&quot;, class: &#39;img-responsive&#39; -->
+<!-- .col-md-2.col-sm-3.col-xs-4.zero-left-padding -->
+<!-- %a.badge-link{:href =&gt; &quot;https://play.google.com/store/apps/details?id=com.brightstripe.parcels&amp;referrer=utm_source%3Dparcelsapp%26utm_medium%3Dcarrier-page&amp;hl=es&quot;, onclick: &quot;trackOutboundLink(&#39;https://play.google.com/store/apps/details?id=com.brightstripe.parcels&amp;hl=es&#39;); return false;&quot;, target: &quot;_blank&quot;} -->
+<!-- =image_tag &quot;landing/es/google-play-badge.svg&quot;, class: &#39;img-responsive&#39; -->
+</div>
+</section>
+<a class="scroll-up" href="#"><i class='fa fa-chevron-up'></i>
+Up
+</a><a href='#tisunov'>
+<div class='tisunov'>
+<img src='//dvow0vltefbxy.cloudfront.net/assets/tisunov-7c47bdd637a3e606d565ae21bedb36e67c52f2b2940853a7cd5f7c9d555cb3ed.png'>
+<p>by tisunov</p>
+</div>
+</a>
+<footer class='content text-center' id='tisunov'>
+<div class='container'>
+<div class='row'>
+<div class='col-md-2'>
+<div class='head lazy' data-src='//dvow0vltefbxy.cloudfront.net/assets/tisunov_lg-43daf05b83aac7b0fd0fb8de6e7a9c33351cb092c44f5fe5111af667e4636505.jpg'></div>
+</div>
+<div class='col-md-10'>
+<p>
+I made Parcels package tracking app, download it <a target="_blank" href="https://itunes.apple.com/us/app/apple-store/id1229071393?pt=1235501&amp;mt=8">Parcels for iOS</a> or <a target="_blank" href="https://play.google.com/store/apps/details?id=com.brightstripe.parcels&amp;referrer=utm_medium%3Dlanding&amp;hl=en">Parcels for Android</a>. Snowboarder and kitesurfer.
+</p>
+<p style='margin-top: 2em; font-size: 0.9em;'>All logos, product and company names are trademarks™ or registered® trademarks of their respective holders. Use of them does not imply any affiliation with or endorsement by them. This site and the products and services offered on this site are not associated, affiliated, endorsed, or sponsored by any business listed on this page nor have they been reviewed tested or certified by any other company listed on this page.</p>
+<h4 style='margin-top: 2em;'>
+© 2017-2026 ParcelsApp
+<a href="/en/blog/about">About</a>
+<a href="/pro">Parcels Pro</a>
+<a href="/en/privacy">Privacy Policy</a>
+<a href="/tracking-widget">Tracking Button</a>
+<a href="/es/shipping-reports">Informes de envíos</a>
+<a href="/developers">API</a>
+<a href="/developers/docs">API Docs</a>
+</h4>
+<ul class='list-unstyled languages'>
+<li>
+<a href="/en">English</a>
+</li>
+<li>
+<a href="/fr">Français</a>
+</li>
+<li>
+<a href="/es">Español</a>
+</li>
+<li>
+<a href="/pt">Português</a>
+</li>
+<li>
+<a href="/de">Deutsch</a>
+</li>
+<li>
+<a href="/nl">Nederlandse</a>
+</li>
+<li>
+<a href="/sv">Svenska</a>
+</li>
+<li>
+<a href="/it">Italiano</a>
+</li>
+<li>
+<a href="/id">Bahasa Indonesia</a>
+</li>
+<li>
+<a href="/ru">???????</a>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</footer>
+
+
+
+<script>
+  window.polyglotPhrases = {"tracking.tracking_id":"El número de rastreo","tracking.add_title":"Agregar título de envío","tracking.correct_id":"Corrected tracking number","tracking.origin":"Origen","tracking.destination":"Destino","tracking.checkedCountry":"Tracked with","tracking.weight":"Peso","tracking.sender":"Remitente","tracking.recipient":"Recipiente","tracking.from":"De","tracking.to":"A","tracking.next_tracking_ids":"Siguiente número de seguimiento","tracking.services":"Tracked with couriers","tracking.detected":"Found in","tracking.days_transit":"Days in transit","tracking.delivered_by":"Entrega estimada","tracking.tracking_link":"Tracking link","tracking.tracking_link_cta":"Bookmark this page to track parcels faster!","tracking.try_again":"Inténtalo de nuevo","tracking.add_carrier":"Agregar mensajero","tracking.error.no_data":"No hay información sobre su paquete.","tracking.error.no_data_country":"No hay información sobre su paquete. El seguimiento se realiza para «%{country}», si el país no es correcto, seleccione el país de destino a continuación.","tracking.error.down":"El sitio web del operador no funciona. Vuelve a intentarlo más tarde.","tracking.error.reload":"Vuelva a cargar la página para poder rastrear su paquete","tracking.error.busy":"El sitio web del operador está ocupado. Vuelve a intentarlo más tarde.","tracking.error.parser":"Error al leer la información de seguimiento del sitio web del operador","tracking.error.captcha":"El sitio web del operador ha prohibido el seguimiento automático, por lo que la información no se pudo descargar","tracking.error.invalid_tracking_number":"Ha introducido un número de seguimiento no válido","tracking.error.no_tracker":"No se pudo detectar el operador para su número de seguimiento. Envíeme el número de seguimiento y el nombre del mensajero y agregaré soporte para ello.","tracking.error.maintenance":"El sitio web del operador está realizando trabajos de mantenimiento, intente actualizar más tarde","tracking.error.default":"Aún no se ha encontrado información, intente verificar nuevamente en un par de minutos.","eta.title":"Fecha estimada de llegada a la oficina de correos","eta.disclaimer":"El pronóstico no es 100% seguro y se basa en %{parcels} paquetes entregados en los últimos 60 días.","eta.today":"Hoy, %{date}","eta.remaining_days_single":"quedan aproximadamente %{days} días","eta.remaining_days_range":"%{daysMin} - %{daysMax} días restantes","share.tracking":"Tracking","share.whatsapp":"Share to WhatsApp","share.viber":"Share to Viber","share.telegram":"Share to Telegram","share.messenger":"Share to Messenger","tracking.external":"Track with official websites","tracking.track_package":"Localizar Envío","tracking.search":"Buscar por nombre","tracking.select_carrier":"Seleccionar operador","tracking.select_country":"Choose country","tracking.faq.why_not_tracking":"Why is my parcel not tracking?","tracking.faq.why_not_tracking_url":"/en/faq/why-is-my-parcel-not-tracking","tracking.faq.stuck_in_transit":"Is my package stuck in transit?","tracking.faq.stuck_in_transit_url":"/en/faq/why-is-my-parcel-stuck-in-transit","tracking.faq.stuck_in_customs":"Is my package stuck in customs?","tracking.faq.stuck_in_customs_url":"/en/faq/my-package-stuck-in-customs"};
+  window.I18NLocale = "es"
+  window.parcelsAssetPaths = {
+    courierIconsCss: "//dvow0vltefbxy.cloudfront.net/assets/courier-icons-c0d2938a0a9f7fb5eae3f6e09eacaeb95f9aa703eee4feb6a27bdf50076dfc03.css",
+    flagIconsCss: "//dvow0vltefbxy.cloudfront.net/assets/flag-icons-3d5ee9db49d167a64e58ccf7da58c9d74de978e4d4396e6abf5c27bf002256f3.css"
+  };
+</script>
+<script src="https://polyfill-fastly.io/v3/polyfill.min.js?features=Promise,Array.prototype.forEach,Array.prototype.map,Array.isArray,Object.defineProperty|gated&amp;unknown=polyfill"></script>
+<script src="//dvow0vltefbxy.cloudfront.net/assets/application-de2ac179e66b4a764e251abf39b02442ea15788e1190718f10e60251bfa0fe1a.js"></script>
+<script src="//dvow0vltefbxy.cloudfront.net/packs/js/application-aa19cda6a00923f7e330.js"></script>
+<link rel="stylesheet" media="all" href="//dvow0vltefbxy.cloudfront.net/packs/css/recent-tracking-4e51b299.css" />
+<script src="//dvow0vltefbxy.cloudfront.net/packs/js/recent-tracking-83bfaf736308407433a7.js" defer="defer"></script>
+<script defer='' src='/ads.js' type='text/javascript'></script>
+<script>
+    window.addEventListener('DOMContentLoaded', function() {
+        if (!document.getElementById('vaPhxOlNwXMF')){
+            if ('yaCounter47386579' in window) {
+              yaCounter47386579.reachGoal('NaughtyBoy');
+              window.bard = true;
+            }
+            else
+                window.bard = false;
+        }            
+    });
+</script>
+</body>
+</html>
+

@@ -35,6 +35,8 @@
         $eventSources = collect($trackingRows)->groupBy(fn ($row) => $row->SOURCE_DB ?: 'IPS5Db');
         $ediCount = count($eventSources->get('IPS5Db-EDI', []));
         $indirectCount = collect($eventSources)->except(['IPS5Db', 'IPS5Db-EDI'])->sum(fn ($rows) => count($rows));
+        $principalTransit = $transitSummary['principal'] ?? null;
+        $transitCountries = collect($transitSummary['paises'] ?? []);
     @endphp
 
     <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center">
@@ -122,6 +124,13 @@
                 Estado postal: {{ $latestStatus }}.
                 Origen: {{ $origin }}.
                 Destino: {{ $destination }}.
+                @if($principalTransit)
+                    Tránsito detectado: {{ $principalTransit['nombre'] }}
+                    @if(!empty($principalTransit['ubicaciones']))
+                        ({{ implode(', ', $principalTransit['ubicaciones']) }})
+                    @endif
+                    .
+                @endif
                 @if($latestOffice !== '')
                     Oficina de referencia: {{ $latestOffice }}.
                 @endif
@@ -167,6 +176,16 @@
                         <span class="kv-item__label">Origen / destino</span>
                         <strong>{{ $origin }} -> {{ $destination }}</strong>
                     </div>
+                    @if($principalTransit)
+                        <div class="kv-item">
+                            <span class="kv-item__label">Tránsito detectado</span>
+                            <strong>{{ $principalTransit['nombre'] }}</strong>
+                            <div>
+                                Códigos:
+                                {{ !empty($principalTransit['ubicaciones']) ? implode(', ', $principalTransit['ubicaciones']) : '-' }}
+                            </div>
+                        </div>
+                    @endif
                     <div class="kv-item">
                         <span class="kv-item__label">Peso / valor</span>
                         <strong>{{ $mainPackage->MAILITM_WEIGHT ?? '-' }} / {{ $mainPackage->MAILITM_VALUE ?? '-' }}</strong>
