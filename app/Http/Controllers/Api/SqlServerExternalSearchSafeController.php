@@ -94,14 +94,25 @@ class SqlServerExternalSearchSafeController extends Controller
                 );
                 $condition = $eventRuleService->normalizeText(isset($row->CONDITION_TXT) ? (string) $row->CONDITION_TXT : '');
                 $detail = $eventRuleService->normalizeText(isset($row->DETAIL_TXT) ? (string) $row->DETAIL_TXT : '');
+                $eventCode = isset($row->EVENT_TYPE_CD) ? (int) $row->EVENT_TYPE_CD : null;
+
+                // A hidden label must not hide a milestone such as delivery from public tracking.
+                if ($eventType === null && ! $this->isProgressEvent($eventCode)) {
+                    return null;
+                }
 
                 if ($eventType === null) {
-                    return null;
+                    $eventType = $eventRuleService->normalizeText(
+                        isset($row->EVENT_TYPE_NM_ES) ? (string) $row->EVENT_TYPE_NM_ES : ''
+                    );
                 }
 
                 return [
                     'mailitM_PID' => isset($row->MAILITM_PID) ? strtolower(trim((string) $row->MAILITM_PID)) : '',
                     'mailitM_FID' => $this->resolveMailItemFid($row),
+                    // Preserve the UPU code even when the visible event name is customized.
+                    'codigo_evento' => $eventCode,
+                    'origen_evento' => trim((string) ($row->SOURCE_DB ?? 'IPS5Db')),
                     'eventType' => $eventType,
                     'eventDate' => $this->formatEventDate($row->EVENT_GMT_DT ?? null),
                     'office' => $this->buildOffice($row, $originCountry, $detail),
@@ -122,6 +133,14 @@ class SqlServerExternalSearchSafeController extends Controller
             ]))
             ->sortByDesc(fn (array $evento) => strtotime($evento['eventDate'] ?: '1970-01-01') ?: 0)
             ->values();
+    }
+
+    private function isProgressEvent(?int $eventCode): bool
+    {
+        return in_array($eventCode, [
+            1, 2, 3, 5, 8, 12, 30, 32, 35, 36, 37, 39, 40, 42, 43, 44,
+            67, 71, 72, 73, 74, 75, 77, 78, 1250,
+        ], true);
     }
 
     private function formatEventDate(mixed $eventDate): string

@@ -90,6 +90,9 @@ class SqlServerExternalSearchAllController extends Controller
                 return [
                     'mailitM_PID' => isset($row->MAILITM_PID) ? strtolower(trim((string) $row->MAILITM_PID)) : '',
                     'mailitM_FID' => $this->resolveMailItemFid($row),
+                    // UPU event code lets consumers determine the postal stage without parsing text.
+                    'codigo_evento' => isset($row->EVENT_TYPE_CD) ? (int) $row->EVENT_TYPE_CD : null,
+                    'origen_evento' => trim((string) ($row->SOURCE_DB ?? 'IPS5Db')),
                     'eventType' => $eventType,
                     'eventDate' => $this->formatEventDate($row->EVENT_GMT_DT ?? null),
                     'office' => $this->buildOffice($row, $originCountry, $detail),
