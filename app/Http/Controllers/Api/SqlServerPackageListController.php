@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\SqlServerSearchService;
-use App\Services\TrackingEventRuleService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -15,8 +14,7 @@ class SqlServerPackageListController extends Controller
 {
     public function __invoke(
         Request $request,
-        SqlServerSearchService $searchService,
-        TrackingEventRuleService $eventRuleService
+        SqlServerSearchService $searchService
     ): JsonResponse {
         if (!$request->user() || !$request->user()->hasRole('admin')) {
             return response()->json([
@@ -43,7 +41,7 @@ class SqlServerPackageListController extends Controller
         try {
             $result = $searchService->listPackages($page, $perPage, $search);
             $trackingRows = $searchService->trackingRowsForPackageRows($result['rows'] ?? []);
-            $eventsByPackage = $this->transformPackageEvents($trackingRows, $eventRuleService)->groupBy('mailitm_pid');
+            $eventsByPackage = $this->transformPackageEvents($trackingRows)->groupBy('mailitm_pid');
 
             $items = collect($result['rows'] ?? [])
                 ->map(fn ($row) => $this->transformRow($row, $eventsByPackage->get(trim((string) ($row->MAILITM_PID ?? '')), collect())))
@@ -184,28 +182,23 @@ class SqlServerPackageListController extends Controller
                 'codigo' => $this->nullableString($row->DEST_COUNTRY_CD ?? null),
                 'nombre' => $this->cleanText($row->DEST_COUNTRY_NM ?? ''),
             ],
-            'eventos' => $this->filterBoliviaBoundaryEvents(collect($events), $row)->values()->all(),
+            'eventos' => collect($events)->values()->all(),
         ];
     }
 
-    private function transformPackageEvents(iterable $trackingRows, TrackingEventRuleService $eventRuleService)
+    private function transformPackageEvents(iterable $trackingRows)
     {
         return collect($trackingRows)
-            ->map(function ($row) use ($eventRuleService) {
+            ->map(function ($row) {
                 $rawEvent = $this->cleanText($row->EVENT_TYPE_NM_ES ?? '');
-                $apiEvent = $eventRuleService->present(
-                    isset($row->EVENT_TYPE_NM_ES) ? (string) $row->EVENT_TYPE_NM_ES : '',
-                    isset($row->SOURCE_DB) ? (string) $row->SOURCE_DB : '',
-                    $row->EVENT_TYPE_CD ?? null
-                );
 
                 return [
                     'mailitm_pid' => trim((string) ($row->MAILITM_PID ?? '')),
                     'fecha' => $this->formatDate($row->EVENT_GMT_DT ?? null),
                     'codigo_evento' => isset($row->EVENT_TYPE_CD) ? (int) $row->EVENT_TYPE_CD : null,
                     'evento_original' => $rawEvent,
-                    'evento_api' => $apiEvent !== null ? trim((string) $apiEvent) : null,
-                    'visible_api' => $apiEvent !== null,
+                    'evento_api' => $rawEvent,
+                    'visible_api' => true,
                     'fuente' => $this->nullableString($row->SOURCE_DB ?? null),
                     'oficina' => $this->joinParts([
                         $row->OFFICE_FCD ?? null,
@@ -219,84 +212,7 @@ class SqlServerPackageListController extends Controller
                     'condicion' => $this->cleanText($row->CONDITION_TXT ?? ''),
                 ];
             })
-            ->filter(fn (array $event) => $event['fecha'] !== null)
             ->sortByDesc(fn (array $event) => strtotime($event['fecha'] ?: '1970-01-01 00:00:00') ?: 0)
             ->values();
-    }
-
-    private function filterBoliviaBoundaryEvents($events, object $row)
-    {
-        $originCode = strtoupper(trim((string) ($row->ORIG_COUNTRY_CD ?? '')));
-        $destinationCode = strtoupper(trim((string) ($row->DEST_COUNTRY_CD ?? '')));
-
-        return collect($events)
-            ->map(function (array $event) use ($originCode, $destinationCode) {
-                $eventText = $this->comparableText(implode(' ', array_filter([
-                    $event['evento_original'] ?? '',
-                    $event['evento_api'] ?? '',
-                    $event['detalle'] ?? '',
-                ])));
-
-                $movement = null;
-
-                if ($originCode === 'BO' && $this->isBoliviaDepartureEvent($eventText)) {
-                    $movement = 'salida_bolivia';
-                }
-
-                if ($destinationCode === 'BO' && $this->isBoliviaArrivalEvent($eventText)) {
-                    $movement = 'entrada_bolivia';
-                }
-
-                if ($movement === null) {
-                    return null;
-                }
-
-                $event['movimiento_bolivia'] = $movement;
-
-                return $event;
-            })
-            ->filter()
-            ->values();
-    }
-
-    private function isBoliviaArrivalEvent(string $eventText): bool
-    {
-        foreach ([
-            'recibir envio en oficina de cambio (entrada)',
-            'recibir envio desde el extranjero',
-            'recibir envase desde el extranjero',
-            'recibir despacho desde el extranjero',
-        ] as $pattern) {
-            if (str_contains($eventText, $pattern)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private function isBoliviaDepartureEvent(string $eventText): bool
-    {
-        foreach ([
-            'enviar envio al extranjero',
-            'paquete enviado al extranjero',
-            'enviar envase al extranjero',
-            'despacho enviado al extranjero',
-            'enviar despacho al extranjero',
-        ] as $pattern) {
-            if (str_contains($eventText, $pattern)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private function comparableText(string $value): string
-    {
-        $value = $this->cleanText($value) ?? '';
-        $value = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value) ?: $value;
-
-        return mb_strtolower($value);
     }
 }

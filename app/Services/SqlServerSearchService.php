@@ -87,13 +87,7 @@ class SqlServerSearchService
                     RTRIM(LTRIM(mi.MAILITM_LOCAL_ID)) AS MAILITM_LOCAL_ID,
                     e.EVENT_GMT_DT,
                     e.EVENT_TYPE_CD,
-                    CASE
-                        WHEN e.EVENT_TYPE_CD = 32 THEN 'Paquete recibido en oficina de entrega(Listo para entregar).'
-                        WHEN e.EVENT_TYPE_CD = 13 THEN 'Paquete incluido en la saca nacional.'
-                        WHEN e.EVENT_TYPE_CD = 35 THEN 'Paquete en camino a ubicación nacional.'
-                        WHEN e.EVENT_TYPE_CD = 30 THEN 'Paquete recibido en oficina de tránsito.'
-                        ELSE COALESCE(ct.LOCAL_EVENT_TYPE_NM, c.EVENT_TYPE_NM)
-                    END AS EVENT_TYPE_NM_ES,
+                    COALESCE(ct.LOCAL_EVENT_TYPE_NM, c.EVENT_TYPE_NM) AS EVENT_TYPE_NM_ES,
                     e.USER_PID,
                     u.USER_FID,
                     u.USER_NM,
@@ -137,13 +131,7 @@ class SqlServerSearchService
                     CAST('' AS varchar(40)) AS MAILITM_LOCAL_ID,
                     COALESCE(CAST(nee.EVENT_LOCAL_DT AS datetime), nee.CAPTURE_GMT_DT) AS EVENT_GMT_DT,
                     nee.EVENT_TYPE_CD,
-                    CASE
-                        WHEN nee.EVENT_TYPE_CD = 12 THEN 'Paquete enviado al extranjero.'
-                        WHEN nee.EVENT_TYPE_CD = 8 THEN 'Paquete incluido en la saca de envío.'
-                        WHEN nee.EVENT_TYPE_CD = 3 THEN 'Paquete recibido en oficina de tránsito.'
-                        WHEN nee.EVENT_TYPE_CD = 1 THEN 'Paquete recibido del cliente.'
-                        ELSE COALESCE(ct.LOCAL_EVENT_TYPE_NM, c.EVENT_TYPE_NM)
-                    END AS EVENT_TYPE_NM_ES,
+                    COALESCE(ct.LOCAL_EVENT_TYPE_NM, c.EVENT_TYPE_NM) AS EVENT_TYPE_NM_ES,
                     CAST(NULL AS int) AS USER_PID,
                     CAST(NULL AS varchar(100)) AS USER_FID,
                     CAST(NULL AS varchar(200)) AS USER_NM,
@@ -390,13 +378,7 @@ class SqlServerSearchService
                 RTRIM(LTRIM(mi.MAILITM_LOCAL_ID)) AS MAILITM_LOCAL_ID,
                 e.EVENT_GMT_DT,
                 e.EVENT_TYPE_CD,
-                CASE
-                    WHEN e.EVENT_TYPE_CD = 32 THEN 'Paquete recibido en oficina de entrega(Listo para entregar).'
-                    WHEN e.EVENT_TYPE_CD = 13 THEN 'Paquete incluido en la saca nacional.'
-                    WHEN e.EVENT_TYPE_CD = 35 THEN 'Paquete en camino a ubicaciÃ³n nacional.'
-                    WHEN e.EVENT_TYPE_CD = 30 THEN 'Paquete recibido en oficina de trÃ¡nsito.'
-                    ELSE COALESCE(ct.LOCAL_EVENT_TYPE_NM, c.EVENT_TYPE_NM)
-                END AS EVENT_TYPE_NM_ES,
+                COALESCE(ct.LOCAL_EVENT_TYPE_NM, c.EVENT_TYPE_NM) AS EVENT_TYPE_NM_ES,
                 e.USER_PID,
                 u.USER_FID,
                 u.USER_NM,
@@ -436,13 +418,7 @@ class SqlServerSearchService
                 CAST('' AS varchar(40)) AS MAILITM_LOCAL_ID,
                 COALESCE(CAST(nee.EVENT_LOCAL_DT AS datetime), nee.CAPTURE_GMT_DT) AS EVENT_GMT_DT,
                 nee.EVENT_TYPE_CD,
-                CASE
-                    WHEN nee.EVENT_TYPE_CD = 12 THEN 'Paquete enviado al extranjero.'
-                    WHEN nee.EVENT_TYPE_CD = 8 THEN 'Paquete incluido en la saca de envÃ­o.'
-                    WHEN nee.EVENT_TYPE_CD = 3 THEN 'Paquete recibido en oficina de trÃ¡nsito.'
-                    WHEN nee.EVENT_TYPE_CD = 1 THEN 'Paquete recibido del cliente.'
-                    ELSE COALESCE(ct.LOCAL_EVENT_TYPE_NM, c.EVENT_TYPE_NM)
-                END AS EVENT_TYPE_NM_ES,
+                COALESCE(ct.LOCAL_EVENT_TYPE_NM, c.EVENT_TYPE_NM) AS EVENT_TYPE_NM_ES,
                 CAST(NULL AS int) AS USER_PID,
                 CAST(NULL AS varchar(100)) AS USER_FID,
                 CAST(NULL AS varchar(200)) AS USER_NM,
@@ -785,7 +761,7 @@ class SqlServerSearchService
                 RTRIM(LTRIM(mi.MAILITM_LOCAL_ID)) AS MAILITM_LOCAL_ID,
                 dre.EVENT_GMT_DT,
                 dre.EVENT_TYPE_CD,
-                CONCAT(COALESCE(ct.LOCAL_EVENT_TYPE_NM, c.EVENT_TYPE_NM), ' [Indirecto: envase nacional]') AS EVENT_TYPE_NM_ES,
+                COALESCE(ct.LOCAL_EVENT_TYPE_NM, c.EVENT_TYPE_NM) AS EVENT_TYPE_NM_ES,
                 dre.USER_PID,
                 u.USER_FID,
                 u.USER_NM,
@@ -832,7 +808,7 @@ class SqlServerSearchService
                 RTRIM(LTRIM(mi.MAILITM_LOCAL_ID)) AS MAILITM_LOCAL_ID,
                 dde.EVENT_GMT_DT,
                 dde.EVENT_TYPE_CD,
-                CONCAT(COALESCE(ct.LOCAL_EVENT_TYPE_NM, c.EVENT_TYPE_NM), ' [Indirecto: despacho nacional]') AS EVENT_TYPE_NM_ES,
+                COALESCE(ct.LOCAL_EVENT_TYPE_NM, c.EVENT_TYPE_NM) AS EVENT_TYPE_NM_ES,
                 dde.USER_PID,
                 u.USER_FID,
                 u.USER_NM,
@@ -870,7 +846,7 @@ class SqlServerSearchService
                 RTRIM(LTRIM(mi.MAILITM_LOCAL_ID)) AS MAILITM_LOCAL_ID,
                 re.EVENT_GMT_DT,
                 re.EVENT_TYPE_CD,
-                CONCAT(COALESCE(ct.LOCAL_EVENT_TYPE_NM, c.EVENT_TYPE_NM), ' [Indirecto: receptaculo]') AS EVENT_TYPE_NM_ES,
+                COALESCE(ct.LOCAL_EVENT_TYPE_NM, c.EVENT_TYPE_NM) AS EVENT_TYPE_NM_ES,
                 re.USER_PID,
                 u.USER_FID,
                 u.USER_NM,
@@ -914,15 +890,6 @@ class SqlServerSearchService
         return $domesticReceptacleRows
             ->concat($domesticDespatchRows)
             ->concat($receptacleRows)
-            ->unique(function ($row) {
-                return implode('|', [
-                    $row->SOURCE_DB ?? '',
-                    $row->MAILITM_PID ?? '',
-                    $row->EVENT_GMT_DT ?? '',
-                    $row->EVENT_TYPE_CD ?? '',
-                    $row->DETAIL_TXT ?? '',
-                ]);
-            })
             ->values();
     }
 
