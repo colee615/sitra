@@ -317,9 +317,15 @@ return [
             'icon' => 'fas fa-compass',
         ],
         [
-            'text' => 'Consulta Unificada',
+            'text' => 'Consulta IPS',
             'url' => '/consultas',
             'icon' => 'fas fa-search',
+            'can' => 'admin-only',
+        ],
+        [
+            'text' => 'Paquetes y entregas',
+            'url' => '/operaciones',
+            'icon' => 'fas fa-box',
             'can' => 'admin-only',
         ],
         [
@@ -358,12 +364,6 @@ return [
                     'text' => 'Detalle IPS',
                     'url' => '/sqlserver/datos',
                     'icon' => 'fas fa-database',
-                    'can' => 'admin-only',
-                ],
-                [
-                    'text' => 'Detalle CDS',
-                    'url' => '/cds/datos',
-                    'icon' => 'fas fa-broadcast-tower',
                     'can' => 'admin-only',
                 ],
                 [

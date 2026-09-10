@@ -1,8 +1,8 @@
 <?php
 
+use App\Models\User;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
-use App\Models\User;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -18,13 +18,15 @@ Artisan::command('token:issue {email} {--name=integration-sitra} {--ability=sqls
 
     $user = User::query()->where('email', $email)->first();
 
-    if (!$user) {
+    if (! $user) {
         $this->error("No existe usuario con email: {$email}");
+
         return self::FAILURE;
     }
 
-    if (!$user->hasRole('admin')) {
+    if (! $user->hasRole('admin')) {
         $this->error("El usuario {$email} debe tener rol admin para emitir token de integracion.");
+
         return self::FAILURE;
     }
 
@@ -35,23 +37,33 @@ Artisan::command('token:issue {email} {--name=integration-sitra} {--ability=sqls
             $expiresAt = now()->parse($expiresAtInput);
         } catch (\Throwable $e) {
             $this->error('Formato invalido en --expires-at. Usa por ejemplo: 2029-03-03 23:59:59');
+
             return self::FAILURE;
         }
     } elseif ($years !== null && $years !== '') {
-        if (!is_numeric($years) || (int) $years < 1) {
+        if (! is_numeric($years) || (int) $years < 1) {
             $this->error('El valor de --years debe ser un entero mayor o igual a 1.');
+
             return self::FAILURE;
         }
         $expiresAt = now()->addYears((int) $years);
     } elseif ($days !== null && $days !== '') {
-        if (!is_numeric($days) || (int) $days < 1) {
+        if (! is_numeric($days) || (int) $days < 1) {
             $this->error('El valor de --days debe ser un entero mayor o igual a 1.');
+
             return self::FAILURE;
         }
         $expiresAt = now()->addDays((int) $days);
     }
 
-    $token = $user->createToken($name, [$ability], $expiresAt);
+    $abilities = array_values(array_unique(array_filter(array_map('trim', explode(',', $ability)))));
+    $allowed = ['sqlserver.read', 'ips.read', 'ips.create', 'ips.events', 'ips.deliver', 'ips.operations'];
+    if ($abilities === [] || array_diff($abilities, $allowed)) {
+        $this->error('Permisos admitidos: '.implode(',', $allowed));
+
+        return self::FAILURE;
+    }
+    $token = $user->createToken($name, $abilities, $expiresAt);
 
     $this->info('Token creado. Guardalo ahora, luego no podras volver a verlo:');
     $this->line($token->plainTextToken);
@@ -66,8 +78,9 @@ Artisan::command('token:revoke {email} {--name=}', function () {
 
     $user = User::query()->where('email', $email)->first();
 
-    if (!$user) {
+    if (! $user) {
         $this->error("No existe usuario con email: {$email}");
+
         return self::FAILURE;
     }
 

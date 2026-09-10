@@ -7,10 +7,16 @@ use Throwable;
 
 class TrackingSearchCacheService
 {
+    public function invalidate(string $codigo): void
+    {
+        $codigo = strtoupper(trim($codigo));
+        Cache::forget($this->freshKey($codigo));
+        Cache::forget($this->staleKey($codigo));
+    }
+
     public function __construct(
         private readonly SqlServerSearchService $searchService
-    ) {
-    }
+    ) {}
 
     public function search(string $codigo): array
     {

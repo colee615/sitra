@@ -32,6 +32,6 @@
                 {{ $slot }}
             </main>
         </div>
-        @include('toast::messages')
+        @includeIf('toast::messages')
     </body>
 </html>

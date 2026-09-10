@@ -359,12 +359,6 @@ h1,h2,h3,h4,h5 {
     linear-gradient(135deg, #0f172a 0%, #0f3b53 60%, #0ea5c6 100%);
 }
 
-.summary-banner--cds {
-  background:
-    radial-gradient(circle at top right, rgba(255, 255, 255, 0.16), transparent 26%),
-    linear-gradient(135deg, #10251d 0%, #146c43 60%, #22c55e 100%);
-}
-
 .summary-banner__meta {
   display: flex;
   flex-wrap: wrap;

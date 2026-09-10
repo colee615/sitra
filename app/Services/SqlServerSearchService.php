@@ -339,6 +339,68 @@ class SqlServerSearchService
         ];
     }
 
+    public function searchManyEvents(array $codigos): array
+    {
+        $codes = collect($codigos)
+            ->map(fn ($codigo) => strtoupper(trim((string) $codigo)))
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($codes->isEmpty()) {
+            return [];
+        }
+
+        $requested = array_fill_keys($codes->all(), true);
+        $packageRows = $this->packageRowsForCodes($codes);
+        $trackingRows = $this->trackingRowsForPackageRows($packageRows);
+        $packageRowsByCode = [];
+        $trackingRowsByCode = [];
+        $pidToCodes = [];
+
+        foreach ($codes as $code) {
+            $packageRowsByCode[$code] = collect();
+            $trackingRowsByCode[$code] = collect();
+        }
+
+        foreach ($packageRows as $row) {
+            $matches = $this->matchingRequestedCodes($row, $requested);
+
+            foreach ($matches as $code) {
+                $packageRowsByCode[$code]->push($row);
+                $pid = isset($row->MAILITM_PID) ? trim((string) $row->MAILITM_PID) : '';
+                if ($pid !== '') {
+                    $pidToCodes[$pid][$code] = true;
+                }
+            }
+        }
+
+        foreach ($trackingRows as $row) {
+            $matches = $this->matchingRequestedCodes($row, $requested);
+            $pid = isset($row->MAILITM_PID) ? trim((string) $row->MAILITM_PID) : '';
+
+            if ($matches === [] && $pid !== '' && isset($pidToCodes[$pid])) {
+                $matches = array_keys($pidToCodes[$pid]);
+            }
+
+            foreach ($matches as $code) {
+                $trackingRowsByCode[$code]->push($row);
+            }
+        }
+
+        return $codes
+            ->mapWithKeys(fn (string $code) => [
+                $code => [
+                    'codigo' => $code,
+                    'packageRows' => $packageRowsByCode[$code]->values(),
+                    'trackingRows' => $trackingRowsByCode[$code]
+                        ->sortByDesc('EVENT_GMT_DT')
+                        ->values(),
+                ],
+            ])
+            ->all();
+    }
+
     public function listPackages(?int $page = 1, ?int $perPage = 50, ?string $search = null): array
     {
         $page = $page !== null ? max(1, $page) : null;
@@ -653,6 +715,71 @@ class SqlServerSearchService
         ));
     }
 
+    private function packageRowsForCodes(Collection $codes): Collection
+    {
+        $codes = $codes
+            ->map(fn ($codigo) => strtoupper(trim((string) $codigo)))
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($codes->isEmpty()) {
+            return collect();
+        }
+
+        $connection = $this->connectionName();
+        $placeholders = implode(',', array_fill(0, $codes->count(), '?'));
+        $bindings = array_merge($codes->all(), $codes->all());
+
+        return collect(DB::connection($connection)->select(
+            "
+            SELECT
+                mi.MAILITM_PID,
+                mi.MAILITM_FID AS MAILITM_FID,
+                RTRIM(LTRIM(mi.MAILITM_LOCAL_ID)) AS MAILITM_LOCAL_ID,
+                mi.MAILITM_WEIGHT,
+                mi.MAILITM_VALUE,
+                mi.DUTIES_AMOUNT,
+                mi.CUSTOMS_NO,
+                mi.MAIL_CLASS_CD,
+                mc.MAIL_CLASS_NM,
+                mi.MAILITM_CONTENT_CD,
+                mcon.MAILITM_CONTENT_NM,
+                mi.PRODUCT_TYPE_CD,
+                pt.PRODUCT_TYPE_NM,
+                mi.POSTAL_STATUS_CD,
+                ps.POSTAL_STATUS_NM,
+                mi.ORIG_COUNTRY_CD,
+                coo.COUNTRY_NM AS ORIG_COUNTRY_NM,
+                mi.DEST_COUNTRY_CD,
+                cod.COUNTRY_NM AS DEST_COUNTRY_NM,
+                mi.CURRENCY_CD,
+                cur.CURRENCY_NM,
+                mi.EVT_GMT_DT,
+                mi.EVT_TYPE_CD,
+                COALESCE(cte.LOCAL_EVENT_TYPE_NM, ce.EVENT_TYPE_NM) AS EVT_TYPE_NM_ES,
+                mi.EVT_OFFICE_CD,
+                nof.OFFICE_FCD AS EVT_OFFICE_FCD,
+                nof.OFFICE_NM AS EVT_OFFICE_NM
+            FROM dbo.L_MAILITMS mi
+            LEFT JOIN dbo.C_MAIL_CLASSES mc ON mc.MAIL_CLASS_CD = mi.MAIL_CLASS_CD
+            LEFT JOIN dbo.C_MAILITM_CONTENTS mcon ON mcon.MAILITM_CONTENT_CD = mi.MAILITM_CONTENT_CD
+            LEFT JOIN dbo.C_PRODUCT_TYPES pt ON pt.PRODUCT_TYPE_CD = mi.PRODUCT_TYPE_CD
+            LEFT JOIN dbo.C_POSTAL_STATUSES ps ON ps.POSTAL_STATUS_CD = mi.POSTAL_STATUS_CD
+            LEFT JOIN dbo.C_COUNTRIES coo ON coo.COUNTRY_CD = mi.ORIG_COUNTRY_CD
+            LEFT JOIN dbo.C_COUNTRIES cod ON cod.COUNTRY_CD = mi.DEST_COUNTRY_CD
+            LEFT JOIN dbo.C_CURRENCIES cur ON cur.CURRENCY_CD = mi.CURRENCY_CD
+            LEFT JOIN dbo.C_EVENT_TYPES ce ON ce.EVENT_TYPE_CD = mi.EVT_TYPE_CD
+            LEFT JOIN dbo.CT_EVENT_TYPES cte ON cte.EVENT_TYPE_CD = mi.EVT_TYPE_CD AND cte.LANGUAGE_CD = 'ES'
+            LEFT JOIN dbo.N_OWN_OFFICES nof ON nof.OWN_OFFICE_CD = mi.EVT_OFFICE_CD
+            WHERE UPPER(RTRIM(LTRIM(mi.MAILITM_FID))) IN ($placeholders)
+               OR UPPER(RTRIM(LTRIM(mi.MAILITM_LOCAL_ID))) IN ($placeholders)
+            ORDER BY mi.EVT_GMT_DT DESC
+            ",
+            $bindings
+        ));
+    }
+
     private function packageListFilters(?string $search = null): array
     {
         $search = strtoupper(trim((string) $search));
@@ -901,6 +1028,19 @@ class SqlServerSearchService
             ->map(fn ($pid) => trim((string) $pid))
             ->unique()
             ->values();
+    }
+
+    private function matchingRequestedCodes(object $row, array $requested): array
+    {
+        return collect([
+            $row->MAILITM_FID ?? null,
+            $row->MAILITM_LOCAL_ID ?? null,
+        ])
+            ->map(fn ($codigo) => strtoupper(trim((string) $codigo)))
+            ->filter(fn (string $codigo) => $codigo !== '' && isset($requested[$codigo]))
+            ->unique()
+            ->values()
+            ->all();
     }
 }
 

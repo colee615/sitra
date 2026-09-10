@@ -10,7 +10,7 @@ class SqlServerDataController extends Controller
 {
     public function index(Request $request, SqlServerSearchService $searchService)
     {
-        if (!$request->user() || !$request->user()->hasRole('admin')) {
+        if (! $request->user() || ! $request->user()->hasRole('admin')) {
             abort(403, 'Solo los administradores pueden ver esta pagina.');
         }
 
@@ -40,7 +40,7 @@ class SqlServerDataController extends Controller
                 'tableMap' => [],
                 'similarCodes' => collect(),
                 'transitSummary' => null,
-                'error' => $e->getMessage(),
+                'error' => 'No se pudo consultar IPS. Verifique la conexión e intente nuevamente.',
             ]);
         }
     }

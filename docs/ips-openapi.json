@@ -1,0 +1,933 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "SITRA · Operaciones IPS",
+    "version": "1.0.0",
+    "description": "PostgreSQL principal e IPS5Db. Consulta, alta y operación postal. Las escrituras requieren identidad técnica configurada, IPS_WRITES_ENABLED y validación de procedimientos en IPS de pruebas. Límite: 60 solicitudes/minuto. EMI significa entrega al destinatario."
+  },
+  "servers": [
+    {
+      "url": "/api/v1/ips"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/catalogos": {
+      "get": {
+        "summary": "Catálogos e identificadores operativos",
+        "description": "Requiere administrador y permiso ips.read.",
+        "x-token-ability": "ips.read",
+        "responses": {
+          "200": {
+            "description": "data: eventos locales, operations, offices, mail_classes, countries, non_delivery_reasons, non_delivery_measures y writes_enabled."
+          },
+          "401": {
+            "description": "Sin autenticación."
+          },
+          "403": {
+            "description": "Rol o permiso insuficiente."
+          },
+          "422": {
+            "description": "Datos inválidos."
+          },
+          "429": {
+            "description": "Límite de solicitudes excedido."
+          },
+          "503": {
+            "description": "Conexión/configuración no disponible o resultado incierto. Consultar operación antes de reenviar."
+          }
+        }
+      }
+    },
+    "/paquetes": {
+      "get": {
+        "summary": "Listar paquetes",
+        "description": "Requiere administrador y permiso ips.read.",
+        "x-token-ability": "ips.read",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "pending",
+                "delivered"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 35,
+              "description": "Identificador principal o local exacto."
+            }
+          },
+          {
+            "name": "office_cd",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 32767
+            }
+          },
+          {
+            "name": "event_cd",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 32767
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100000,
+              "default": 1
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista paginada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackageList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin autenticación."
+          },
+          "403": {
+            "description": "Rol o permiso insuficiente."
+          },
+          "422": {
+            "description": "Datos inválidos."
+          },
+          "429": {
+            "description": "Límite de solicitudes excedido."
+          },
+          "503": {
+            "description": "Conexión/configuración no disponible o resultado incierto. Consultar operación antes de reenviar."
+          }
+        }
+      },
+      "post": {
+        "summary": "Crear paquete con remitente y destinatario",
+        "description": "Requiere administrador y permiso ips.create.",
+        "x-token-ability": "ips.create",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.:-]+$"
+            },
+            "description": "Guardar por operación y reutilizar con el mismo cuerpo al repetir. Alcance: usuario SITRA."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePackage"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Operación confirmada o repetición del resultado original.",
+            "headers": {
+              "Idempotency-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin autenticación."
+          },
+          "403": {
+            "description": "Rol o permiso insuficiente."
+          },
+          "409": {
+            "description": "Conflicto de estado, clave reutilizada, operación en curso o incierta."
+          },
+          "422": {
+            "description": "Datos inválidos."
+          },
+          "429": {
+            "description": "Límite de solicitudes excedido."
+          },
+          "503": {
+            "description": "Conexión/configuración no disponible o resultado incierto. Consultar operación antes de reenviar."
+          }
+        }
+      }
+    },
+    "/paquetes/pendientes-entrega": {
+      "get": {
+        "summary": "Paquetes candidatos a entrega",
+        "description": "Requiere administrador y permiso ips.read.",
+        "x-token-ability": "ips.read",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 35,
+              "description": "Identificador principal o local exacto."
+            }
+          },
+          {
+            "name": "office_cd",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 32767
+            }
+          },
+          {
+            "name": "event_cd",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 32767
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100000,
+              "default": 1
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Siempre fuerza estado pending. Excluye historial terminal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackageList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin autenticación."
+          },
+          "403": {
+            "description": "Rol o permiso insuficiente."
+          },
+          "422": {
+            "description": "Datos inválidos."
+          },
+          "429": {
+            "description": "Límite de solicitudes excedido."
+          },
+          "503": {
+            "description": "Conexión/configuración no disponible o resultado incierto. Consultar operación antes de reenviar."
+          }
+        }
+      }
+    },
+    "/paquetes/{codigo}": {
+      "get": {
+        "summary": "Consultar paquete e historial local",
+        "description": "Requiere administrador y permiso ips.read.",
+        "x-token-ability": "ips.read",
+        "parameters": [
+          {
+            "name": "codigo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9-]{1,35}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "data.package y data.events."
+          },
+          "401": {
+            "description": "Sin autenticación."
+          },
+          "403": {
+            "description": "Rol o permiso insuficiente."
+          },
+          "404": {
+            "description": "Paquete no encontrado."
+          },
+          "409": {
+            "description": "Identificador ambiguo."
+          },
+          "422": {
+            "description": "Datos inválidos."
+          },
+          "429": {
+            "description": "Límite de solicitudes excedido."
+          },
+          "503": {
+            "description": "Conexión/configuración no disponible o resultado incierto. Consultar operación antes de reenviar."
+          }
+        }
+      }
+    },
+    "/paquetes/{codigo}/eventos": {
+      "post": {
+        "summary": "Registrar movimiento o intento fallido (EMI requiere además ips.deliver)",
+        "description": "Requiere administrador y permiso ips.events.",
+        "x-token-ability": "ips.events",
+        "parameters": [
+          {
+            "name": "codigo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9-]{1,35}$"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.:-]+$"
+            },
+            "description": "Guardar por operación y reutilizar con el mismo cuerpo al repetir. Alcance: usuario SITRA."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Event"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Operación confirmada o repetición del resultado original.",
+            "headers": {
+              "Idempotency-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin autenticación."
+          },
+          "403": {
+            "description": "Rol o permiso insuficiente."
+          },
+          "409": {
+            "description": "Conflicto de estado, clave reutilizada, operación en curso o incierta."
+          },
+          "422": {
+            "description": "Datos inválidos."
+          },
+          "429": {
+            "description": "Límite de solicitudes excedido."
+          },
+          "503": {
+            "description": "Conexión/configuración no disponible o resultado incierto. Consultar operación antes de reenviar."
+          }
+        }
+      }
+    },
+    "/paquetes/{codigo}/entrega": {
+      "post": {
+        "summary": "Registrar entrega final EMI / evento local 37",
+        "description": "Requiere administrador y permiso ips.deliver.",
+        "x-token-ability": "ips.deliver",
+        "parameters": [
+          {
+            "name": "codigo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9-]{1,35}$"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_.:-]+$"
+            },
+            "description": "Guardar por operación y reutilizar con el mismo cuerpo al repetir. Alcance: usuario SITRA."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Delivery"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Operación confirmada o repetición del resultado original.",
+            "headers": {
+              "Idempotency-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin autenticación."
+          },
+          "403": {
+            "description": "Rol o permiso insuficiente."
+          },
+          "409": {
+            "description": "Conflicto de estado, clave reutilizada, operación en curso o incierta."
+          },
+          "422": {
+            "description": "Datos inválidos."
+          },
+          "429": {
+            "description": "Límite de solicitudes excedido."
+          },
+          "503": {
+            "description": "Conexión/configuración no disponible o resultado incierto. Consultar operación antes de reenviar."
+          }
+        }
+      }
+    },
+    "/operaciones/{id}": {
+      "get": {
+        "summary": "Estado de una operación del usuario autenticado",
+        "description": "Requiere administrador y permiso ips.operations.",
+        "x-token-ability": "ips.operations",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "data.operation_id, codigo, event, status, created_at, updated_at y result. Estados: processing, succeeded, rejected, uncertain."
+          },
+          "401": {
+            "description": "Sin autenticación."
+          },
+          "403": {
+            "description": "Rol o permiso insuficiente."
+          },
+          "404": {
+            "description": "Operación no encontrada o pertenece a otro usuario."
+          },
+          "422": {
+            "description": "Datos inválidos."
+          },
+          "429": {
+            "description": "Límite de solicitudes excedido."
+          },
+          "503": {
+            "description": "Conexión/configuración no disponible o resultado incierto. Consultar operación antes de reenviar."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Token personal Sanctum emitido por token:issue."
+      }
+    },
+    "schemas": {
+      "Customer": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "address",
+          "city",
+          "country"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "address": {
+            "type": "string",
+            "maxLength": 105
+          },
+          "city": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "country": {
+            "type": "string",
+            "pattern": "^[A-Z]{2}$"
+          },
+          "postcode": {
+            "type": "string",
+            "maxLength": 20
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 64
+          }
+        }
+      },
+      "CreatePackage": {
+        "type": "object",
+        "required": [
+          "codigo",
+          "event",
+          "occurred_at",
+          "office_cd",
+          "mail_class",
+          "origin_country",
+          "destination_country",
+          "weight_kg",
+          "sender",
+          "recipient"
+        ],
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "maxLength": 35,
+            "pattern": "^[A-Z0-9][A-Z0-9-]*$"
+          },
+          "event": {
+            "type": "string",
+            "enum": [
+              "EMA",
+              "EMD"
+            ]
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Fecha real con segundos y zona explícita, no futura."
+          },
+          "office_cd": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 32767
+          },
+          "mail_class": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1
+          },
+          "origin_country": {
+            "type": "string",
+            "pattern": "^[A-Z]{2}$"
+          },
+          "destination_country": {
+            "type": "string",
+            "pattern": "^[A-Z]{2}$"
+          },
+          "weight_kg": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMinimum": true,
+            "maximum": 999.999,
+            "multipleOf": 0.001
+          },
+          "sender": {
+            "$ref": "#/components/schemas/Customer"
+          },
+          "recipient": {
+            "$ref": "#/components/schemas/Customer"
+          }
+        }
+      },
+      "Event": {
+        "type": "object",
+        "description": "EMH requiere non_delivery_reason y non_delivery_measure. EMI requiere signatory y permiso ips.deliver.",
+        "required": [
+          "event",
+          "occurred_at",
+          "office_cd",
+          "expected_event_cd",
+          "expected_event_at"
+        ],
+        "properties": {
+          "event": {
+            "type": "string",
+            "enum": [
+              "EMA",
+              "EMD",
+              "EMG",
+              "EDG",
+              "EDH",
+              "EMH",
+              "EMI"
+            ]
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Fecha real con segundos y zona explícita, no futura."
+          },
+          "office_cd": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 32767
+          },
+          "expected_event_cd": {
+            "type": "integer"
+          },
+          "expected_event_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Copiar event_at de la consulta previa, incluida zona."
+          },
+          "signatory": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Obligatorio para EMI."
+          },
+          "delivery_location": {
+            "type": "string",
+            "maxLength": 25
+          },
+          "non_delivery_reason": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Obligatorio para EMH; catálogo IPS."
+          },
+          "non_delivery_measure": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1,
+            "description": "Obligatorio para EMH; catálogo IPS."
+          }
+        }
+      },
+      "Delivery": {
+        "type": "object",
+        "required": [
+          "occurred_at",
+          "office_cd",
+          "expected_event_cd",
+          "expected_event_at",
+          "signatory"
+        ],
+        "properties": {
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Fecha real con segundos y zona explícita, no futura."
+          },
+          "office_cd": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 32767
+          },
+          "expected_event_cd": {
+            "type": "integer"
+          },
+          "expected_event_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Copiar event_at de la consulta previa, incluida zona."
+          },
+          "signatory": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Obligatorio para EMI."
+          },
+          "delivery_location": {
+            "type": "string",
+            "maxLength": 25
+          }
+        }
+      },
+      "Package": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "codigo": {
+            "type": "string",
+            "maxLength": 35
+          },
+          "local_id": {
+            "type": "string",
+            "maxLength": 35
+          },
+          "weight_kg": {
+            "type": "number",
+            "nullable": true
+          },
+          "origin_country": {
+            "type": "string",
+            "maxLength": 2
+          },
+          "destination_country": {
+            "type": "string",
+            "maxLength": 2
+          },
+          "state_cd": {
+            "type": "integer",
+            "nullable": true
+          },
+          "event_cd": {
+            "type": "integer",
+            "nullable": true
+          },
+          "event_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "office_cd": {
+            "type": "integer",
+            "nullable": true
+          },
+          "office_name": {
+            "type": "string"
+          },
+          "event_name": {
+            "type": "string"
+          }
+        }
+      },
+      "PackageList": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Package"
+            }
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "page": {
+                "type": "integer"
+              },
+              "per_page": {
+                "type": "integer"
+              },
+              "has_more": {
+                "type": "boolean"
+              },
+              "status": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "WriteResult": {
+        "type": "object",
+        "required": [
+          "operation_id",
+          "status"
+        ],
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "succeeded",
+              "rejected",
+              "processing",
+              "uncertain"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "codigo": {
+                "type": "string",
+                "maxLength": 35
+              },
+              "mailitm_pid": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "event": {
+                "type": "string",
+                "enum": [
+                  "EMA",
+                  "EMD",
+                  "EMG",
+                  "EDG",
+                  "EDH",
+                  "EMH",
+                  "EMI"
+                ]
+              },
+              "event_cd": {
+                "type": "integer"
+              },
+              "event_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "office_cd": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 32767
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
