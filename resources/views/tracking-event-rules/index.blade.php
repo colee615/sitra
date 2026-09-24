@@ -107,7 +107,7 @@
                 <form method="GET" action="{{ route('tracking-event-rules.index') }}">
                     <div class="row">
                         <div class="col-md-5">
-                            <input type="text" name="q" class="form-control" value="{{ request('q') }}" placeholder="Buscar por nombre o fuente">
+                            <input type="text" name="q" class="form-control" value="{{ request('q') }}" placeholder="Buscar por código, nombre o fuente">
                         </div>
                         <div class="col-md-3">
                             <select name="source_db" class="form-control">
@@ -180,7 +180,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="7" class="text-center text-muted tracking-rules-empty">No hay reglas registradas todavia.</td>
+                                    <td colspan="7" class="text-center text-muted tracking-rules-empty">No hay reglas que coincidan con los filtros.</td>
                                 </tr>
                             @endforelse
                         </tbody>

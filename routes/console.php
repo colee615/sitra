@@ -57,7 +57,7 @@ Artisan::command('token:issue {email} {--name=integration-sitra} {--ability=sqls
     }
 
     $abilities = array_values(array_unique(array_filter(array_map('trim', explode(',', $ability)))));
-    $allowed = ['sqlserver.read', 'ips.read', 'ips.create', 'ips.events', 'ips.deliver', 'ips.operations'];
+    $allowed = ['sqlserver.read', 'ips.read', 'ips.write', 'ips.create', 'ips.events', 'ips.deliver', 'ips.operations'];
     if ($abilities === [] || array_diff($abilities, $allowed)) {
         $this->error('Permisos admitidos: '.implode(',', $allowed));
 

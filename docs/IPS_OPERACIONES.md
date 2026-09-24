@@ -140,8 +140,8 @@ Use `has_more` para continuar. La lista se ordena por fecha descendente e ID. Co
 
 ### Entrega
 
-1. Consulte el paquete y conserve `event_cd`, `event_at` y `office_cd`.
-2. Registre la fecha real y el nombre de quien recibe.
+1. El otro sistema envia el codigo del paquete a `/entrega`.
+2. Si conoce quien recibio, envia `signatory`; si no, SITRA replica el comportamiento de IPS Web Client y deja el receptor vacio.
 3. Genere una clave de idempotencia por operación y **guárdela en el otro proyecto antes del envío**.
 4. Envíe la misma clave y el mismo cuerpo ante una repetición de esa solicitud.
 
@@ -153,16 +153,11 @@ Idempotency-Key: entrega-orden-12345
 
 ~~~json
 {
-  "occurred_at": "2026-09-10T10:30:00-04:00",
-  "office_cd": 1,
-  "expected_event_cd": 75,
-  "expected_event_at": "2026-09-09T15:00:00+00:00",
-  "signatory": "Nombre de quien recibe",
-  "delivery_location": "Ventanilla"
+  "signatory": "Nombre de quien recibe"
 }
 ~~~
 
-Sustituya el código, fechas y oficina por valores reales. Las fechas futuras y las fechas sin zona se rechazan. La fecha del nuevo evento debe ser posterior al movimiento actual. `/entrega` fija EMI aunque el cliente envíe otro evento.
+Para `EMI`, SITRA completa automaticamente `occurred_at` con la hora actual, `office_cd` con la oficina actual del paquete, `expected_event_cd` y `expected_event_at` con el ultimo estado leido de IPS, y `delivery_location` con el nombre de la oficina. Si el cliente envia esos campos manualmente, se validan igual: las fechas futuras y las fechas sin zona se rechazan; la fecha del nuevo evento debe ser posterior al movimiento actual; la oficina debe ser la oficina actual del paquete. `/entrega` fija EMI aunque el cliente envie otro evento.
 
 Respuesta confirmada:
 
@@ -218,7 +213,7 @@ Se requiere un identificador ya asignado por el operador postal. SITRA no invent
 
 ### Movimientos e intento fallido
 
-`POST /paquetes/{codigo}/eventos` recibe el mismo contexto temporal y de estado que entrega, más `event`: EMD, EMG, EDG, EDH o EMH según la transición válida. EMA sobre un objeto existente queda sujeto a la compatibilidad IPS. Para EMH se requieren `non_delivery_reason` y `non_delivery_measure` del catálogo. No use valores de ejemplo como códigos reales. El receptor solo es obligatorio para EMI.
+`POST /paquetes/{codigo}/eventos` recibe el mismo contexto temporal y de estado que entrega, más `event`: EMD, EMG, EDG, EDH o EMH según la transición válida. EMA sobre un objeto existente queda sujeto a la compatibilidad IPS. Para EMH se requieren `non_delivery_reason` y `non_delivery_measure` del catálogo. No use valores de ejemplo como códigos reales. Para EMI, SITRA puede autocompletar el contexto desde IPS; el receptor es recomendable para auditoría, pero IPS Web Client también permite omitirlo.
 
 Este alcance no incluye borrar objetos, anulaciones, devoluciones automáticas, creación de despachos/sacas, liquidación aduanera ni emisión de rangos S10. Son operaciones distintas a la entrega y requieren sus propios contratos.
 

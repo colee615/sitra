@@ -3,8 +3,11 @@
 return [
     'connection' => 'sqlsrv',
     'expected_database' => 'IPS5Db',
+    'totals_cache_seconds' => (int) env('IPS_TOTALS_CACHE_SECONDS', 30),
+    'totals_cache_store' => env('IPS_TOTALS_CACHE_STORE'),
     // Validate stored procedures in an IPS test database before enabling production writes.
     'writes_enabled' => (bool) env('IPS_WRITES_ENABLED', false),
+    'user_provisioning_enabled' => (bool) env('IPS_USER_PROVISIONING_ENABLED', false),
     'user_pid' => env('IPS_USER_PID'),
     'workstation_pid' => env('IPS_WORKSTATION_PID'),
     'destination_country' => 'BO',
@@ -20,4 +23,6 @@ return [
     ],
     // Local operational policy, not a universal UPU transition requirement.
     'delivery_candidate_events' => [32, 39, 74, 75, 36],
+    // Receipt requires physical confirmation and office routing; 35 is not mandatory.
+    'reception_candidate_events' => [30, 33, 35, 38, 42, 43, 44, 71, 72],
 ];

@@ -68,10 +68,11 @@ class IpsApiTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_delivery_requires_idempotency_signatory_and_expected_state(): void
+    public function test_delivery_requires_only_idempotency_before_autofill(): void
     {
         $this->withToken($this->token(['ips.deliver']))->postJson('/api/v1/ips/paquetes/TEST01/entrega', [])
-            ->assertUnprocessable()->assertJsonValidationErrors(['idempotency_key', 'signatory', 'expected_event_cd', 'expected_event_at', 'occurred_at', 'office_cd']);
+            ->assertUnprocessable()->assertJsonValidationErrors(['idempotency_key'])
+            ->assertJsonMissingValidationErrors(['signatory', 'expected_event_cd', 'expected_event_at', 'occurred_at', 'office_cd']);
     }
 
     public function test_delivery_rejects_future_or_timezone_less_timestamp(): void
@@ -96,6 +97,22 @@ class IpsApiTest extends TestCase
             ->assertOk()->assertJsonPath('operation_id', $first->json('operation_id'))->assertHeader('Idempotency-Replayed', 'true');
         $this->assertDatabaseCount('ips_operations', 1);
         $this->assertDatabaseHas('ips_operations', ['status' => 'succeeded']);
+    }
+
+    public function test_delivery_accepts_ips_web_client_minimal_payload(): void
+    {
+        $totals = app(\App\Services\IpsPackageTotalsCache::class);
+        $this->assertSame(1, $totals->remember(['status' => 'pending'], fn () => 1));
+        $workflow = Mockery::mock(IpsWorkflowService::class);
+        $workflow->shouldReceive('execute')->once()->with('event', Mockery::on(fn ($v) => $v['event'] === 'EMI' &&
+            $v['codigo'] === 'TEST01' && ! array_key_exists('occurred_at', $v) && ! array_key_exists('office_cd', $v)
+        ))->andReturn(['codigo' => 'TEST01', 'event' => 'EMI', 'event_cd' => 37]);
+        $this->app->instance(IpsWorkflowService::class, $workflow);
+
+        $this->withToken($this->token(['ips.deliver']))->withHeader('Idempotency-Key', 'delivery-minimal-01')
+            ->postJson('/api/v1/ips/paquetes/TEST01/entrega', [])
+            ->assertOk()->assertJsonPath('status', 'succeeded');
+        $this->assertSame(0, $totals->remember(['status' => 'pending'], fn () => 0));
     }
 
     public function test_reused_key_with_different_payload_is_conflict(): void
@@ -235,6 +252,10 @@ class IpsApiTest extends TestCase
     {
         $user = User::factory()->create();
         $user->assignRole(Role::findOrCreate('admin', 'web'));
+        $user->givePermissionTo([
+            \Spatie\Permission\Models\Permission::findByName('ips.read', 'web'),
+            \Spatie\Permission\Models\Permission::findByName('ips.create', 'web'),
+        ]);
         $ips = Mockery::mock(IpsRepository::class);
         $ips->shouldReceive('catalog')->once()->andReturn([
             'offices' => [], 'countries' => [], 'mail_classes' => [], 'non_delivery_reasons' => [], 'non_delivery_measures' => [],

@@ -62,6 +62,11 @@ class IpsOperationService
         }
         if (($body['status'] ?? '') === 'succeeded') {
             try {
+                app(IpsPackageTotalsCache::class)->invalidate();
+            } catch (Throwable $e) {
+                Log::warning('IPS package total invalidation failed', ['operation_id' => $id, 'exception_type' => $e::class]);
+            }
+            try {
                 app(TrackingSearchCacheService::class)->invalidate($input['codigo']);
                 if (! empty($result['codigo']) && $result['codigo'] !== $input['codigo']) {
                     app(TrackingSearchCacheService::class)->invalidate($result['codigo']);

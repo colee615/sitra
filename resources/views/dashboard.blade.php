@@ -14,7 +14,7 @@
             </div>
         </form>
     </div></div>
-    @can('admin-only')
+    @can('ips.read')
         <a class="btn btn-primary mb-3" href="{{ route('operaciones.index') }}">Gestionar paquetes y entregas</a>
     @endcan
     @include('footer')

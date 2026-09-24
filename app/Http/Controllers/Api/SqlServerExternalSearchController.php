@@ -163,6 +163,7 @@ class SqlServerExternalSearchController extends Controller
             'Enviar envío para entrega física (entrada)' => 'Paquete en camino para entrega física.',
             'Recibir envío en punto de recogida (entrada)' => 'Paquete recibido en punto de recogida.',
             'Detener importación de envío (entrada)' => 'Importación del paquete detenida.',
+            'Handed over to customs/security custody' => 'Paquete bajo custodia de Aduana o seguridad.',
             'Recibido por EDI' => 'Paquete: datos recibidos por EDI.',
         ];
 

@@ -23,6 +23,12 @@ class AppServiceProvider extends ServiceProvider
     {
         Paginator::useBootstrapFive();
 
+        foreach (['ips.read', 'ips.create', 'ips.events', 'ips.deliver', 'ips.operations'] as $ability) {
+            Gate::define($ability, function ($user) use ($ability) {
+                return $user->checkPermissionTo($ability, 'web');
+            });
+        }
+
         Gate::define('admin-only', function ($user) {
             return method_exists($user, 'hasRole') && $user->hasRole('admin');
         });

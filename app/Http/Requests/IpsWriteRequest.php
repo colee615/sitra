@@ -31,16 +31,20 @@ class IpsWriteRequest extends FormRequest
     public function rules(): array
     {
         $creating = ($this->route()->defaults['ips_action'] ?? '') === 'create';
+        $delivery = ! $creating && $this->input('event') === 'EMI';
 
         return [
             'idempotency_key' => ['required', 'string', 'min:8', 'max:128', 'regex:/^[A-Za-z0-9_.:-]+$/'],
             'codigo' => ['required', 'string', 'max:35', 'regex:/^[A-Z0-9][A-Z0-9-]*$/'],
             'event' => ['required', Rule::in($creating ? ['EMA', 'EMD'] : array_keys(config('ips.events')))],
-            'occurred_at' => ['required', 'date_format:Y-m-d\TH:i:sP', 'before_or_equal:now'],
-            'office_cd' => ['required', 'integer', 'min:1', 'max:32767'],
-            'expected_event_cd' => [$creating ? 'prohibited' : 'required', 'integer'],
-            'expected_event_at' => [$creating ? 'prohibited' : 'required', 'date_format:Y-m-d\TH:i:sP,Y-m-d\TH:i:s.vP'],
-            'signatory' => [Rule::requiredIf($this->input('event') === 'EMI'), 'nullable', 'string', 'max:64'],
+            'occurred_at' => [$delivery ? 'sometimes' : 'required', 'date_format:Y-m-d\TH:i:sP', 'before_or_equal:now'],
+            'office_cd' => [$delivery ? 'sometimes' : 'required', 'integer', 'min:0', 'max:32767'],
+            'expected_event_cd' => [$creating ? 'prohibited' : ($delivery ? 'sometimes' : 'required'), 'integer'],
+            'expected_event_at' => [$creating ? 'prohibited' : ($delivery ? 'sometimes' : 'required'), 'date_format:Y-m-d\TH:i:sP,Y-m-d\TH:i:s.vP'],
+            'signatory' => ['nullable', 'string', 'max:64'],
+            'actor_user_pid' => ['sometimes', 'integer', 'min:1', 'max:32767'],
+            'external_actor_id' => ['sometimes', 'string', 'max:80'],
+            'physical_receipt_confirmed' => ['exclude_unless:event,EMG', 'required', 'boolean', 'accepted'],
             'delivery_location' => ['nullable', 'string', 'max:25'],
             'non_delivery_reason' => [Rule::requiredIf($this->input('event') === 'EMH'), 'nullable', 'integer', 'min:1'],
             'non_delivery_measure' => [Rule::requiredIf($this->input('event') === 'EMH'), 'nullable', 'string', 'size:1'],

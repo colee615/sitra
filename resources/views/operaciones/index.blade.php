@@ -48,7 +48,15 @@
         @php($package = $detail['package'])
         <div class="card"><div class="card-header"><h2 class="h5 mb-0">{{ $package['codigo'] }} · Registrar movimiento</h2></div><div class="card-body">
             <p>Último evento: {{ $package['event_cd'] }} · {{ $package['event_at'] }}. La entrega registra al receptor y cierra el flujo del paquete.</p>
-            <form method="POST" action="{{ route('operaciones.event', $package['codigo']) }}">
+            @canany(['ips.events', 'ips.deliver'])
+            @php($movementUrl = auth()->user()->can('ips.events')
+                ? route('operaciones.event', $package['codigo'])
+                : route('operaciones.deliver', $package['codigo']))
+            <form id="ips-movement-form"
+                  method="POST"
+                  action="{{ $movementUrl }}"
+                  data-event-url="{{ route('operaciones.event', $package['codigo']) }}"
+                  data-delivery-url="{{ route('operaciones.deliver', $package['codigo']) }}">
                 @csrf
                 <input type="hidden" name="idempotency_key" value="{{ old('idempotency_key', (string) \Illuminate\Support\Str::uuid()) }}">
                 <input type="hidden" name="expected_event_cd" value="{{ $package['event_cd'] }}">
@@ -56,7 +64,13 @@
                 <div class="row">
                     <div class="col-md-4 form-group"><label for="event">Movimiento</label><select id="event" name="event" class="form-control" required>
                         @foreach(config('ips.events') as $code => $definition)
-                            @unless($definition['create'])<option value="{{ $code }}" @selected(old('event') === $code)>{{ $code }} · {{ $definition['name'] }}</option>@endunless
+                            @unless($definition['create'])
+                                @if($code === 'EMI')
+                                    @can('ips.deliver')<option value="{{ $code }}" @selected(old('event') === $code)>{{ $code }} · {{ $definition['name'] }}</option>@endcan
+                                @else
+                                    @can('ips.events')<option value="{{ $code }}" @selected(old('event') === $code)>{{ $code }} · {{ $definition['name'] }}</option>@endcan
+                                @endif
+                            @endunless
                         @endforeach
                     </select></div>
                     <div class="col-md-4 form-group"><label for="event-office">Oficina</label><select id="event-office" name="office_cd" class="form-control" required>
@@ -74,12 +88,31 @@
                 </div>
                 <button class="btn btn-primary" @disabled(!config('ips.writes_enabled') || $package['state_cd'] === 5)>Registrar movimiento</button>
             </form>
+            <script>
+                (() => {
+                    const form = document.getElementById('ips-movement-form');
+                    const eventSelect = document.getElementById('event');
+                    if (!form || !eventSelect) return;
+
+                    const updateAction = () => {
+                        form.action = eventSelect.value === 'EMI'
+                            ? form.dataset.deliveryUrl
+                            : form.dataset.eventUrl;
+                    };
+
+                    eventSelect.addEventListener('change', updateAction);
+                    form.addEventListener('submit', updateAction);
+                    updateAction();
+                })();
+            </script>
+            @endcanany
         </div></div>
         <div class="card"><div class="card-header">Historial IPS</div><div class="table-responsive"><table class="table"><thead><tr><th>Evento</th><th>Fecha UTC</th><th>Oficina</th></tr></thead><tbody>
             @foreach($detail['events'] as $event)<tr><td>{{ $event->EVENT_TYPE_NM }} ({{ $event->EVENT_TYPE_CD }})</td><td>{{ $event->EVENT_GMT_DT }}</td><td>{{ $event->EVENT_OFFICE_CD }}</td></tr>@endforeach
         </tbody></table></div></div>
     @endif
 
+    @can('ips.create')
     <details class="card"><summary class="card-header">Crear paquete en IPS</summary><div class="card-body">
         <form method="POST" action="{{ route('operaciones.create') }}">
             @csrf
@@ -107,9 +140,12 @@
             <button class="btn btn-primary" @disabled(!config('ips.writes_enabled'))>Crear paquete</button>
         </form>
     </div></details>
+    @endcan
 
+    @can('ips.operations')
     <div class="card"><div class="card-header">Mis últimas operaciones</div><div class="table-responsive"><table class="table"><thead><tr><th>Referencia</th><th>Paquete</th><th>Evento</th><th>Resultado</th><th>Fecha</th></tr></thead><tbody>
         @forelse($operations as $operation)<tr><td><code>{{ $operation->id }}</code></td><td>{{ $operation->codigo }}</td><td>{{ $operation->event }}</td><td>{{ $operation->status }}</td><td>{{ $operation->created_at }}</td></tr>
         @empty<tr><td colspan="5">Todavía no hay operaciones registradas.</td></tr>@endforelse
     </tbody></table></div></div>
+    @endcan
 @stop

@@ -17,6 +17,7 @@ class IpsWorkflowService
         return $this->ips->connection()->transaction(function () use ($action, $input) {
             $this->ips->lockCode($input['codigo']);
             $item = $this->ips->find($input['codigo'], true);
+            $input = $this->autofillDeliveryInput($action, $input, $item);
             $definition = config('ips.events.'.$input['event']);
             if (! $definition) {
                 throw new IpsOperationException('Evento operativo no permitido.', 422);
@@ -44,16 +45,36 @@ class IpsWorkflowService
                 'event_cd' => (int) $event->EVENT_TYPE_CD,
                 'event_at' => $date->copy()->utc()->format('Y-m-d\TH:i:sP'),
                 'office_cd' => (int) $input['office_cd'],
+                'actor_user_pid' => (int) $parameters['User'],
+                'workstation_pid' => (int) $parameters['Workstation'],
+                'external_actor_id' => $input['external_actor_id'] ?? null,
             ];
         }, 1); // No automatic transaction retry across IPS procedures.
     }
 
+    private function autofillDeliveryInput(string $action, array $input, ?object $item): array
+    {
+        if ($action === 'create' || ($input['event'] ?? null) !== 'EMI' || ! $item) {
+            return $input;
+        }
+
+        $office = isset($item->EVT_OFFICE_CD) ? $this->ips->ownOffice((int) $item->EVT_OFFICE_CD) : null;
+
+        return array_replace([
+            'occurred_at' => Carbon::now(config('app.timezone'))->format('Y-m-d\TH:i:sP'),
+            'office_cd' => isset($item->EVT_OFFICE_CD) ? (int) $item->EVT_OFFICE_CD : null,
+            'expected_event_cd' => isset($item->EVT_TYPE_CD) ? (int) $item->EVT_TYPE_CD : null,
+            'expected_event_at' => isset($item->EVT_GMT_DT) ? Carbon::parse($item->EVT_GMT_DT, 'UTC')->format('Y-m-d\TH:i:s.vP') : null,
+            'delivery_location' => $office ? Str::limit(trim($office->OFFICE_NM), 25, '') : null,
+        ], array_filter($input, fn ($value) => $value !== null && $value !== ''));
+    }
+
     private function validateTransition(string $action, array $input, ?object $item, object $event, array $definition): void
     {
-        if (! $this->ips->reference('N_OWN_OFFICES', 'OWN_OFFICE_CD', $input['office_cd'])) {
-            throw new IpsOperationException('La oficina no está activa en IPS.', 422);
-        }
         if ($action === 'create') {
+            if (! $this->ips->reference('N_OWN_OFFICES', 'OWN_OFFICE_CD', $input['office_cd'])) {
+                throw new IpsOperationException('La oficina no está activa en IPS.', 422);
+            }
             if ($item) {
                 throw new IpsOperationException('El paquete ya existe. Consulte su estado antes de registrar eventos.');
             }
@@ -83,6 +104,9 @@ class IpsWorkflowService
         if (! $item) {
             throw new IpsOperationException('Paquete no encontrado en IPS.', 404);
         }
+        if (! $this->ips->reference('N_OWN_OFFICES', 'OWN_OFFICE_CD', $input['office_cd'])) {
+            throw new IpsOperationException('La oficina no está activa en IPS.', 422);
+        }
         if ((int) $item->STATE_IND_CD === 5 || $this->ips->eventExists($item->MAILITM_PID, [37, 76])) {
             throw new IpsOperationException('El paquete ya fue entregado o su importación terminó.');
         }
@@ -99,12 +123,20 @@ class IpsWorkflowService
         if ($definition['direction'] === 'I' && trim($item->DEST_COUNTRY_CD ?? '') !== config('ips.destination_country')) {
             throw new IpsOperationException('Este flujo de entrega solo opera envíos con destino Bolivia.');
         }
-        if ($input['event'] === 'EMI') {
-            if (! in_array((int) $item->EVT_TYPE_CD, config('ips.delivery_candidate_events'), true)) {
-                throw new IpsOperationException('El paquete no está en una etapa habilitada para entrega.');
+        if (isset($input['actor_user_pid'])) {
+            $actor = $this->ips->user((int) $input['actor_user_pid']);
+            if ((int) ($actor['office_cd'] ?? 0) !== (int) $input['office_cd']) {
+                throw new IpsOperationException('La oficina no corresponde al usuario IPS vinculado.', 403);
             }
-            if ((int) $item->EVT_OFFICE_CD !== (int) $input['office_cd']) {
-                throw new IpsOperationException('La entrega debe registrarse en la oficina actual del paquete.');
+        }
+        if (in_array($input['event'], ['EMG', 'EDH', 'EDG', 'EMI'], true)) {
+            $this->ips->enrich(collect([$item]));
+            $package = $this->ips->present($item);
+            if (!in_array($input['event'], app(IpsStagePolicy::class)->actions($package, (int) $input['office_cd']), true)) {
+                throw new IpsOperationException('La etapa u oficina actual no está habilitada para esta operación.');
+            }
+            if ($input['event'] === 'EMG' && empty($input['physical_receipt_confirmed'])) {
+                throw new IpsOperationException('Confirme que recibió físicamente el paquete.', 422);
             }
         }
         if ($input['event'] === 'EMH') {
@@ -143,16 +175,17 @@ class IpsWorkflowService
         }
 
         return array_replace($parameters, [
+            'StateInd' => $event->RESULT_STATE_IND_CD,
             'EventType' => (int) $event->EVENT_TYPE_CD,
             'EventGmtDt' => $date->copy()->utc()->toDateTimeString(),
             'EventLocalOffset' => $date->utcOffset() / 60,
             'Office' => (int) $input['office_cd'],
-            'User' => (int) config('ips.user_pid'),
+            'User' => (int) ($input['actor_user_pid'] ?? config('ips.user_pid')),
             'Workstation' => (int) config('ips.workstation_pid'),
             'InnerBagPId' => $item?->EVT_INNRBAG_PID,
             'ReceptaclePId' => $item?->EVT_RECPTCL_PID,
             'DelivInfoValid' => in_array($input['event'], ['EMI', 'EMH'], true) ? '1' : '0',
-            'Signatory' => $input['event'] === 'EMI' ? $input['signatory'] : null,
+            'Signatory' => $input['event'] === 'EMI' ? ($input['signatory'] ?? null) : null,
             'DelivLocation' => $input['delivery_location'] ?? null,
             'NonDeliveryReason' => $input['event'] === 'EMH' ? $input['non_delivery_reason'] : null,
             'NonDeliveryMeasure' => $input['event'] === 'EMH' ? $input['non_delivery_measure'] : null,

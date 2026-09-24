@@ -10,10 +10,6 @@ class SqlServerDataController extends Controller
 {
     public function index(Request $request, SqlServerSearchService $searchService)
     {
-        if (! $request->user() || ! $request->user()->hasRole('admin')) {
-            abort(403, 'Solo los administradores pueden ver esta pagina.');
-        }
-
         $codigo = trim((string) $request->query('codigo', ''));
 
         try {

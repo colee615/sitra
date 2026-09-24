@@ -56,7 +56,11 @@ class SqlServerExternalSearchSafeController extends Controller
                     'destination_country_name' => $packageMeta['destination_country_name'],
                     'destino' => $packageMeta['destination_country_name'],
                     'pais_destino' => $packageMeta['destination_country_name'],
+                    'postal_status_cd' => $packageMeta['postal_status_cd'],
+                    'postal_status_name' => $packageMeta['postal_status_name'],
                 ],
+                'estado_postal' => $packageMeta['postal_status_name'],
+                'codigo_estado_postal' => $packageMeta['postal_status_cd'],
                 'eventos_externos' => $this->transformExternalEvents(
                     $result['trackingRows'] ?? [],
                     $originCountry,
@@ -107,6 +111,15 @@ class SqlServerExternalSearchSafeController extends Controller
                     );
                 }
 
+                $office = $this->buildOffice($row, $originCountry, $detail);
+                if ($eventCode === 1
+                    && $office !== ''
+                    && $originCountry !== ''
+                    && stripos($office, $originCountry) === false
+                    && !preg_match('/^\d+(?:\s*-|$)/', $office)) {
+                    $eventType = 'Registro postal en tránsito internacional';
+                }
+
                 return [
                     'mailitM_PID' => isset($row->MAILITM_PID) ? strtolower(trim((string) $row->MAILITM_PID)) : '',
                     'mailitM_FID' => $this->resolveMailItemFid($row),
@@ -115,11 +128,18 @@ class SqlServerExternalSearchSafeController extends Controller
                     'origen_evento' => trim((string) ($row->SOURCE_DB ?? 'IPS5Db')),
                     'eventType' => $eventType,
                     'eventDate' => $this->formatEventDate($row->EVENT_GMT_DT ?? null),
-                    'office' => $this->buildOffice($row, $originCountry, $detail),
+                    'office' => $office,
                     'scanned' => $this->cleanLabel(isset($row->SCANNED_TXT) ? (string) $row->SCANNED_TXT : ''),
                     'workstation' => $this->cleanLabel(isset($row->WORKSTATION_TXT) ? (string) $row->WORKSTATION_TXT : ''),
                     'condition' => $condition,
                     'nextOffice' => $this->cleanLabel(isset($row->NEXT_OFFICE_FCD) ? (string) $row->NEXT_OFFICE_FCD : ''),
+                    'next_office_code' => isset($row->NEXT_OFFICE_CD) && is_numeric($row->NEXT_OFFICE_CD)
+                        ? (int) $row->NEXT_OFFICE_CD
+                        : null,
+                    'reason_code' => isset($row->RETENTION_REASON_CD) && is_numeric($row->RETENTION_REASON_CD)
+                        ? (int) $row->RETENTION_REASON_CD
+                        : null,
+                    'attempted_delivery_location' => $this->cleanLabel(isset($row->ATTEMPTED_DELIVERY_LOCATION) ? (string) $row->ATTEMPTED_DELIVERY_LOCATION : ''),
                     'detail' => $detail,
                 ];
             })
@@ -158,9 +178,21 @@ class SqlServerExternalSearchSafeController extends Controller
 
     private function buildOffice(object $row, string $originCountry, string $detail): string
     {
+        $officeCode = isset($row->OFFICE_FCD) ? trim((string) $row->OFFICE_FCD) : '';
+        $officeName = isset($row->OFFICE_NM)
+            ? $this->friendlyLocationName(trim((string) $row->OFFICE_NM))
+            : '';
+
+        // Algunos eventos de admisión solo traen un identificador numérico
+        // (por ejemplo 951140). Para el cliente ese valor no es una ubicación;
+        // usamos el país de origen que IPS ya informó en los metadatos.
+        if ($officeName === '' && preg_match('/^\d+$/', $officeCode) === 1 && $originCountry !== '') {
+            return $originCountry;
+        }
+
         $office = trim(implode(' - ', array_filter([
-            isset($row->OFFICE_FCD) ? trim((string) $row->OFFICE_FCD) : '',
-            isset($row->OFFICE_NM) ? trim((string) $row->OFFICE_NM) : '',
+            $officeCode,
+            $officeName,
         ])));
 
         if ($office !== '') {
@@ -178,6 +210,19 @@ class SqlServerExternalSearchSafeController extends Controller
         return '';
     }
 
+    private function friendlyLocationName(string $location): string
+    {
+        return str_ireplace([
+            'United States of America (the)',
+            'United Kingdom of Great Britain and Northern Ireland (the)',
+            'Bolivia (Plurinational State of)',
+        ], [
+            'Estados Unidos',
+            'Reino Unido',
+            'Bolivia',
+        ], trim($location));
+    }
+
     private function resolveMailItemFid(object $row): string
     {
         if (($row->SOURCE_DB ?? '') === 'IPS5Db-EDI') {
@@ -191,7 +236,7 @@ class SqlServerExternalSearchSafeController extends Controller
     {
         $package = collect($packageRows)->first();
         $originCountryCode = isset($package->ORIG_COUNTRY_CD) ? trim((string) $package->ORIG_COUNTRY_CD) : '';
-        $originCountryName = $this->normalizeText(isset($package->ORIG_COUNTRY_NM) ? (string) $package->ORIG_COUNTRY_NM : '');
+        $originCountryName = $this->friendlyLocationName($this->normalizeText(isset($package->ORIG_COUNTRY_NM) ? (string) $package->ORIG_COUNTRY_NM : ''));
 
         if ($originCountryName !== '') {
             return $originCountryCode !== '' ? $originCountryCode . ' - ' . $originCountryName : $originCountryName;
@@ -204,7 +249,7 @@ class SqlServerExternalSearchSafeController extends Controller
             return '';
         }
 
-        $countryName = $this->countryNameFromS10($countryCode);
+        $countryName = $this->friendlyLocationName($this->countryNameFromS10($countryCode));
 
         return $countryName !== '' ? $countryCode . ' - ' . $countryName : $countryCode;
     }
@@ -214,16 +259,20 @@ class SqlServerExternalSearchSafeController extends Controller
         $package = collect($packageRows)->first();
 
         $originCountryCode = isset($package->ORIG_COUNTRY_CD) ? trim((string) $package->ORIG_COUNTRY_CD) : '';
-        $originCountryName = $this->normalizeText(isset($package->ORIG_COUNTRY_NM) ? (string) $package->ORIG_COUNTRY_NM : '');
+        $originCountryName = $this->friendlyLocationName($this->normalizeText(isset($package->ORIG_COUNTRY_NM) ? (string) $package->ORIG_COUNTRY_NM : ''));
         $destinationCountryCode = isset($package->DEST_COUNTRY_CD) ? trim((string) $package->DEST_COUNTRY_CD) : '';
-        $destinationCountryName = $this->normalizeText(isset($package->DEST_COUNTRY_NM) ? (string) $package->DEST_COUNTRY_NM : '');
+        $destinationCountryName = $this->friendlyLocationName($this->normalizeText(isset($package->DEST_COUNTRY_NM) ? (string) $package->DEST_COUNTRY_NM : ''));
+        $postalStatusCode = isset($package->POSTAL_STATUS_CD) && is_numeric($package->POSTAL_STATUS_CD)
+            ? (int) $package->POSTAL_STATUS_CD
+            : null;
+        $postalStatusName = $this->normalizeText(isset($package->POSTAL_STATUS_NM) ? (string) $package->POSTAL_STATUS_NM : '');
 
         if ($originCountryName === '' && $originCountryCode !== '') {
-            $originCountryName = $this->countryNameFromS10($originCountryCode);
+            $originCountryName = $this->friendlyLocationName($this->countryNameFromS10($originCountryCode));
         }
 
         if ($destinationCountryName === '' && $destinationCountryCode !== '') {
-            $destinationCountryName = $this->countryNameFromS10($destinationCountryCode);
+            $destinationCountryName = $this->friendlyLocationName($this->countryNameFromS10($destinationCountryCode));
         }
 
         return [
@@ -231,6 +280,8 @@ class SqlServerExternalSearchSafeController extends Controller
             'origin_country_name' => $originCountryName !== '' ? $originCountryName : null,
             'destination_country_code' => $destinationCountryCode !== '' ? strtoupper($destinationCountryCode) : null,
             'destination_country_name' => $destinationCountryName !== '' ? $destinationCountryName : null,
+            'postal_status_cd' => $postalStatusCode,
+            'postal_status_name' => $postalStatusName !== '' ? $postalStatusName : null,
         ];
     }
 

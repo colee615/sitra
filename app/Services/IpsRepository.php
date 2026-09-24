@@ -35,27 +35,86 @@ class IpsRepository
 
     public function packages(array $filters): array
     {
-        $query = $this->connection()->table('dbo.L_MAILITMS as m')
+        // Counting benefits from one history scan; a small page benefits from indexed seeks.
+        $total = app(IpsPackageTotalsCache::class)->remember($filters,
+            fn () => $this->packagesQuery($filters, false)->count('m.MAILITM_PID'));
+        $perPage = min(100, max(1, (int) ($filters['per_page'] ?? 25)));
+        $page = max(1, (int) ($filters['page'] ?? 1));
+        $ids = $this->packagesQuery($filters, true)
+            ->orderByDesc('m.EVT_GMT_DT')->orderBy('m.MAILITM_PID')
+            ->offset(($page - 1) * $perPage)->limit($perPage + 1)
+            ->pluck('m.MAILITM_PID');
+        // Hydrate only this page, so sorting/filtering never fetches every parcel's wide row.
+        $rows = $ids->isEmpty() ? collect() : $this->connection()->table('dbo.L_MAILITMS as m')
             ->leftJoin('dbo.C_EVENT_TYPES as e', 'e.EVENT_TYPE_CD', '=', 'm.EVT_TYPE_CD')
-            ->leftJoin('dbo.N_OWN_OFFICES as o', 'o.OWN_OFFICE_CD', '=', 'm.EVT_OFFICE_CD');
+            ->leftJoin('dbo.N_OWN_OFFICES as o', 'o.OWN_OFFICE_CD', '=', 'm.EVT_OFFICE_CD')
+            ->whereIn('m.MAILITM_PID', $ids)->get(['m.*', 'e.EVENT_TYPE_NM', 'o.OFFICE_NM'])
+            ->sortBy(fn ($row) => $ids->search($row->MAILITM_PID))->values();
+        $this->enrich($rows);
 
-        if (($filters['status'] ?? 'all') === 'pending') {
-            $query->where('m.DEST_COUNTRY_CD', config('ips.destination_country'))
-                ->whereIn('m.EVT_TYPE_CD', config('ips.delivery_candidate_events'))
-                ->whereIn('m.STATE_IND_CD', [0, 8])
+        return [
+            'data' => $rows->take($perPage)->map(fn ($row) => $this->presentForOffice($row, isset($filters['office_cd']) ? (int) $filters['office_cd'] : null))->values()->all(),
+            'meta' => ['page' => $page, 'per_page' => $perPage, 'total' => $total, 'has_more' => $rows->count() > $perPage, 'status' => $filters['status'] ?? 'all'],
+        ];
+    }
+
+    private function packagesQuery(array $filters, bool $pageQuery): \Illuminate\Database\Query\Builder
+    {
+        $db = $this->connection();
+        $latest = $db->table('dbo.L_MAILITM_EVENTS')
+            ->whereNotIn('EVENT_TYPE_CD', IpsStagePolicy::TECHNICAL_EVENTS);
+        $query = $db->table('dbo.L_MAILITMS as m');
+        if (($pageQuery || ! empty($filters['q'])) && $db->getDriverName() === 'sqlsrv') {
+            // Seek each item's indexed history instead of sorting the entire event table.
+            $latest->whereColumn('MAILITM_PID', 'm.MAILITM_PID')
+                ->orderByDesc('EVENT_GMT_DT')->orderByDesc('EVENT_TYPE_CD')
+                ->limit(1)->select(['EVENT_TYPE_CD', 'EVENT_OFFICE_CD', 'NEXT_OFFICE_CD']);
+            $query->leftJoinLateral($latest, 'op');
+        } else {
+            $latest->selectRaw('MAILITM_PID, EVENT_TYPE_CD, EVENT_OFFICE_CD, NEXT_OFFICE_CD, ROW_NUMBER() OVER (PARTITION BY MAILITM_PID ORDER BY EVENT_GMT_DT DESC, EVENT_TYPE_CD DESC) AS rn');
+            $query->leftJoinSub($latest, 'op', fn ($j) => $j->on('op.MAILITM_PID', '=', 'm.MAILITM_PID')->where('op.rn', 1));
+        }
+
+        $status = $filters['status'] ?? 'all';
+        // The operational queues are inbound Bolivia only. An exact search in “Todos”
+        // may still open an outbound item for history; its policy actions remain empty.
+        $exactHistorySearch = $status === 'all' && ! empty($filters['q']);
+        if (! $exactHistorySearch) {
+            $query->where('m.DEST_COUNTRY_CD', config('ips.destination_country'));
+        }
+        if (in_array($status, ['pending', 'reception'], true)) {
+            $query->whereIn(DB::raw('COALESCE(op.EVENT_TYPE_CD, m.EVT_TYPE_CD)'), $status === 'pending'
+                    ? config('ips.delivery_candidate_events') : config('ips.reception_candidate_events'))
+                ->whereIn('m.STATE_IND_CD', $status === 'pending' ? [0, 8] : [0, 2, 3, 6])
                 ->whereNotExists(function ($q) {
-                    $q->selectRaw('1')->from('dbo.L_MAILITM_EVENTS as delivered')
-                        ->whereColumn('delivered.MAILITM_PID', 'm.MAILITM_PID')
-                        ->whereIn('delivered.EVENT_TYPE_CD', [37, 76]);
+                    $q->selectRaw('1')->from('dbo.L_MAILITM_EVENTS as terminal')
+                        ->whereColumn('terminal.MAILITM_PID', 'm.MAILITM_PID')->whereIn('terminal.EVENT_TYPE_CD', [37, 76]);
                 });
-        } elseif (($filters['status'] ?? '') === 'delivered') {
+        } elseif ($status === 'returns') {
+            $query->whereIn('m.POSTAL_STATUS_CD', [6, 7, 22, 23]);
+        } elseif ($status === 'delivered') {
             $query->where('m.STATE_IND_CD', 5);
+        }
+        if (isset($filters['office_cd'])) {
+            $office = (int) $filters['office_cd'];
+            $query->where(function ($q) use ($office, $status) {
+                $q->whereRaw('COALESCE(op.EVENT_OFFICE_CD, m.EVT_OFFICE_CD) = ?', [$office]);
+                if ($status !== 'pending') {
+                    $q->orWhere('op.NEXT_OFFICE_CD', $office);
+                }
+            });
+            if ($status === 'reception') {
+                $query->where(function ($q) use ($office) {
+                    $q->whereNotIn(DB::raw('COALESCE(op.EVENT_TYPE_CD, m.EVT_TYPE_CD)'), [35, 72])
+                        ->orWhere('op.NEXT_OFFICE_CD', $office);
+                });
+            }
         }
         if (! empty($filters['q'])) {
             $code = strtoupper(trim($filters['q']));
             $query->where(fn ($q) => $q->where('m.MAILITM_FID', $code)->orWhere('m.MAILITM_LOCAL_ID', $code));
         }
-        foreach (['office_cd' => 'm.EVT_OFFICE_CD', 'event_cd' => 'm.EVT_TYPE_CD'] as $filter => $column) {
+        foreach (['event_cd' => 'm.EVT_TYPE_CD'] as $filter => $column) {
             if (isset($filters[$filter])) {
                 $query->where($column, $filters[$filter]);
             }
@@ -66,15 +125,131 @@ class IpsRepository
         if (! empty($filters['to'])) {
             $query->where('m.EVT_GMT_DT', '<=', Carbon::parse($filters['to'])->utc()->toDateTimeString());
         }
+
+        return $query;
+    }
+
+    public function users(array $filters): array
+    {
+        $query = $this->connection()->table('dbo.L_USERS as u')
+            ->leftJoin('dbo.N_OWN_OFFICES as o', 'o.OWN_OFFICE_CD', '=', 'u.OWN_OFFICE_CD')
+            ->whereIn('u.VALID_IND', ['1', '3']);
+
+        if (! empty($filters['q'])) {
+            $search = mb_strtolower(trim((string) $filters['q']));
+            $query->where(function ($q) use ($search) {
+                $q->whereRaw('LOWER(u.USER_FID) LIKE ?', ['%'.$search.'%'])
+                    ->orWhereRaw('LOWER(u.USER_NM) LIKE ?', ['%'.$search.'%'])
+                    ->orWhereRaw('LOWER(u.USER_DOMAIN) LIKE ?', ['%'.$search.'%']);
+            });
+        }
+
+        if (isset($filters['user_pid'])) {
+            $query->where('u.USER_PID', $filters['user_pid']);
+        }
+
         $perPage = min(100, max(1, (int) ($filters['per_page'] ?? 25)));
         $page = max(1, (int) ($filters['page'] ?? 1));
-        $rows = $query->orderByDesc('m.EVT_GMT_DT')->orderBy('m.MAILITM_PID')
+        $rows = $query->orderBy('u.USER_DOMAIN')->orderBy('u.USER_FID')->orderBy('u.USER_PID')
             ->offset(($page - 1) * $perPage)->limit($perPage + 1)
-            ->get(['m.MAILITM_PID', 'm.MAILITM_FID', 'm.MAILITM_LOCAL_ID', 'm.MAILITM_WEIGHT', 'm.ORIG_COUNTRY_CD', 'm.DEST_COUNTRY_CD', 'm.STATE_IND_CD', 'm.EVT_TYPE_CD', 'm.EVT_GMT_DT', 'm.EVT_OFFICE_CD', 'e.EVENT_TYPE_NM', 'o.OFFICE_NM']);
+            ->get([
+                'u.USER_PID', 'u.USER_FID', 'u.USER_NM', 'u.USER_DOMAIN', 'u.USER_TYPE',
+                'u.OWN_OFFICE_CD', 'o.OFFICE_NM', 'o.OFFICE_FCD', 'u.VALID_IND', 'u.IPSWEB',
+                'u.RESTRICT_USER_OFFICES', 'u.E_MAIL_ADDRESS',
+            ]);
 
         return [
-            'data' => $rows->take($perPage)->map(fn ($row) => $this->present($row))->values()->all(),
-            'meta' => ['page' => $page, 'per_page' => $perPage, 'has_more' => $rows->count() > $perPage, 'status' => $filters['status'] ?? 'all'],
+            'data' => $rows->take($perPage)->map(fn ($row) => $this->presentUser($row))->values()->all(),
+            'meta' => ['page' => $page, 'per_page' => $perPage, 'has_more' => $rows->count() > $perPage],
+        ];
+    }
+
+    public function user(int $pid): array
+    {
+        $result = $this->users(['user_pid' => $pid, 'per_page' => 1]);
+        $user = $result['data'][0] ?? null;
+        if (! $user) {
+            throw new IpsOperationException('Usuario IPS no encontrado o inactivo.', 404);
+        }
+
+        return $user;
+    }
+
+    public function createUser(array $data): array
+    {
+        if (! config('ips.user_provisioning_enabled')) {
+            throw new IpsOperationException('Alta de usuarios IPS deshabilitada en la configuración.', 503);
+        }
+
+        $userFid = trim((string) $data['user_fid']);
+        $userName = trim((string) $data['user_name']);
+        $domain = strtoupper(trim((string) ($data['user_domain'] ?? 'AGBC')));
+        $email = isset($data['email']) ? trim((string) $data['email']) : null;
+        $officeCd = isset($data['office_cd']) && $data['office_cd'] !== '' ? (int) $data['office_cd'] : null;
+
+        if ($userFid === '' || $userName === '' || $domain === '') {
+            throw new IpsOperationException('Usuario, nombre y dominio IPS son obligatorios.', 422);
+        }
+        if ($officeCd !== null && ! $this->reference('N_OWN_OFFICES', 'OWN_OFFICE_CD', $officeCd)) {
+            throw new IpsOperationException('Oficina IPS no existe o no está activa.', 422);
+        }
+
+        $db = $this->connection();
+
+        $pid = $db->transaction(function () use ($db, $userFid, $userName, $domain, $email, $officeCd): int {
+            $exists = $db->table('dbo.L_USERS')
+                ->whereRaw('LOWER(USER_FID) = ?', [mb_strtolower($userFid)])
+                ->whereRaw('RTRIM(USER_DOMAIN) = ?', [$domain])
+                ->whereIn('VALID_IND', ['1', '3'])
+                ->exists();
+
+            if ($exists) {
+                throw new IpsOperationException('Ya existe un usuario IPS activo con ese dominio e identificador.', 409);
+            }
+
+            $next = $db->selectOne('SELECT ISNULL(MAX(USER_PID), 0) + 1 AS next_pid FROM dbo.L_USERS WITH (UPDLOCK, HOLDLOCK)');
+            $nextPid = (int) $next->next_pid;
+            if ($nextPid > 32767) {
+                throw new IpsOperationException('No hay rango disponible para USER_PID smallint.', 503);
+            }
+
+            $db->table('dbo.L_USERS')->insert([
+                'USER_PID' => $nextPid,
+                'USER_FID' => $userFid,
+                'USER_NM' => $userName,
+                'USER_DOMAIN' => $domain,
+                'USER_TYPE' => '1',
+                'USER_PASSWORD' => null,
+                'USER_ACCREDITATION' => null,
+                'OWN_OFFICE_CD' => $officeCd,
+                'VALID_IND' => '3',
+                'IPSWEB' => 'N',
+                'E_MAIL_ADDRESS' => $email !== '' ? $email : null,
+                'RESTRICT_USER_OFFICES' => 0,
+                'PASSWORD_SALT' => null,
+            ]);
+
+            return $nextPid;
+        });
+
+        return $this->user($pid);
+    }
+
+    private function presentUser(object $row): array
+    {
+        return [
+            'user_pid' => (int) $row->USER_PID,
+            'user_fid' => trim((string) $row->USER_FID),
+            'user_name' => trim((string) $row->USER_NM),
+            'user_domain' => trim((string) $row->USER_DOMAIN),
+            'user_type' => trim((string) $row->USER_TYPE),
+            'office_cd' => isset($row->OWN_OFFICE_CD) ? (int) $row->OWN_OFFICE_CD : null,
+            'office_fcd' => trim((string) ($row->OFFICE_FCD ?? '')),
+            'office_name' => trim((string) ($row->OFFICE_NM ?? '')),
+            'valid_ind' => trim((string) $row->VALID_IND),
+            'ipsweb' => trim((string) $row->IPSWEB) === 'Y',
+            'restrict_user_offices' => (bool) $row->RESTRICT_USER_OFFICES,
+            'email' => trim((string) ($row->E_MAIL_ADDRESS ?? '')),
         ];
     }
 
@@ -100,6 +275,8 @@ class IpsRepository
             throw new IpsOperationException('Paquete no encontrado en IPS.', 404);
         }
 
+        $this->enrich(collect([$item]));
+
         return [
             'package' => $this->present($item),
             'events' => $this->connection()->table('dbo.L_MAILITM_EVENTS as e')
@@ -109,9 +286,63 @@ class IpsRepository
         ];
     }
 
+    public function enrich($rows): void
+    {
+        if ($rows->isEmpty()) {
+            return;
+        }
+        $ids = $rows->pluck('MAILITM_PID')->all();
+        $customers = $this->connection()->table('dbo.L_MAILITM_CUSTOMERS')
+            ->whereIn('MAILITM_PID', $ids)->where('SENDER_PAYEE_IND', 'A')->get()->keyBy('MAILITM_PID');
+        $events = $this->connection()->table('dbo.L_MAILITM_EVENTS')
+            ->whereIn('MAILITM_PID', $ids)->orderByDesc('EVENT_GMT_DT')->orderByDesc('EVENT_TYPE_CD')->get()->groupBy('MAILITM_PID');
+        $offices = $this->connection()->table('dbo.N_OWN_OFFICES')->get()->keyBy('OWN_OFFICE_CD');
+        foreach ($rows as $row) {
+            $customer = $customers->get($row->MAILITM_PID);
+            $row->RECIPIENT_NAME = $customer ? trim(($customer->CUSTOMER_FORENAME ?? '').' '.($customer->CUSTOMER_NAME ?? '')) : null;
+            $row->RECIPIENT_PHONE = $customer?->CUSTOMER_PHONE_NO;
+            $row->RECIPIENT_CITY = $customer?->CUSTOMER_CITY;
+            $row->RECIPIENT_ADDRESS = $customer?->CUSTOMER_ADDRESS;
+            $history = $events->get($row->MAILITM_PID, collect());
+            $op = $history->first(fn ($e) => ! in_array((int) $e->EVENT_TYPE_CD, IpsStagePolicy::TECHNICAL_EVENTS, true));
+            $row->OP_EVENT_CD = $op?->EVENT_TYPE_CD ?? $row->EVT_TYPE_CD;
+            $row->OP_OFFICE_CD = $op?->EVENT_OFFICE_CD ?? $row->EVT_OFFICE_CD;
+            $row->NEXT_OFFICE_CD = $op?->NEXT_OFFICE_CD;
+            $row->OFFICE_NM = $offices->get($row->OP_OFFICE_CD)?->OFFICE_NM;
+            $row->NEXT_OFFICE_NM = $offices->get($row->NEXT_OFFICE_CD)?->OFFICE_NM;
+            $row->TERMINAL = $history->contains(fn ($e) => in_array((int) $e->EVENT_TYPE_CD, [37, 76], true));
+        }
+    }
+
+    public function presentForOffice(object $item, ?int $office): array
+    {
+        $package = $this->present($item);
+        $package['allowed_actions'] = $office ? app(IpsStagePolicy::class)->actions($package, $office) : [];
+
+        return $package;
+    }
+
     public function present(object $item): array
     {
+        $stage = app(IpsStagePolicy::class)->describe((int) ($item->OP_EVENT_CD ?? $item->EVT_TYPE_CD), isset($item->STATE_IND_CD) ? (int) $item->STATE_IND_CD : null, (bool) ($item->TERMINAL ?? false));
+        if (in_array((int) ($item->POSTAL_STATUS_CD ?? 0), [22, 23], true)) {
+            $stage = ['key' => 'returned', 'label' => 'Devuelto al remitente', 'tone' => 'secondary'];
+        } elseif (in_array((int) ($item->POSTAL_STATUS_CD ?? 0), [6, 7], true)) {
+            $stage = ['key' => 'returning', 'label' => 'Devolución en curso', 'tone' => 'warning'];
+        }
+
         return [
+            'stage' => $stage,
+            'operational_event_cd' => (int) ($item->OP_EVENT_CD ?? $item->EVT_TYPE_CD),
+            'operational_office_cd' => (int) ($item->OP_OFFICE_CD ?? $item->EVT_OFFICE_CD),
+            'next_office_cd' => isset($item->NEXT_OFFICE_CD) ? (int) $item->NEXT_OFFICE_CD : null,
+            'next_office_name' => trim($item->NEXT_OFFICE_NM ?? ''),
+            'terminal' => (bool) ($item->TERMINAL ?? false),
+            'address' => trim($item->RECIPIENT_ADDRESS ?? ''),
+            'mail_class' => trim($item->MAIL_CLASS_CD ?? ''),
+            'product_type' => trim($item->PRODUCT_TYPE_CD ?? ''),
+            'dutiable_ind' => $item->DUTIABLE_IND ?? null,
+            'postal_status_cd' => isset($item->POSTAL_STATUS_CD) ? (int) $item->POSTAL_STATUS_CD : null,
             'id' => $item->MAILITM_PID,
             'codigo' => trim($item->MAILITM_FID),
             'local_id' => trim($item->MAILITM_LOCAL_ID ?? ''),
@@ -123,6 +354,9 @@ class IpsRepository
             'event_at' => Carbon::parse($item->EVT_GMT_DT, 'UTC')->format('Y-m-d\TH:i:s.vP'),
             'office_cd' => isset($item->EVT_OFFICE_CD) ? (int) $item->EVT_OFFICE_CD : null,
             'office_name' => trim($item->OFFICE_NM ?? ''),
+            'recipient' => trim((string) ($item->RECIPIENT_NAME ?? '')),
+            'phone' => trim((string) ($item->RECIPIENT_PHONE ?? '')),
+            'city' => trim((string) ($item->RECIPIENT_CITY ?? '')),
             'event_name' => trim($item->EVENT_TYPE_NM ?? ''),
         ];
     }
@@ -183,6 +417,12 @@ class IpsRepository
         return $this->connection()->table('dbo.C_EVENT_TYPES')->where('EVENT_TYPE_CD', $id)->whereIn('VALID_IND', ['1', '3'])->where('MAILUNIT_TYPE_CD', 'MI')->first();
     }
 
+    public function ownOffice(int $id): ?object
+    {
+        return $this->connection()->table('dbo.N_OWN_OFFICES')
+            ->where('OWN_OFFICE_CD', $id)->whereIn('VALID_IND', ['1', '3'])->first();
+    }
+
     public function callProcedure(string $procedure, array $parameters): void
     {
         $expected = config('ips-procedures.'.$procedure);
@@ -217,9 +457,13 @@ class IpsRepository
         if (! $exists || ! $row || (int) $row->EVT_TYPE_CD !== $event || Carbon::parse($row->EVT_GMT_DT, 'UTC')->toDateTimeString() !== $date) {
             throw new IpsOperationException('IPS no confirmó el evento y su estado actual. Operación revertida.', 502);
         }
-        if ($event === 37 && ((int) $row->STATE_IND_CD !== 5 || ! $db->table('dbo.L_MAILITM_DELIV_INFOS')
+        if ($event === 37 && (int) $row->STATE_IND_CD !== 5) {
+            throw new IpsOperationException('IPS no confirmó la entrega y el receptor. Operación revertida.', 502);
+        }
+        $delivery = $db->table('dbo.L_MAILITM_DELIV_INFOS')
             ->where('MAILITM_PID', $pid)->where('EVENT_TYPE_CD', 37)->where('EVENT_GMT_DT', $date)
-            ->where('SIGNATORY_NM', $signatory)->exists())) {
+            ->when($signatory !== null && $signatory !== '', fn ($q) => $q->where('SIGNATORY_NM', $signatory));
+        if ($event === 37 && ! $delivery->exists()) {
             throw new IpsOperationException('IPS no confirmó la entrega y el receptor. Operación revertida.', 502);
         }
     }

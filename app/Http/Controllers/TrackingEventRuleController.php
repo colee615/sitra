@@ -27,6 +27,10 @@ class TrackingEventRuleController extends Controller
                     ->where('raw_name', 'like', "%{$search}%")
                     ->orWhere('display_name', 'like', "%{$search}%")
                     ->orWhere('source_db', 'like', "%{$search}%");
+
+                if (ctype_digit($search)) {
+                    $builder->orWhere('event_type_cd', (int) $search);
+                }
             });
         }
 

@@ -688,7 +688,7 @@
       },
       "Event": {
         "type": "object",
-        "description": "EMH requiere non_delivery_reason y non_delivery_measure. EMI requiere signatory y permiso ips.deliver.",
+        "description": "EMH requiere non_delivery_reason y non_delivery_measure. EMI requiere permiso ips.deliver; occurred_at, office_cd, expected_event_*, signatory y delivery_location son opcionales para EMI y SITRA puede autocompletarlos desde IPS.",
         "required": [
           "event",
           "occurred_at",
@@ -716,7 +716,7 @@
           },
           "office_cd": {
             "type": "integer",
-            "minimum": 1,
+            "minimum": 0,
             "maximum": 32767
           },
           "expected_event_cd": {
@@ -730,7 +730,7 @@
           "signatory": {
             "type": "string",
             "maxLength": 64,
-            "description": "Obligatorio para EMI."
+            "description": "Recomendado para EMI; IPS Web Client permite omitirlo."
           },
           "delivery_location": {
             "type": "string",
@@ -751,22 +751,15 @@
       },
       "Delivery": {
         "type": "object",
-        "required": [
-          "occurred_at",
-          "office_cd",
-          "expected_event_cd",
-          "expected_event_at",
-          "signatory"
-        ],
         "properties": {
           "occurred_at": {
             "type": "string",
             "format": "date-time",
-            "description": "Fecha real con segundos y zona explícita, no futura."
+            "description": "Opcional para EMI. Si se omite, SITRA usa la hora actual con zona."
           },
           "office_cd": {
             "type": "integer",
-            "minimum": 1,
+            "minimum": 0,
             "maximum": 32767
           },
           "expected_event_cd": {
@@ -775,12 +768,12 @@
           "expected_event_at": {
             "type": "string",
             "format": "date-time",
-            "description": "Copiar event_at de la consulta previa, incluida zona."
+            "description": "Opcional para EMI. Si se omite, SITRA usa el estado actual del paquete leido de IPS."
           },
           "signatory": {
             "type": "string",
             "maxLength": 64,
-            "description": "Obligatorio para EMI."
+            "description": "Recomendado para auditoria; IPS Web Client permite omitirlo."
           },
           "delivery_location": {
             "type": "string",

@@ -6,6 +6,7 @@ use App\Exceptions\IpsOperationException;
 use App\Services\IpsRepository;
 use App\Services\IpsWorkflowService;
 use Illuminate\Database\Connection;
+use Illuminate\Support\Carbon;
 use Mockery;
 use Tests\TestCase;
 
@@ -20,6 +21,9 @@ class IpsWorkflowTest extends TestCase
         $repo->shouldReceive('assertReady')->once();
         $repo->shouldReceive('lockCode')->once()->with('TEST01');
         $repo->shouldReceive('find')->once()->with('TEST01', true)->andReturn($item);
+        if ($item && $code === 'EMI') {
+            $repo->shouldReceive('ownOffice')->once()->with((int) $item->EVT_OFFICE_CD)->andReturn((object) ['OFFICE_NM' => 'LA PAZ LC/AO']);
+        }
         $definition = config('ips.events.'.$code);
         $repo->shouldReceive('event')->once()->with($definition['id'])->andReturn((object) [
             'EVENT_TYPE_CD' => $definition['id'], 'INB_OTB_IND' => $definition['direction'],
@@ -28,6 +32,8 @@ class IpsWorkflowTest extends TestCase
         $repo->shouldReceive('reference')->andReturn(true);
         $repo->shouldReceive('eventExists')->andReturn($terminal);
         $repo->shouldReceive('compatible')->andReturn($compatible);
+        $repo->shouldReceive('enrich')->andReturnNull();
+        $repo->shouldReceive('present')->andReturnUsing(fn ($row) => (new IpsRepository)->present($row));
 
         return $repo;
     }
@@ -57,12 +63,28 @@ class IpsWorkflowTest extends TestCase
         $repo = $this->repository($this->item());
         $repo->shouldReceive('callProcedure')->once()->with('SP_SET_MAILITM', Mockery::on(fn ($p) => $p['EventType'] === 37 && $p['EventGmtDt'] === '2026-01-02 16:00:00' &&
             $p['EventLocalOffset'] == -4 && $p['Signatory'] === 'Receptor' &&
-            $p['Weight'] === '1.250' && $p['DelivInfoValid'] === '1'
+            $p['Weight'] === '1.250' && $p['DelivInfoValid'] === '1' && (int) $p['StateInd'] === 5
         ));
         $repo->shouldReceive('verifyWrite')->once()->with('11111111-1111-4111-8111-111111111111', 37, '2026-01-02 16:00:00', 'Receptor');
         $result = (new IpsWorkflowService($repo))->execute('event', $this->input());
         $this->assertSame(37, $result['event_cd']);
         $this->assertSame('2026-01-02T16:00:00+00:00', $result['event_at']);
+    }
+
+    public function test_delivery_autofills_ips_web_client_fields_from_current_package(): void
+    {
+        Carbon::setTestNow('2026-01-02 16:00:00');
+        $repo = $this->repository($this->item());
+        $repo->shouldReceive('callProcedure')->once()->with('SP_SET_MAILITM', Mockery::on(fn ($p) => $p['EventType'] === 37 &&
+            $p['Office'] === 1 && $p['EventGmtDt'] === '2026-01-02 16:00:00' &&
+            $p['DelivLocation'] === 'LA PAZ LC/AO' && $p['Signatory'] === null
+        ));
+        $repo->shouldReceive('verifyWrite')->once()->with('11111111-1111-4111-8111-111111111111', 37, '2026-01-02 16:00:00', null);
+
+        $result = (new IpsWorkflowService($repo))->execute('event', ['codigo' => 'TEST01', 'event' => 'EMI']);
+
+        $this->assertSame(1, $result['office_cd']);
+        Carbon::setTestNow();
     }
 
     public function test_existing_delivery_blocks_another_delivery(): void
@@ -93,7 +115,7 @@ class IpsWorkflowTest extends TestCase
     {
         $repo = $this->repository($this->item(['EVT_TYPE_CD' => 31]));
         $repo->shouldNotReceive('callProcedure');
-        $this->expectExceptionMessage('etapa habilitada');
+        $this->expectExceptionMessage('no está habilitada');
         (new IpsWorkflowService($repo))->execute('event', $this->input(['expected_event_cd' => 31]));
     }
 
@@ -137,5 +159,32 @@ class IpsWorkflowTest extends TestCase
             'weight_kg' => 1.25, 'sender' => $customer, 'recipient' => $customer,
         ]));
         $this->assertSame(1, $result['event_cd']);
+    }
+
+    public function test_receipt_requires_physical_confirmation_and_uses_linked_actor(): void
+    {
+        $repo = $this->repository($this->item(['EVT_TYPE_CD'=>30]), 'EMG');
+        $repo->shouldReceive('user')->with(73)->andReturn(['office_cd'=>1]);
+        $repo->shouldReceive('callProcedure')->once()->with('SP_SET_MAILITM', Mockery::on(fn ($p) => $p['EventType'] === 32 && $p['User'] === 73 && $p['Office'] === 1 && $p['Signatory'] === null));
+        $repo->shouldReceive('verifyWrite')->once();
+        $result = (new IpsWorkflowService($repo))->execute('event', $this->input(['event'=>'EMG','expected_event_cd'=>30,'actor_user_pid'=>73,'physical_receipt_confirmed'=>true]));
+        $this->assertSame(73, $result['actor_user_pid']);
+    }
+
+    public function test_receipt_without_confirmation_never_writes(): void
+    {
+        $repo = $this->repository($this->item(['EVT_TYPE_CD'=>30]), 'EMG');
+        $repo->shouldNotReceive('callProcedure');
+        $this->expectExceptionMessage('físicamente');
+        (new IpsWorkflowService($repo))->execute('event', $this->input(['event'=>'EMG','expected_event_cd'=>30]));
+    }
+
+    public function test_wrong_linked_actor_office_never_writes(): void
+    {
+        $repo = $this->repository($this->item());
+        $repo->shouldReceive('user')->with(73)->andReturn(['office_cd'=>2]);
+        $repo->shouldNotReceive('callProcedure');
+        $this->expectExceptionMessage('usuario IPS vinculado');
+        (new IpsWorkflowService($repo))->execute('event', $this->input(['actor_user_pid'=>73]));
     }
 }
