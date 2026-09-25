@@ -23,6 +23,12 @@ class AppServiceProvider extends ServiceProvider
     {
         Paginator::useBootstrapFive();
 
+        // Administrators can consult postal data. Operators need an explicit
+        // read permission; write/delivery abilities remain separately controlled.
+        Gate::define('postal.ips', fn ($user) => $user->hasRole('admin') || $user->checkPermissionTo('ips.read', 'web'));
+        Gate::define('postal.cds', fn ($user) => $user->hasRole('admin') || $user->checkPermissionTo('cds.read', 'web'));
+        Gate::define('postal.access', fn ($user) => $user->can('postal.ips') || $user->can('postal.cds'));
+
         foreach (['ips.read', 'ips.create', 'ips.events', 'ips.deliver', 'ips.operations'] as $ability) {
             Gate::define($ability, function ($user) use ($ability) {
                 return $user->checkPermissionTo($ability, 'web');

@@ -1,12 +1,15 @@
 @extends('adminlte::page')
 @section('title', 'Paquetes y entregas')
 @section('content_header')
-    <h1>Paquetes y entregas</h1>
+    <div class="postal-heading"><div><span class="postal-eyebrow">OPERACIONES · IPS</span><h1>Paquetes y entregas</h1><p>Encuentra el paquete, verifica su último movimiento y registra la operación.</p></div><a class="btn btn-outline-primary" href="{{ route('consultas.index') }}"><i class="fas fa-search"></i> Consultar expediente</a></div>
 @stop
 @section('content')
     @if($error)<div class="alert alert-danger" role="alert">{{ $error }}</div>@endif
     @if($errors->any())
         <div class="alert alert-danger" role="alert"><ul class="mb-0">@foreach($errors->all() as $message)<li>{{ $message }}</li>@endforeach</ul></div>
+    @endif
+    @if(config('ips.writes_enabled') && config('ips.connection') !== config('postal.ips_read_connection'))
+        <div class="alert alert-warning"><i class="fas fa-database"></i> Esta bandeja registra movimientos en la conexi?n de pruebas IPS. Los expedientes consultados muestran el cat?logo postal de solo lectura.</div>
     @endif
     @if(session('operation_result'))
         @php($operation = session('operation_result'))
@@ -35,7 +38,7 @@
     <div class="card"><div class="card-header">Paquetes</div><div class="table-responsive">
         <table class="table table-striped mb-0"><thead><tr><th>Código</th><th>Último evento</th><th>Oficina</th><th>Fecha UTC</th><th></th></tr></thead><tbody>
         @forelse($result['data'] as $item)
-            <tr><td>{{ $item['codigo'] }}</td><td>{{ $item['event_name'] }} ({{ $item['event_cd'] }})</td><td>{{ $item['office_name'] }}</td><td>{{ $item['event_at'] }}</td>
+            <tr><td><a href="{{ route('consultas.index', ['codigo'=>$item['codigo']]) }}"><i class="fas fa-box"></i> {{ $item['codigo'] }}</a></td><td>{{ $item['event_name'] }} ({{ $item['event_cd'] }})</td><td>{{ $item['office_name'] }}</td><td>{{ $item['event_at'] }}</td>
                 <td><a href="{{ route('operaciones.index', ['q' => $item['codigo'], 'status' => 'all']) }}">Abrir</a></td></tr>
         @empty<tr><td colspan="5">No hay paquetes para estos filtros.</td></tr>@endforelse
         </tbody></table>

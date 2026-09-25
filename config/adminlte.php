@@ -14,7 +14,7 @@ return [
     |
     */
 
-    'title' => 'adminagbc',
+    'title' => 'SITRA · Correos de Bolivia',
     'title_prefix' => '',
     'title_postfix' => '| AGBC',
 
@@ -63,7 +63,7 @@ return [
     |
     */
 
-    'logo' => '<b>admin</b>AGBC',
+    'logo' => '<b>SITRA</b> Postal',
     'logo_img' => 'images/AGBClogo.png',
     'logo_img_class' => 'brand-image img-circle',
     'logo_img_xl' => null,
@@ -110,7 +110,7 @@ return [
     */
 
     'preloader' => [
-        'enabled' => true,
+        'enabled' => false,
         'mode' => 'fullscreen',
         'img' => [
             'path' => 'images/AGBClogo.png',
@@ -215,7 +215,7 @@ return [
     */
 
     'sidebar_mini' => 'lg',
-    'sidebar_collapse' => true,
+    'sidebar_collapse' => false,
     'sidebar_collapse_auto_size' => false,
     'sidebar_collapse_remember' => false,
     'sidebar_collapse_remember_no_transition' => true,
@@ -297,7 +297,7 @@ return [
         // Navbar items:
         [
             'type' => 'navbar-search',
-            'text' => 'search',
+            'text' => 'Buscar',
             'topnav_right' => true,
         ],
         [
@@ -308,83 +308,55 @@ return [
         // Sidebar items:
         [
             'type' => 'sidebar-menu-search',
-            'text' => 'search',
+            'text' => 'Buscar sección',
         ],
-        ['header' => 'SISTEMA DE INFORMACIÓN'],
+        ['header' => 'SITRA POSTAL'],
         [
-            'text' => 'Centro de Consultas',
+            'text' => 'Inicio',
             'url' => '/dashboard',
             'icon' => 'fas fa-compass',
         ],
         [
-            'text' => 'IPS',
-            'icon' => 'fas fa-globe-americas',
-            'can' => 'ips.read',
+            'text' => 'Consultas postales',
+            'icon' => 'fas fa-search',
+            'can' => 'postal.access',
             'submenu' => [
-                [
-                    'text' => 'Paquetes y entregas',
-                    'url' => '/operaciones',
-                    'icon' => 'fas fa-box',
-                    'can' => 'ips.read',
-                ],
-                [
-                    'text' => 'Consulta IPS',
-                    'url' => '/consultas',
-                    'icon' => 'fas fa-search',
-                    'can' => 'ips.read',
-                ],
-                [
-                    'text' => 'Detalle IPS',
-                    'url' => '/sqlserver/datos',
-                    'icon' => 'fas fa-database',
-                    'can' => 'ips.read',
-                ],
-                [
-                    'text' => 'Eventos API',
-                    'url' => '/tracking-event-rules',
-                    'icon' => 'fas fa-stream',
-                    'can' => 'admin-only',
-                ],
+                ['text'=>'Paquetes IPS','url'=>'/ips','icon'=>'fas fa-globe-americas','can'=>'postal.ips'],
+                ['text'=>'Declaraciones CDS','url'=>'/cds','icon'=>'fas fa-clipboard-list','can'=>'postal.cds'],
+                ['text'=>'Expediente IPS + CDS','url'=>'/conjunto','icon'=>'fas fa-project-diagram','can'=>'postal.access'],
             ],
         ],
         [
-            'text' => 'Gestion Usuarios',
-            'icon' => 'fas fa-users',
-            // 'can'  => 'users.index',
+            'text' => 'Operación en oficina',
+            'icon' => 'fas fa-boxes',
+            'can' => 'postal.ips',
             'submenu' => [
-                [
-                    'text' => 'Personal AGBC',
-                    'url' => 'users',
-                    'icon' => 'fas fa-user',
-                ],
-                [
-                    'text' => 'Roles',
-                    'url' => 'roles',
-                    'icon' => 'fas fa-users-cog',
-                ],
-                [
-                    'text' => 'Permisos',
-                    'url' => 'permissions',
-                    'icon' => 'fas fa-key',
-                ],
-                [
-                    'text' => 'Accesos',
-                    'url' => 'role-has-permissions',
-                    'icon' => 'fas fa-key',
-                ],
+                ['text'=>'Actividad por oficina','url'=>'/operaciones-postales','icon'=>'fas fa-clipboard-check','can'=>'postal.ips'],
+                ['text'=>'Marbetes y sacas','url'=>'/marbetes','icon'=>'fas fa-barcode','can'=>'postal.ips'],
+                ['text'=>'Movimientos y entregas','url'=>'/operaciones','icon'=>'fas fa-truck','can'=>'ips.read'],
+                ['text'=>'Datos técnicos de IPS','url'=>'/sqlserver/datos','icon'=>'fas fa-database','can'=>'ips.read'],
             ],
         ],
         [
-            'text' => 'Rendimiento',
-            'url' => '/pulse',
-
-            'icon' => 'fas fa-user',
+            'text' => 'Configuración y accesos',
+            'icon' => 'fas fa-sliders-h',
+            'can' => 'admin-only',
+            'submenu' => [
+                ['text'=>'Reglas de eventos','url'=>'/tracking-event-rules','icon'=>'fas fa-stream'],
+                ['text'=>'Personal AGBC','url'=>'/users','icon'=>'fas fa-user'],
+                ['text'=>'Roles','url'=>'/roles','icon'=>'fas fa-users-cog'],
+                ['text'=>'Permisos','url'=>'/permissions','icon'=>'fas fa-key'],
+                ['text'=>'Accesos postales','url'=>'/accesos','icon'=>'fas fa-user-shield'],
+            ],
         ],
         [
-            'text' => 'Logs',
-            'url' => '/log-viewer',
-
-            'icon' => 'fas fa-user',
+            'text' => 'Supervisión del sistema',
+            'icon' => 'fas fa-chart-line',
+            'can' => 'admin-only',
+            'submenu' => [
+                ['text'=>'Rendimiento','url'=>'/pulse','icon'=>'fas fa-chart-line'],
+                ['text'=>'Registro técnico','url'=>'/log-viewer','icon'=>'fas fa-terminal'],
+            ],
         ],
     ],
 
@@ -430,6 +402,16 @@ return [
                     'type' => 'css',
                     'asset' => true,
                     'location' => 'css/sitra-admin.css',
+                ],
+                [
+                    'type' => 'css',
+                    'asset' => true,
+                    'location' => 'css/postal-workspace.css',
+                ],
+                [
+                    'type' => 'css',
+                    'asset' => true,
+                    'location' => 'css/postal-accessibility.css',
                 ],
             ],
         ],

@@ -1,0 +1,23 @@
+.postal-hero h2,
+.postal-overview h2 { color: #fff; }
+.postal-task input[type="checkbox"] { width: 18px; height: 18px; accent-color: #174977; vertical-align: middle; margin-right: 8px; }
+.postal-task:has(input:checked) { border-color: #174977; background: #f4f8fd; }
+.postal-declaration h4 { font-size: 14px; }
+.postal-panel .table td small { overflow-wrap: anywhere; }
+.postal-section-nav a[aria-current="page"] { background: #174977; border-color: #174977; color: #fff; }
+.postal-bag-total { display: flex; align-items: center; gap: 14px; padding: 14px 20px; border: 1px solid #ffffff45; border-radius: 14px; background: #ffffff15; }
+.postal-bag-total strong { font-size: 36px; line-height: 1; color: #fff; }
+.postal-bag-total span { font-size: 13px; line-height: 1.3; color: #e3f2f5; }
+.postal-bag-actions { margin: -4px 0 18px; flex-wrap: wrap; }
+.postal-empty-compact { padding: 20px; }
+.receptacle-label header { margin-bottom: 20px; }
+.receptacle-label h1 { text-align: center; font-size: clamp(19px,4vw,32px); }
+.receptacle-label .barcode { display: flex; justify-content: center; min-height: 75px; }
+.receptacle-label-stats { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin: 25px 0; }
+.receptacle-label-stats>div { border: 1px solid #ccd7e2; border-radius: 6px; padding: 12px; min-width: 0; }
+.receptacle-label-stats span,.receptacle-label-stats strong { display: block; overflow-wrap: anywhere; }
+.receptacle-label-stats span { font-size: 10px; color: #62758a; margin-bottom: 7px; }
+.receptacle-label-stats strong { font-size: 13px; }
+.postal-current { background: #eef6fb; border-left: 4px solid #2973a3; padding: 16px; margin-bottom: 20px; border-radius: 0 10px 10px 0; }
+.postal-current strong { display: block; margin-top: 6px; }
+@media print { .main-sidebar, .main-header, .postal-tabs, .postal-search, .postal-actions,.print-toolbar { display: none !important; } .content-wrapper { margin: 0 !important; } .receptacle-label { max-width: 110mm; margin: 0 auto; padding: 5mm; } }

@@ -1,7 +1,7 @@
 :root {
-  --sitra-accent: #0ea5c6;
-  --sitra-accent-dark: #0b88a4;
-  --sitra-sidebar: #0f172a;
+  --sitra-accent: #174977;
+  --sitra-accent-dark: #12395e;
+  --sitra-sidebar: #153650;
   --sitra-sidebar-soft: #1e293b;
   --sitra-bg: #f3f6fb;
   --sitra-text: #0f172a;
@@ -54,6 +54,40 @@ body {
   background: #0f3b53 !important;
   color: #e6f8ff !important;
   box-shadow: inset 3px 0 0 0 var(--sitra-accent);
+}
+
+.main-sidebar .nav-sidebar > .nav-header {
+  padding: 18px 20px 7px;
+  color: #9fb5ca !important;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.main-sidebar .nav-sidebar .nav-treeview {
+  margin: 2px 12px 8px 22px;
+  padding: 2px 0 3px 8px;
+  border-left: 1px solid rgba(203, 213, 225, 0.2);
+}
+
+.main-sidebar .nav-sidebar .nav-treeview > .nav-item > .nav-link {
+  margin: 2px 0;
+  padding: 8px 9px;
+  border-radius: 8px;
+  color: #c4d2e3 !important;
+  font-size: 0.91rem;
+  line-height: 1.3;
+}
+
+.main-sidebar .nav-sidebar .nav-treeview > .nav-item > .nav-link .nav-icon {
+  width: 1.4rem;
+  font-size: 0.85rem;
+}
+
+.main-sidebar .nav-sidebar .nav-treeview > .nav-item > .nav-link:hover,
+.main-sidebar .nav-sidebar .nav-treeview > .nav-item > .nav-link.active {
+  background: rgba(14, 165, 198, 0.18) !important;
+  color: #fff !important;
 }
 
 .content-header h1,
@@ -477,6 +511,168 @@ h1,h2,h3,h4,h5 {
 .empty-state p {
   margin: 0;
   color: var(--sitra-muted);
+}
+
+/* Shared page frame: consistent gutters and readable widths across modules. */
+body {
+  font-family: "Source Sans Pro", "Segoe UI", sans-serif;
+  line-height: 1.5;
+}
+
+body .content-wrapper {
+  min-height: calc(100vh - 56px);
+}
+
+body .content-wrapper > .content-header {
+  padding: 1.15rem 0 0.45rem !important;
+}
+
+body .content-header > .container-fluid,
+body .content-wrapper > .content > .container-fluid {
+  width: 100%;
+  max-width: 1560px;
+  margin-inline: auto;
+  padding-right: clamp(16px, 2.1vw, 32px) !important;
+  padding-left: clamp(16px, 2.1vw, 32px) !important;
+}
+
+body .content-wrapper > .content {
+  padding: 0 0 2rem !important;
+}
+
+body .content-header h1 {
+  margin: 0 0 0.35rem;
+  color: var(--sitra-text);
+  font-size: clamp(1.45rem, 1.8vw, 1.9rem);
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+body .content-header p {
+  max-width: 78ch;
+  margin: 0;
+  color: var(--sitra-muted);
+  line-height: 1.55;
+}
+
+.content .container-fluid > .row + .row {
+  margin-top: 0.5rem;
+}
+
+.card {
+  margin-bottom: 1rem;
+  border-radius: 14px !important;
+  box-shadow: 0 5px 18px rgba(15, 23, 42, 0.045) !important;
+}
+
+.card-header,
+.card-footer {
+  padding: 0.9rem 1.15rem;
+}
+
+.card-body {
+  padding: clamp(1rem, 1.5vw, 1.5rem);
+}
+
+.card-header .card-title {
+  margin: 0;
+  line-height: 1.35;
+}
+
+.form-group,
+fieldset {
+  margin-bottom: 1rem;
+}
+
+.form-group label,
+fieldset legend {
+  color: #33475b;
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.form-control,
+.custom-select,
+select.form-control {
+  min-height: 40px;
+  color: var(--sitra-text);
+}
+
+textarea.form-control {
+  min-height: 96px;
+}
+
+.btn:not(.btn-sm):not(.btn-xs) {
+  min-height: 38px;
+  padding: 0.48rem 0.85rem;
+}
+
+.btn.btn-sm,
+.btn.btn-xs {
+  min-height: 31px;
+  padding: 0.28rem 0.62rem;
+}
+
+.alert {
+  border-radius: 12px;
+  line-height: 1.5;
+}
+
+.table-responsive {
+  border-radius: 0 0 12px 12px;
+}
+
+.table th,
+.table td {
+  vertical-align: middle;
+  line-height: 1.45;
+}
+
+.table thead th {
+  padding-top: 0.8rem;
+  padding-bottom: 0.8rem;
+  white-space: nowrap;
+}
+
+.table tbody td {
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
+.pagination {
+  gap: 0.25rem;
+}
+
+.page-link {
+  border-radius: 8px;
+}
+
+.modal-content {
+  overflow: hidden;
+  border: 1px solid var(--sitra-border);
+  border-radius: 16px;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18);
+}
+
+@media (max-width: 767.98px) {
+  body .content-wrapper > .content-header {
+    padding-top: 1rem !important;
+  }
+
+  body .content-header > .container-fluid,
+  body .content-wrapper > .content > .container-fluid {
+    padding-right: 14px !important;
+    padding-left: 14px !important;
+  }
+
+  .card-header,
+  .card-footer {
+    padding: 0.8rem 0.9rem;
+  }
+
+  .table-responsive {
+    -webkit-overflow-scrolling: touch;
+  }
 }
 
 @media (max-width: 991.98px) {

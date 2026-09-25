@@ -1,21 +1,12 @@
 @extends('adminlte::page')
-@section('title', 'Operaciones postales')
+@section('title', 'Inicio | SITRA')
 @section('content_header')
-    <h1>Operaciones postales</h1>
+    <div class="postal-heading"><div><span class="postal-eyebrow">CENTRO DE TRABAJO</span><h1>Hola, {{ auth()->user()->name }}</h1><p>Consulta, verifica y gestiona cada envío desde un mismo lugar.</p></div></div>
 @stop
 @section('content')
-    <div class="card"><div class="card-body">
-        <h2 class="h4">Seguimiento de paquetes</h2>
-        <p>Consulta movimientos, oficinas, despachos y entregas de IPS.</p>
-        <form method="GET" action="{{ route('consultas.index') }}">
-            <div class="input-group">
-                <input name="codigo" maxlength="35" class="form-control" placeholder="Código postal o identificador local" required aria-label="Código del paquete">
-                <div class="input-group-append"><button class="btn btn-primary">Consultar</button></div>
-            </div>
-        </form>
-    </div></div>
-    @can('ips.read')
-        <a class="btn btn-primary mb-3" href="{{ route('operaciones.index') }}">Gestionar paquetes y entregas</a>
-    @endcan
+    @include('postal.home')
+    @cannot('postal.access')
+        <div class="postal-panel"><h2><i class="fas fa-lock"></i> Tu cuenta está lista</h2><p>Un administrador debe asignarte los permisos de consulta para trabajar con IPS o CDS.</p></div>
+    @endcannot
     @include('footer')
 @stop

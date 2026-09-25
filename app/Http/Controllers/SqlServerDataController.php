@@ -13,6 +13,7 @@ class SqlServerDataController extends Controller
         $codigo = trim((string) $request->query('codigo', ''));
 
         try {
+            $searchService = $searchService->onConnection(config('postal.ips_read_connection', 'sqlsrv'));
             $result = $searchService->search($codigo);
             $result['transitSummary'] = $this->inferTransitSummary(
                 collect($result['trackingRows'] ?? []),

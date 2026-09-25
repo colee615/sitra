@@ -20,11 +20,12 @@ class IpsWebAclTest extends TestCase
         }
     }
 
-    public function test_admin_role_does_not_bypass_ips_permissions(): void
+    public function test_admin_role_grants_read_only_ips_access_but_not_delivery(): void
     {
         $user = User::factory()->create();
         $user->assignRole(Role::findOrCreate('admin', 'web'));
 
+        $this->assertTrue(Gate::forUser($user)->allows('postal.ips'));
         $this->assertFalse(Gate::forUser($user)->allows('ips.read'));
         $this->assertFalse(Gate::forUser($user)->allows('ips.deliver'));
     }
@@ -61,12 +62,39 @@ class IpsWebAclTest extends TestCase
         $this->actingAs($user)->get('/consultas')->assertForbidden();
     }
 
-    public function test_ips_menu_is_hidden_from_admin_without_ips_read(): void
+    public function test_ips_menu_is_hidden_from_non_admin_without_ips_read(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->get('/dashboard')->assertOk()->assertDontSee('fas fa-globe-americas');
+    }
+
+    public function test_admin_can_see_ips_menu_without_operator_permission(): void
     {
         $user = User::factory()->create();
         $user->assignRole(Role::findOrCreate('admin', 'web'));
 
-        $this->actingAs($user)->get('/dashboard')->assertOk()->assertDontSee('fas fa-globe-americas');
+        $this->actingAs($user)->get('/dashboard')->assertOk()->assertSee('fas fa-globe-americas');
+    }
+
+    public function test_admin_navigation_groups_keep_all_postal_and_admin_destinations(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole(Role::findOrCreate('admin', 'web'));
+        $user->givePermissionTo(Permission::findByName('ips.read', 'web'));
+
+        $response = $this->actingAs($user)->get('/dashboard')->assertOk();
+        foreach ([
+            'Consultas postales', 'Paquetes IPS', 'Declaraciones CDS', 'Expediente IPS + CDS',
+            'Operación en oficina', 'Actividad por oficina', 'Marbetes y sacas', 'Movimientos y entregas',
+            'Datos técnicos de IPS', 'Configuración y accesos', 'Reglas de eventos', 'Accesos postales',
+            'Supervisión del sistema', 'Rendimiento', 'Registro técnico',
+        ] as $label) {
+            $response->assertSeeText($label);
+        }
+        foreach (['/ips', '/cds', '/conjunto', '/operaciones-postales', '/marbetes', '/operaciones', '/sqlserver/datos', '/tracking-event-rules', '/accesos', '/pulse', '/log-viewer'] as $path) {
+            $response->assertSee('href="'.url($path).'"', false);
+        }
     }
 
     public function test_ips_menu_is_visible_when_ips_read_is_assigned(): void

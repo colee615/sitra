@@ -97,6 +97,40 @@ return [
             'sslmode' => 'prefer',
         ],
 
+        'ips_catalog' => [
+            'driver' => 'sqlsrv',
+            'host' => env('IPS_CATALOG_SQLSRV_HOST', env('CDS_SQLSRV_HOST', '127.0.0.1')),
+            'port' => env('IPS_CATALOG_SQLSRV_PORT', env('CDS_SQLSRV_PORT', '1433')),
+            'database' => env('IPS_CATALOG_SQLSRV_DATABASE', 'IPS5Db'),
+            'username' => env('IPS_CATALOG_SQLSRV_USERNAME', env('CDS_SQLSRV_USERNAME', '')),
+            'password' => env('IPS_CATALOG_SQLSRV_PASSWORD', env('CDS_SQLSRV_PASSWORD', '')),
+            'charset' => 'utf8',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'encrypt' => env('IPS_CATALOG_SQLSRV_ENCRYPT', env('CDS_SQLSRV_ENCRYPT', 'yes')),
+            'trust_server_certificate' => env('IPS_CATALOG_SQLSRV_TRUST_SERVER_CERTIFICATE', env('CDS_SQLSRV_TRUST_SERVER_CERTIFICATE', 'true')),
+            'login_timeout' => 8,
+            'options' => extension_loaded('pdo_sqlsrv') ? [PDO::SQLSRV_ATTR_QUERY_TIMEOUT => 15] : [],
+        ],
+
+        'cds' => [
+            'driver' => 'sqlsrv',
+            'host' => env('CDS_SQLSRV_HOST', '127.0.0.1'),
+            'port' => env('CDS_SQLSRV_PORT', '1433'),
+            'database' => env('CDS_SQLSRV_DATABASE', 'CDSDb'),
+            'login_timeout' => 8,
+            'username' => env('CDS_SQLSRV_USERNAME', ''),
+            'password' => env('CDS_SQLSRV_PASSWORD', ''),
+            'charset' => 'utf8',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'encrypt' => env('CDS_SQLSRV_ENCRYPT', 'yes'),
+            'trust_server_certificate' => env('CDS_SQLSRV_TRUST_SERVER_CERTIFICATE', 'true'),
+            'options' => extension_loaded('pdo_sqlsrv') ? [
+                PDO::SQLSRV_ATTR_QUERY_TIMEOUT => 15,
+            ] : [],
+        ],
+
         'sqlsrv' => [
             'driver' => 'sqlsrv',
             'url' => env('SQLSRV_URL'),

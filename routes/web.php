@@ -35,7 +35,17 @@ Route::get('/dashboard', function () {
 })->middleware(['auth', 'verified'])->name('dashboard');
 
 Route::middleware('auth')->group(function () {
-    Route::get('/consultas', [PostalIntelligenceController::class, 'index'])->middleware('can:ips.read')->name('consultas.index');
+    Route::get('/consultas', [PostalIntelligenceController::class, 'index'])->middleware('can:postal.access')->name('consultas.index');
+    Route::get('/ips', [PostalIntelligenceController::class, 'ips'])->middleware('can:postal.ips')->name('postal.ips');
+    Route::get('/cds', [PostalIntelligenceController::class, 'cds'])->middleware('can:postal.cds')->name('postal.cds');
+    Route::get('/conjunto', [PostalIntelligenceController::class, 'index'])->middleware('can:postal.access')->name('postal.combined');
+    Route::get('/operaciones-postales', [PostalIntelligenceController::class, 'activityReport'])->middleware('can:postal.ips')->name('postal.operations');
+    Route::get('/operaciones-postales/reporte.csv', [PostalIntelligenceController::class, 'activityReportCsv'])->middleware('can:postal.ips')->name('postal.operations.csv');
+    Route::get('/consultas/expediente.csv', [PostalIntelligenceController::class, 'packageCsv'])->middleware('can:postal.access')->name('postal.package.csv');
+    Route::get('/marbetes', [PostalIntelligenceController::class, 'receptacles'])->middleware('can:postal.ips')->name('postal.receptacles');
+    Route::get('/marbetes/documento/{type}', [PostalIntelligenceController::class, 'receptacleDocument'])->middleware('can:postal.ips')->name('postal.receptacles.document');
+    Route::get('/aduana', [PostalIntelligenceController::class, 'cds'])->middleware('can:postal.cds')->name('postal.customs');
+    Route::get('/consultas/documentos/{kind}', [PostalIntelligenceController::class, 'document'])->middleware('can:postal.access')->name('postal.document');
     Route::get('/sqlserver/datos', [SqlServerDataController::class, 'index'])->middleware('can:ips.read')->name('sqlserver.datos');
     Route::get('/tracking-event-rules', [TrackingEventRuleController::class, 'index'])->name('tracking-event-rules.index');
     Route::get('/tracking-event-rules/create', [TrackingEventRuleController::class, 'create'])->name('tracking-event-rules.create');
@@ -46,6 +56,9 @@ Route::middleware('auth')->group(function () {
     Route::put('/tracking-event-rules/{trackingEventRule}', [TrackingEventRuleController::class, 'update'])->name('tracking-event-rules.update');
     Route::delete('/tracking-event-rules/{trackingEventRule}', [TrackingEventRuleController::class, 'destroy'])->name('tracking-event-rules.destroy');
 
+    Route::middleware('can:admin-only')->group(function () {
+    Route::get('/accesos', [\App\Http\Controllers\PostalAccessController::class, 'index'])->name('postal.access.index');
+    Route::put('/accesos/{role}', [\App\Http\Controllers\PostalAccessController::class, 'update'])->name('postal.access.update');
     Route::get('/users', [UserController::class, 'index'])->name('users.index');
     Route::get('/users/create', [UserController::class, 'create'])->name('users.create');
     Route::post('/users', [UserController::class, 'store'])->name('users.store');
@@ -84,8 +97,9 @@ Route::middleware('auth')->group(function () {
     // Route::get('/role-has-permission/{roleHasPermission}', [RoleHasPermissionController::class, 'show'])->name('role-has-permissions.show');
     Route::post('/role-has-permission', [RoleHasPermissionController::class, 'store'])->name('role-has-permissions.store');
     Route::get('/role-has-permission/{roleHasPermission}/edit', [RoleHasPermissionController::class, 'edit'])->name('role-has-permissions.edit');
-    Route::put('/role-has-permission/{roleHasPermission', [RoleHasPermissionController::class, 'update'])->name('role-has-permissions.update');
+    Route::put('/role-has-permission/{roleHasPermission}', [RoleHasPermissionController::class, 'update'])->name('role-has-permissions.update');
     Route::delete('/role-has-permission/{roleHasPermission}', [RoleHasPermissionController::class, 'destroy'])->name('role-has-permissions.destroy');
+    });
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');

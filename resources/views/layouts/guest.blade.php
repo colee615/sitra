@@ -15,6 +15,19 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="font-[Manrope] text-slate-900 antialiased">
-    {{ $slot }}
+    @if (request()->routeIs('login'))
+        {{ $slot }}
+    @else
+        <main class="sitra-guest-page">
+            <a class="sitra-guest-brand" href="{{ route('login') }}" aria-label="SITRA, ir al inicio de sesión">
+                <span class="sitra-guest-brand-mark" aria-hidden="true">S</span>
+                <span>SITRA <span class="font-normal text-slate-500">Postal</span></span>
+            </a>
+            <section class="sitra-guest-card">
+                {{ $slot }}
+            </section>
+            <p class="sitra-guest-footer">Correos de Bolivia · Gestión postal y aduanera</p>
+        </main>
+    @endif
 </body>
 </html>

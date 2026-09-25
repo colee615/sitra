@@ -7,9 +7,18 @@ use Illuminate\Support\Facades\DB;
 
 class SqlServerSearchService
 {
+    private ?string $connectionOverride = null;
+
+    public function onConnection(string $connection): self
+    {
+        $service = clone $this;
+        $service->connectionOverride = $connection;
+        return $service;
+    }
+
     private function connectionName(): string
     {
-        return (string) config('tracking.sqlserver.connection', 'sqlsrv');
+        return $this->connectionOverride ?: (string) config('tracking.sqlserver.connection', 'sqlsrv');
     }
 
     public function search(string $codigo): array
@@ -255,10 +264,14 @@ class SqlServerSearchService
                     ml.OWN_OFFICE_CD,
                     nof.OFFICE_FCD,
                     nof.OFFICE_NM,
-                    ml.MANIF_TYPE_ID
+                    ml.MANIF_TYPE_ID,
+                    ml.FORM_NM,
+                    mu.USER_FID,
+                    mu.USER_NM
                 FROM dbo.L_MAILITMS mi
                 INNER JOIN dbo.L_MANIFESTS_MAILITMS mm ON mm.MAILITM_PID = mi.MAILITM_PID
                 INNER JOIN dbo.L_MANIFEST_LISTS ml ON ml.MANIFEST_LIST_ID = mm.MANIFEST_LIST_ID
+                LEFT JOIN dbo.L_USERS mu ON mu.USER_PID = ml.USER_PID
                 LEFT JOIN dbo.N_OWN_OFFICES nof ON nof.OWN_OFFICE_CD = ml.OWN_OFFICE_CD
                 WHERE UPPER(RTRIM(LTRIM(mi.MAILITM_FID))) = ?
                    OR UPPER(RTRIM(LTRIM(mi.MAILITM_LOCAL_ID))) = ?

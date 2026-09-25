@@ -208,7 +208,7 @@
         <section class="sitra-login-wrap">
             <div class="sitra-login-left">
                 <p class="sitra-eyebrow">Acceso</p>
-                <h2 class="sitra-title">Login SITRA</h2>
+                <h2 class="sitra-title">Bienvenido a SITRA</h2>
 
                 <x-auth-session-status class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700" :status="session('status')" />
 
@@ -216,7 +216,7 @@
                     @csrf
 
                     <div class="sitra-field">
-                        <label for="email" class="sitra-label">Email</label>
+                        <label for="email" class="sitra-label">Correo electrónico</label>
                         <div class="sitra-input-wrap">
                             <svg class="sitra-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16v12H4z"/><path d="m4 8 8 6 8-6"/></svg>
                             <input id="email" class="sitra-input" type="email" name="email" value="{{ old('email') }}" required autofocus autocomplete="username" />
@@ -225,7 +225,7 @@
                     </div>
 
                     <div class="sitra-field">
-                        <label for="password" class="sitra-label">Password</label>
+                        <label for="password" class="sitra-label">Contraseña</label>
                         <div class="sitra-input-wrap">
                             <svg class="sitra-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V8a4 4 0 1 1 8 0v3"/></svg>
                             <input id="password" class="sitra-input" type="password" name="password" required autocomplete="current-password" />
@@ -240,7 +240,7 @@
                         </label>
 
                         @if (Route::has('password.request'))
-                            <a class="sitra-link" href="{{ route('password.request') }}">Olvide mi contrasena</a>
+                            <a class="sitra-link" href="{{ route('password.request') }}">Olvidé mi contraseña</a>
                         @endif
                     </div>
 
@@ -253,7 +253,7 @@
                 <div class="sitra-grid"></div>
                 <div class="sitra-copy">
                     <p class="sitra-brand">SITRA</p>
-                    <p class="sitra-sub">Sistema de acceso</p>
+                    <p class="sitra-sub">Gestión postal y aduanera</p>
                 </div>
             </div>
         </section>

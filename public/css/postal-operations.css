@@ -1,0 +1,33 @@
+.postal-activity-report .postal-report-filters{padding:20px}
+.postal-report-filter-grid{display:grid;grid-template-columns:repeat(4,minmax(145px,1fr));gap:14px}
+.postal-report-filter-grid label{display:block;margin-bottom:6px;color:#18334e;font-size:12px;font-weight:700}
+.postal-report-search{grid-column:span 2}
+.postal-report-actions{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:16px;color:#62758a;font-size:12px}
+.postal-report-actions>div{display:flex;gap:8px}
+.postal-report-summary{display:flex;align-items:center;gap:24px;padding:18px 22px}
+.postal-report-summary>div{display:flex;align-items:center;gap:12px;min-width:0}
+.postal-report-summary>div strong{color:#18334e;font-size:18px;white-space:nowrap}
+.postal-report-summary>div span:last-child{color:#62758a;font-size:12px}
+.postal-report-summary .postal-task-icon{flex:0 0 42px;width:42px;height:42px}
+.postal-report-summary .btn{margin-left:auto;white-space:nowrap}
+.postal-activity-table{min-width:950px}
+.postal-activity-table td{font-size:12px!important;line-height:1.45}
+.postal-report-code{font-weight:700;color:#174977;white-space:nowrap}
+.postal-activity-report .postal-empty-compact{padding:18px}
+.postal-operations-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin:16px 0}
+.postal-operations-metrics>div{display:flex;flex-direction:column;gap:3px;padding:13px 15px;background:#f5f8fb;border:1px solid #e1e9f1;border-radius:11px}
+.postal-operations-metrics strong{font-size:21px;line-height:1.15;color:#174977}
+.postal-operations-metrics span{font-size:12px;color:#62758a}
+.postal-reconciliation{border-color:#dce7ef;background:#fff}
+.postal-check{display:flex;align-items:flex-start;gap:10px;border-radius:10px;padding:13px 15px;margin-bottom:16px;font-size:14px;line-height:1.5}
+.postal-check i{margin-top:2px}
+.postal-check.is-ok{background:#edf9f1;color:#24633c;border:1px solid #c8ebd2}
+.postal-check.is-warning{background:#fff7e5;color:#79530d;border:1px solid #f2dda5}
+.postal-check.is-neutral{background:#eff6fb;color:#365c77;border:1px solid #d2e4f0}
+.postal-reconciliation-weights{display:grid;grid-template-columns:repeat(2,minmax(160px,1fr));gap:14px;margin-bottom:12px}
+.postal-reconciliation-weights>div{padding:12px 14px;background:#f6f9fc;border-radius:9px}
+.postal-reconciliation-weights span{display:block;color:#62758a;font-size:12px;margin-bottom:4px}
+.postal-reconciliation-weights strong{color:#18334e;font-size:16px}
+.postal-operational-summary .alert{font-size:13px}
+@media(max-width:991px){.postal-report-filter-grid{grid-template-columns:repeat(2,minmax(140px,1fr))}.postal-report-summary{align-items:flex-start;flex-wrap:wrap}.postal-report-summary .btn{margin-left:0}}
+@media(max-width:575px){.postal-report-filter-grid{grid-template-columns:1fr}.postal-report-search{grid-column:auto}.postal-report-actions{align-items:stretch;flex-direction:column}.postal-report-actions>div{flex-direction:column}.postal-report-summary{align-items:stretch;flex-direction:column;gap:14px}.postal-report-summary>div strong{white-space:normal}.postal-reconciliation-weights{grid-template-columns:1fr}}

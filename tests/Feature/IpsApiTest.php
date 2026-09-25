@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Services\IpsRepository;
 use App\Services\IpsWorkflowService;
 use App\Services\SqlServerSearchService;
+use App\Services\TrackingSearchCacheService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery;
 use Spatie\Permission\Models\Role;
@@ -238,6 +239,87 @@ class IpsApiTest extends TestCase
             ->assertJsonPath('resultado.0.eventos_externos.0.codigo_evento', 31)
             ->assertJsonPath('resultado.1.codigo', 'LX002NL')
             ->assertJsonCount(0, 'resultado.1.eventos_externos');
+    }
+
+    public function test_public_tracking_exposes_only_a_validated_destination_city_from_local_id(): void
+    {
+        $search = Mockery::mock(TrackingSearchCacheService::class);
+        $search->shouldReceive('search')->times(3)->andReturnUsing(function (string $code): array {
+            if ($code === 'EC258057494BE') {
+                return [
+                    'data' => [
+                        'codigo' => $code,
+                        'packageRows' => collect([
+                            (object) [
+                                'MAILITM_LOCAL_ID' => null,
+                                'ORIG_COUNTRY_CD' => 'BE',
+                                'ORIG_COUNTRY_NM' => 'Belgica',
+                                'DEST_COUNTRY_CD' => null,
+                                'DEST_COUNTRY_NM' => null,
+                                'POSTAL_STATUS_CD' => 0,
+                                'POSTAL_STATUS_NM' => 'Normal',
+                            ],
+                            (object) [
+                                'MAILITM_LOCAL_ID' => null,
+                                'ORIG_COUNTRY_CD' => 'BE',
+                                'ORIG_COUNTRY_NM' => 'Belgica',
+                                'DEST_COUNTRY_CD' => 'BO',
+                                'DEST_COUNTRY_NM' => 'Bolivia',
+                                'POSTAL_STATUS_CD' => 0,
+                                'POSTAL_STATUS_NM' => 'Normal',
+                            ],
+                        ]),
+                        'trackingRows' => collect([(object) [
+                            'EVENT_TYPE_CD' => 37,
+                            'EVENT_GMT_DT' => '2026-09-21 14:55:22',
+                            'OFFICE_FCD' => 'BOTJAB',
+                            'OFFICE_NM' => 'TARIJA',
+                        ]]),
+                    ],
+                    'cache_status' => 'miss',
+                    'stale_fallback' => false,
+                ];
+            }
+
+            $localId = $code === 'EC257727105BE' ? ' CBBA ' : 'URB';
+
+            return [
+                'data' => [
+                    'codigo' => $code,
+                    'packageRows' => collect([(object) [
+                        'MAILITM_LOCAL_ID' => $localId,
+                        'ORIG_COUNTRY_CD' => 'BE',
+                        'ORIG_COUNTRY_NM' => 'Belgica',
+                        'DEST_COUNTRY_CD' => 'BO',
+                        'DEST_COUNTRY_NM' => 'Bolivia',
+                        'POSTAL_STATUS_CD' => 0,
+                        'POSTAL_STATUS_NM' => 'Normal',
+                    ]]),
+                    'trackingRows' => collect(),
+                ],
+                'cache_status' => 'miss',
+                'stale_fallback' => false,
+            ];
+        });
+        $this->app->instance(TrackingSearchCacheService::class, $search);
+        $token = $this->token(['sqlserver.read']);
+
+        $response = $this->withToken($token)->getJson('/api/tracking/eventos?codigo=EC257727105BE');
+        $response->assertOk()
+            ->assertJsonPath('meta.destination_city', 'Cochabamba')
+            ->assertJsonPath('meta.destination_city_source', 'ips_local_id')
+            ->assertJsonMissingPath('meta.recipient_name');
+
+        $this->withToken($token)->getJson('/api/tracking/eventos?codigo=EC257727106BE')
+            ->assertOk()
+            ->assertJsonPath('meta.destination_city', null)
+            ->assertJsonPath('meta.destination_city_source', null);
+
+        $this->withToken($token)->getJson('/api/tracking/eventos?codigo=EC258057494BE')
+            ->assertOk()
+            ->assertJsonPath('meta.destination_country_code', 'BO')
+            ->assertJsonPath('meta.destination_city', 'Tarija')
+            ->assertJsonPath('meta.destination_city_source', 'ips_delivered_office');
     }
 
     public function test_disabled_writes_return_503_without_connecting_to_ips(): void

@@ -40,7 +40,10 @@ class SqlServerExternalSearchSafeController extends Controller
             $lookup = $searchService->search($codigo);
             $result = $lookup['data'];
             $originCountry = $this->resolveOriginCountry($result['packageRows'] ?? [], $result['codigo'] ?? $codigo);
-            $packageMeta = $this->resolvePackageMeta($result['packageRows'] ?? []);
+            $packageMeta = $this->resolvePackageMeta(
+                $result['packageRows'] ?? [],
+                $result['trackingRows'] ?? []
+            );
 
             return response()->json([
                 'codigo' => $result['codigo'] ?? strtoupper(trim($codigo)),
@@ -54,6 +57,8 @@ class SqlServerExternalSearchSafeController extends Controller
                     'origin_country_name' => $packageMeta['origin_country_name'],
                     'destination_country_code' => $packageMeta['destination_country_code'],
                     'destination_country_name' => $packageMeta['destination_country_name'],
+                    'destination_city' => $packageMeta['destination_city'],
+                    'destination_city_source' => $packageMeta['destination_city_source'],
                     'destino' => $packageMeta['destination_country_name'],
                     'pais_destino' => $packageMeta['destination_country_name'],
                     'postal_status_cd' => $packageMeta['postal_status_cd'],
@@ -254,14 +259,37 @@ class SqlServerExternalSearchSafeController extends Controller
         return $countryName !== '' ? $countryCode . ' - ' . $countryName : $countryCode;
     }
 
-    private function resolvePackageMeta(iterable $packageRows): array
+    private function resolvePackageMeta(iterable $packageRows, iterable $trackingRows = []): array
     {
-        $package = collect($packageRows)->first();
+        $packageRows = collect($packageRows);
+        $package = $packageRows->first(fn ($row) => trim((string) ($row->DEST_COUNTRY_CD ?? '')) !== '')
+            ?? $packageRows->first();
 
         $originCountryCode = isset($package->ORIG_COUNTRY_CD) ? trim((string) $package->ORIG_COUNTRY_CD) : '';
         $originCountryName = $this->friendlyLocationName($this->normalizeText(isset($package->ORIG_COUNTRY_NM) ? (string) $package->ORIG_COUNTRY_NM : ''));
         $destinationCountryCode = isset($package->DEST_COUNTRY_CD) ? trim((string) $package->DEST_COUNTRY_CD) : '';
         $destinationCountryName = $this->friendlyLocationName($this->normalizeText(isset($package->DEST_COUNTRY_NM) ? (string) $package->DEST_COUNTRY_NM : ''));
+        $localId = strtoupper(trim((string) ($package->MAILITM_LOCAL_ID ?? '')));
+        $destinationCity = config('tracking.local_id_destination_cities.' . $localId);
+        $destinationCitySource = is_string($destinationCity) && trim($destinationCity) !== '' ? 'ips_local_id' : null;
+
+        // Duplicate IPS rows can leave the newest delivered row without country/local ID,
+        // while an older row still carries DEST_COUNTRY_CD=BO. Only the current delivery
+        // event at a Bolivian office is strong enough to supply the missing city.
+        if ((! is_string($destinationCity) || trim($destinationCity) === '')
+            && $packageRows->contains(fn ($row) => strtoupper(trim((string) ($row->DEST_COUNTRY_CD ?? ''))) === 'BO')) {
+            $latestEvent = collect($trackingRows)->sortByDesc(fn ($row) => $row->EVENT_GMT_DT ?? null)->first();
+            $eventCode = isset($latestEvent->EVENT_TYPE_CD) ? (int) $latestEvent->EVENT_TYPE_CD : null;
+            $officeCode = strtoupper(trim((string) ($latestEvent->OFFICE_FCD ?? '')));
+            $officeName = $this->normalizeText((string) ($latestEvent->OFFICE_NM ?? ''));
+
+            if ($eventCode === 37 && str_starts_with($officeCode, 'BO')) {
+                $destinationCity = $this->bolivianDepartmentFromOffice($officeName);
+                if ($destinationCity !== null) {
+                    $destinationCitySource = 'ips_delivered_office';
+                }
+            }
+        }
         $postalStatusCode = isset($package->POSTAL_STATUS_CD) && is_numeric($package->POSTAL_STATUS_CD)
             ? (int) $package->POSTAL_STATUS_CD
             : null;
@@ -280,9 +308,38 @@ class SqlServerExternalSearchSafeController extends Controller
             'origin_country_name' => $originCountryName !== '' ? $originCountryName : null,
             'destination_country_code' => $destinationCountryCode !== '' ? strtoupper($destinationCountryCode) : null,
             'destination_country_name' => $destinationCountryName !== '' ? $destinationCountryName : null,
+            'destination_city' => is_string($destinationCity) && trim($destinationCity) !== '' ? $destinationCity : null,
+            'destination_city_source' => $destinationCitySource,
             'postal_status_cd' => $postalStatusCode,
             'postal_status_name' => $postalStatusName !== '' ? $postalStatusName : null,
         ];
+    }
+
+    private function bolivianDepartmentFromOffice(string $officeName): ?string
+    {
+        $officeName = mb_strtoupper(trim($officeName));
+        if ($officeName === '') {
+            return null;
+        }
+
+        foreach ([
+            'COBIJA' => 'Cobija',
+            'COCHABAMBA' => 'Cochabamba',
+            'LA PAZ' => 'La Paz',
+            'ORURO' => 'Oruro',
+            'POTOSI' => 'Potosí',
+            'POTOSÍ' => 'Potosí',
+            'SANTA CRUZ' => 'Santa Cruz',
+            'SUCRE' => 'Sucre',
+            'TARIJA' => 'Tarija',
+            'TRINIDAD' => 'Trinidad',
+        ] as $needle => $department) {
+            if (str_contains($officeName, $needle)) {
+                return $department;
+            }
+        }
+
+        return null;
     }
 
     private function countryNameFromS10(string $countryCode): string
