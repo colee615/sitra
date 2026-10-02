@@ -35,16 +35,19 @@
                 @endcan
             @endif
             <nav class="postal-expedient-nav" aria-label="Secciones del expediente">
+                @if($showCds)
+                    <a href="#customs"><strong><i class="fas fa-clipboard-list"></i> Declaraciones y respuestas CDS</strong><small>{{ count($declarations) }} declaraciones · {{ count($responses) }} respuestas · {{ count($cds['events'] ?? []) }} eventos</small></a>
+                @endif
                 @if($showIps)
-                    <a href="#shipment"><strong><i class="fas fa-box"></i> Datos del paquete</strong><small>Situación postal y contactos IPS</small></a>
                     <a href="#movements"><strong><i class="fas fa-route"></i> Recorrido y entrega</strong><small>{{ $operationsMetrics['movement_count'] }} movimientos · {{ $operationsMetrics['delivery_count'] }} registros de entrega · {{ $operationsMetrics['international_count'] }} mensajes EDI</small></a>
+                    <a href="#shipment"><strong><i class="fas fa-box"></i> Datos del paquete</strong><small>Situación postal y contactos IPS</small></a>
                     <a href="#documents"><strong><i class="fas fa-boxes"></i> Despachos y sacas</strong><small>{{ $operationsMetrics['bag_count'] }} sacas vinculadas · {{ $operationsMetrics['manifest_count'] }} manifiestos y formularios</small></a>
                     <a href="#declared-content"><strong><i class="fas fa-box-open"></i> Contenido en IPS</strong><small>{{ $contentPieceRows->count() }} artículos · {{ $customsRows->count() }} fichas aduaneras</small></a>
                 @endif
-                @if($showCds)
-                    <a href="#customs"><strong><i class="fas fa-clipboard-list"></i> Declaraciones CDS</strong><small>{{ count($declarations) }} declaraciones · {{ count($responses) }} respuestas aduaneras · responsables</small></a>
-                @endif
             </nav>
+            @if($showCds)
+                @include('postal.partials.cds-records')
+            @endif
             @if($showIps)
             <section id="shipment" class="postal-panel"><div class="postal-section-heading"><h2><i class="fas fa-box"></i> Datos del paquete</h2><span>IPS</span></div>
                 @if($operationalStatus['latest_event'])
@@ -100,9 +103,6 @@
                     @forelse($customsRows as $customs)<div class="postal-facts"><div><span>Peso bruto declarado</span><strong>{{ $customs->DECLARED_GROSS_WEIGHT ?? 'No informado' }}</strong></div><div><span>Referencia aduanera del remitente</span><strong>{{ $customs->SENDER_CUSTOMS_REFERENCE_NO ?: 'No informada' }}</strong></div><div><span>Referencia aduanera del destinatario</span><strong>{{ $customs->RECIPIENT_CUSTOMS_REFERENCE_NO ?: 'No informada' }}</strong></div></div>@empty<p class="postal-note">IPS no devolvió una ficha de datos aduaneros para este paquete.</p>@endforelse
                     <div class="table-responsive"><table class="table"><thead><tr><th>Artículo declarado</th><th>Unidades</th><th>Valor</th><th>Peso neto</th><th>Origen / partida</th></tr></thead><tbody>@forelse($contentPieceRows as $piece)<tr><td>{{ $piece->DESCRIPTION ?: $piece->IDENTIFIER ?: 'Sin descripción' }}</td><td>{{ $piece->NUMBER_OF_UNITS ?? 'No informado' }}</td><td>{{ $piece->DECLARED_VALUE ?? 'No informado' }} {{ $piece->DECLARED_VALUE_CURRENCY_CD ?? '' }}</td><td>{{ $piece->NET_WEIGHT ?? 'No informado' }}</td><td>{{ $piece->ORIGIN_LOCATION ?: 'No informado' }}@if($piece->TARIFF_HEADING)<small class="d-block text-muted">Partida arancelaria: {{ $piece->TARIFF_HEADING }}</small>@endif</td></tr>@empty<tr><td colspan="5">No hay artículos desglosados en los datos aduaneros de IPS.</td></tr>@endforelse</tbody></table></div>
                 </section>
-            @endif
-            @if($showCds)
-                @include('postal.partials.cds-records')
             @endif
         @endif
     @endif

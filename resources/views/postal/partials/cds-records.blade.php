@@ -44,21 +44,8 @@
         </p>
     @endforelse
 
-    @if($unassignedDeclarations->isNotEmpty() || $unassignedResponses->isNotEmpty())
-        <div class="postal-cds-record">
-            <h3>Documentos sin un objeto coincidente en esta consulta</h3>
-            <p class="postal-note">Se conserva el ID de origen. Estos documentos no se atribuyen a otro objeto CDS.</p>
-            @foreach($unassignedDeclarations as $declaration)
-                @include('postal.declaration', ['declaration'=>$declaration, 'cn23Code'=>$code])
-            @endforeach
-            @foreach($unassignedResponses as $response)
-                @include('postal.partials.customs-response', ['response'=>$response])
-            @endforeach
-        </div>
-    @endif
-
     <details id="responsibles" class="postal-subsection">
-        <summary><i class="fas fa-user-check"></i> Quién registró los cambios en CDS <small>· fechas UTC</small></summary>
+        <summary><i class="fas fa-user-check"></i> Eventos de Aduana <small>· quién, cuándo y dónde registró cada cambio · fechas UTC</small></summary>
         <div class="table-responsive"><table class="table">
             <thead><tr><th>Fecha (UTC)</th><th>Acción registrada</th><th>Responsable</th><th>Oficina</th><th>Documento vinculado</th></tr></thead>
             <tbody>
@@ -70,4 +57,17 @@
             </tbody>
         </table></div>
     </details>
+
+    @if($unassignedDeclarations->isNotEmpty() || $unassignedResponses->isNotEmpty())
+        <div class="postal-cds-record">
+            <h3>Otros documentos sin un objeto coincidente</h3>
+            <p class="postal-note">Se conserva el ID de origen. Estos documentos no se atribuyen a otro objeto CDS.</p>
+            @foreach($unassignedDeclarations as $declaration)
+                @include('postal.declaration', ['declaration'=>$declaration, 'cn23Code'=>$code])
+            @endforeach
+            @foreach($unassignedResponses as $response)
+                @include('postal.partials.customs-response', ['response'=>$response])
+            @endforeach
+        </div>
+    @endif
 </section>
