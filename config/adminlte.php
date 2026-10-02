@@ -48,7 +48,7 @@ return [
     */
 
     'google_fonts' => [
-        'allowed' => true,
+        'allowed' => false,
     ],
 
     /*
@@ -63,12 +63,12 @@ return [
     |
     */
 
-    'logo' => '<b>SITRA</b> Postal',
-    'logo_img' => 'images/AGBClogo.png',
-    'logo_img_class' => 'brand-image img-circle',
+    'logo' => '<b>SITRA</b><small class="d-block">Gestión postal</small>',
+    'logo_img' => 'images/correos-bolivia.png',
+    'logo_img_class' => 'brand-image',
     'logo_img_xl' => null,
     'logo_img_xl_class' => 'brand-image-xs',
-    'logo_img_alt' => 'adminAGBC',
+    'logo_img_alt' => 'Correos de Bolivia',
 
     /*
     |--------------------------------------------------------------------------
@@ -86,11 +86,11 @@ return [
     'auth_logo' => [
         'enabled' => false,
         'img' => [
-            'path' =>'images/AGBClogo.png',
-            'alt' => 'Auth Logo',
+            'path' =>'images/correos-bolivia.png',
+            'alt' => 'Correos de Bolivia',
             'class' => '',
-            'width' => 50,
-            'height' => 50,
+            'width' => 180,
+            'height' => null,
         ],
     ],
 
@@ -113,7 +113,7 @@ return [
         'enabled' => false,
         'mode' => 'fullscreen',
         'img' => [
-            'path' => 'images/AGBClogo.png',
+            'path' => 'images/correos-bolivia.png',
             'alt' => 'AdminLTE Preloader Image',
             'effect' => 'animation__shake',
             'width' => 60,
@@ -312,29 +312,43 @@ return [
         ],
         ['header' => 'SITRA POSTAL'],
         [
-            'text' => 'Inicio',
+            'text' => 'Panorama operativo',
             'url' => '/dashboard',
-            'icon' => 'fas fa-compass',
+            'icon' => 'fas fa-chart-pie',
+            'active' => ['dashboard', 'dashboard/*'],
         ],
         [
-            'text' => 'Consultas postales',
-            'icon' => 'fas fa-search',
+            'text' => 'Gestión diaria',
+            'url' => '/centro-de-trabajo',
+            'icon' => 'fas fa-th-large',
+        ],
+        [
+            'text' => 'Envíos y logística',
+            'icon' => 'fas fa-boxes',
             'can' => 'postal.access',
             'submenu' => [
+                ['text'=>'Expediente IPS + CDS','url'=>'/conjunto','active'=>['conjunto','consultas'],'icon'=>'fas fa-project-diagram','can'=>'postal.access'],
+                ['text'=>'Despachos (S8)','url'=>'/despachos','icon'=>'fas fa-plane-departure','can'=>'postal.ips'],
+                ['text'=>'Sacas y marbetes (S9)','url'=>'/marbetes','icon'=>'fas fa-barcode','can'=>'postal.ips'],
                 ['text'=>'Paquetes IPS','url'=>'/ips','icon'=>'fas fa-globe-americas','can'=>'postal.ips'],
-                ['text'=>'Declaraciones CDS','url'=>'/cds','icon'=>'fas fa-clipboard-list','can'=>'postal.cds'],
-                ['text'=>'Expediente IPS + CDS','url'=>'/conjunto','icon'=>'fas fa-project-diagram','can'=>'postal.access'],
+            ],
+        ],
+        [
+            'text' => 'Gestión aduanera',
+            'icon' => 'fas fa-clipboard-list',
+            'can' => 'postal.cds',
+            'submenu' => [
+                ['text'=>'Declaraciones CDS','url'=>'/cds','active'=>['cds','cds/*','aduana'],'icon'=>'fas fa-clipboard-list','can'=>'postal.cds'],
+                ['text'=>'Remisión a Aduana','url'=>'/aduana/remision','active'=>['aduana/remision','aduana/remision/*','aduana/remision.csv'],'icon'=>'fas fa-file-export','can'=>'postal.cds'],
             ],
         ],
         [
             'text' => 'Operación en oficina',
-            'icon' => 'fas fa-boxes',
+            'icon' => 'fas fa-building',
             'can' => 'postal.ips',
             'submenu' => [
                 ['text'=>'Actividad por oficina','url'=>'/operaciones-postales','icon'=>'fas fa-clipboard-check','can'=>'postal.ips'],
-                ['text'=>'Marbetes y sacas','url'=>'/marbetes','icon'=>'fas fa-barcode','can'=>'postal.ips'],
                 ['text'=>'Movimientos y entregas','url'=>'/operaciones','icon'=>'fas fa-truck','can'=>'ips.read'],
-                ['text'=>'Datos técnicos de IPS','url'=>'/sqlserver/datos','icon'=>'fas fa-database','can'=>'ips.read'],
             ],
         ],
         [
@@ -352,10 +366,11 @@ return [
         [
             'text' => 'Supervisión del sistema',
             'icon' => 'fas fa-chart-line',
-            'can' => 'admin-only',
+            'can' => ['admin-only', 'ips.read'],
             'submenu' => [
-                ['text'=>'Rendimiento','url'=>'/pulse','icon'=>'fas fa-chart-line'],
-                ['text'=>'Registro técnico','url'=>'/log-viewer','icon'=>'fas fa-terminal'],
+                ['text'=>'Datos técnicos de IPS','url'=>'/sqlserver/datos','icon'=>'fas fa-database','can'=>'ips.read'],
+                ['text'=>'Rendimiento','url'=>'/pulse','icon'=>'fas fa-chart-line','can'=>'admin-only'],
+                ['text'=>'Registro técnico','url'=>'/log-viewer','icon'=>'fas fa-terminal','can'=>'admin-only'],
             ],
         ],
     ],
@@ -412,6 +427,11 @@ return [
                     'type' => 'css',
                     'asset' => true,
                     'location' => 'css/postal-accessibility.css',
+                ],
+                [
+                    'type' => 'css',
+                    'asset' => true,
+                    'location' => 'css/correos-brand.css',
                 ],
             ],
         ],

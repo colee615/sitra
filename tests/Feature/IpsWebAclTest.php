@@ -85,14 +85,15 @@ class IpsWebAclTest extends TestCase
 
         $response = $this->actingAs($user)->get('/dashboard')->assertOk();
         foreach ([
-            'Consultas postales', 'Paquetes IPS', 'Declaraciones CDS', 'Expediente IPS + CDS',
-            'Operación en oficina', 'Actividad por oficina', 'Marbetes y sacas', 'Movimientos y entregas',
+            'Envíos y logística', 'Paquetes IPS', 'Declaraciones CDS', 'Expediente IPS + CDS',
+            'Gestión aduanera', 'Remisión a Aduana', 'Despachos (S8)', 'Sacas y marbetes (S9)',
+            'Operación en oficina', 'Actividad por oficina', 'Movimientos y entregas',
             'Datos técnicos de IPS', 'Configuración y accesos', 'Reglas de eventos', 'Accesos postales',
             'Supervisión del sistema', 'Rendimiento', 'Registro técnico',
         ] as $label) {
             $response->assertSeeText($label);
         }
-        foreach (['/ips', '/cds', '/conjunto', '/operaciones-postales', '/marbetes', '/operaciones', '/sqlserver/datos', '/tracking-event-rules', '/accesos', '/pulse', '/log-viewer'] as $path) {
+        foreach (['/ips', '/cds', '/aduana/remision', '/conjunto', '/operaciones-postales', '/despachos', '/marbetes', '/operaciones', '/sqlserver/datos', '/tracking-event-rules', '/accesos', '/pulse', '/log-viewer'] as $path) {
             $response->assertSee('href="'.url($path).'"', false);
         }
     }

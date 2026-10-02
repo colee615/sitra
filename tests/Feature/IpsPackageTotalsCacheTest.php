@@ -20,7 +20,7 @@ class IpsPackageTotalsCacheTest extends TestCase
         $this->assertSame(50, $cache->remember(['office_cd' => '1', 'page' => 2, 'per_page' => 10], fn () => 99));
         $this->assertSame(20, $cache->remember(['office_cd' => 2], fn () => 20));
         $this->assertSame(10, $cache->remember(['office_cd' => 1, 'status' => 'pending'], fn () => 10));
-        config(['database.connections.sqlsrv.database' => 'AnotherDatabase']);
+        config(['database.connections.'.config('ips.connection').'.database' => 'AnotherDatabase']);
         $this->assertSame(5, $cache->remember(['office_cd' => 1], fn () => 5));
     }
 

@@ -1,5 +1,9 @@
 @extends('adminlte::page')
-@section('title', 'Paquetes Ordinarios')
+@section('title', 'Roles del equipo | SITRA')
+@section('content_header')
+<div class="postal-heading"><div><span class="postal-eyebrow">CONFIGURACIÓN Y ACCESOS</span><h1>Roles del equipo</h1><p>Organiza las responsabilidades y niveles de acceso.</p></div></div>
+@stop
+
 @section('template_title')
     Paqueteria Postal
 @endsection
@@ -13,7 +17,7 @@
                         <div style="display: flex; justify-content: space-between; align-items: center;">
 
                             <span id="card_title">
-                                {{ __('Administracion Roles TrackinBO') }}
+                                {{ __('Roles registrados') }}
                             </span>
 
                             <div class="float-right">
@@ -50,7 +54,7 @@
                                             <td>{{ $role->name }}</td>
 
                                             <td>
-                                                <form action="{{ route('roles.destroy', $role->id) }}" method="POST">
+                                                <form action="{{ route('roles.destroy', $role->id) }}" method="POST" data-confirm="Se eliminará el rol {{ $role->name }} y sus asignaciones de acceso. Revisa el impacto antes de continuar.">
                                                     <a class="btn btn-sm btn-success"
                                                         href="{{ route('roles.edit', $role->id) }}"><i
                                                             class="fa fa-fw fa-edit"></i> {{ __('Editar') }}</a>

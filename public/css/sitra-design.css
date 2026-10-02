@@ -1,0 +1,143 @@
+/* SITRA design system. Loaded after each module; document/label print layouts stay independent. */
+:root {
+    --sitra-yellow: #ffce32; --sitra-yellow-hover: #efbc17; --sitra-yellow-soft: #fff7d9;
+    --sitra-text: #252821; --sitra-muted: #72766c; --sitra-bg: #f6f7f3; --sitra-border: #e4e6de;
+    --sitra-accent: #ffce32; --sitra-accent-dark: #efbc17; --sitra-sidebar: #fff;
+    --postal-ink: #252821; --postal-muted: #72766c; --postal-line: #e4e6de; --postal-blue: #465341; --postal-teal: #56664b;
+}
+body { font-family: "Segoe UI", Arial, sans-serif; font-size: 14px; color: var(--sitra-text); background: var(--sitra-bg) !important; -webkit-font-smoothing: antialiased; }
+body .content-wrapper { background: var(--sitra-bg) !important; }
+body .main-header.navbar { background: #fff !important; border-bottom: 1px solid var(--sitra-border) !important; min-height: 64px; padding: 10px 20px; }
+body .main-header.navbar .nav-link { color: #555c51 !important; font-size: 13px; }
+body .main-header .navbar-nav.ml-auto { gap: 8px; }
+body .main-sidebar { background: #fff !important; border-right: 1px solid var(--sitra-border); box-shadow: none !important; }
+body .main-sidebar .brand-link { height: 64px; padding: 10px 18px; gap: 10px; background: var(--sitra-yellow) !important; border-bottom: 0 !important; }
+body .main-sidebar .brand-link .brand-image { width: 102px; max-height: 38px; }
+body .main-sidebar .brand-link .brand-text { font-size: 16px; font-weight: 750; color: #292c25 !important; letter-spacing: .3px; }
+body .main-sidebar .brand-text small { font-size: 9px; letter-spacing: .1px; font-weight: 500; }
+body .main-sidebar .sidebar { padding: 14px 10px; }
+body .main-sidebar .nav-sidebar .nav-link,
+body .main-sidebar .sidebar a,
+body .main-sidebar .nav-icon { color: #666d60 !important; }
+body .main-sidebar .nav-sidebar > .nav-header { color: #93988b !important; font-size: 9px; font-weight: 700; letter-spacing: 1.6px; padding: 23px 14px 10px; }
+body .main-sidebar .nav-sidebar > .nav-item > .nav-link { width: 100%; margin: 3px 0; padding: 12px 12px; border-radius: 8px; font-size: 13px; font-weight: 600; }
+body .main-sidebar .nav-sidebar .nav-link > .nav-icon { margin-right: 9px; font-size: 14px; }
+body .main-sidebar .nav-sidebar .nav-link:hover { background: #f4f5ef !important; color: #252821 !important; }
+body .main-sidebar .nav-sidebar .nav-link.active { background: var(--sitra-yellow) !important; color: #252821 !important; box-shadow: none !important; }
+body .main-sidebar .nav-sidebar .nav-link.active .nav-icon { color: #252821 !important; }
+body .main-sidebar .nav-sidebar .nav-treeview { margin: 2px 3px 10px 23px; padding: 3px 0 3px 11px; border-left: 1px solid #e4e6dc; }
+body .main-sidebar .nav-sidebar .nav-treeview > .nav-item > .nav-link { padding: 9px 8px; color: #707568 !important; font-size: 12px; font-weight: 500; line-height: 1.4; }
+body .main-sidebar .nav-sidebar .nav-treeview > .nav-item > .nav-link.active { background: var(--sitra-yellow-soft) !important; color: #5e4c00 !important; }
+body .main-sidebar .nav-sidebar .nav-treeview > .nav-item > .nav-link:hover { background: #f4f5ef !important; color: #252821 !important; }
+body .main-sidebar .form-control-sidebar, body .main-sidebar .btn-sidebar { background: #f6f7f2; border-color: #e4e6de !important; color: #6c7263; font-size: 12px; min-height: 36px; }
+body .main-sidebar .form-control-sidebar::placeholder { color: #8d9286; }
+body .main-sidebar .sidebar-search-results .list-group-item { background: #fff; color: #363b30; }
+body .content-header > .container-fluid, body .content-wrapper > .content > .container-fluid { max-width: 1720px; padding-inline: clamp(18px, 2.8vw, 48px) !important; }
+body .content-wrapper > .content-header { padding: 30px 0 16px !important; }
+body .content-header h1 { font-size: clamp(24px, 2vw, 32px); font-weight: 700; letter-spacing: -.8px; color: #252821; margin: 8px 0; }
+body .content-header p { font-size: 13px; color: #7c8075; }
+body .content-wrapper h2, body .content-wrapper h3 { letter-spacing: -.3px; }
+body .postal-eyebrow { color: #8b7643; font-size: 9px; letter-spacing: 1.7px; font-weight: 750; }
+body .postal-heading { margin-bottom: 5px; }
+body a { color: #345d7e; }
+body .btn { border-radius: 7px !important; box-shadow: none !important; font-size: 12px; font-weight: 650; transition: background .15s, border-color .15s; }
+body .btn:not(.btn-sm):not(.btn-xs) { padding: 11px 16px; min-height: 40px; }
+body .btn-primary, body .btn-warning, body .sitra-primary-button { background: var(--sitra-yellow) !important; color: #292c23 !important; border-color: var(--sitra-yellow) !important; }
+body .btn-primary:hover, body .btn-primary:focus, body .sitra-primary-button:hover { background: var(--sitra-yellow-hover) !important; color: #292c23 !important; border-color: var(--sitra-yellow-hover) !important; }
+body .btn-outline-primary, body .btn-outline-secondary { border-color: #d8ddd0 !important; color: #4d5646 !important; background: transparent; }
+body .btn-outline-primary:hover, body .btn-outline-secondary:hover { background: #f3f5ec !important; color: #292c23 !important; }
+body .btn-light { background: #fff !important; color: #464d3d !important; border-color: #e1d4a6 !important; }
+body .btn:disabled { opacity: .55; cursor: not-allowed; }
+body .card, body .postal-panel, body .postal-search { border: 1px solid var(--sitra-border) !important; border-radius: 12px !important; box-shadow: 0 2px 3px #24292002 !important; background: #fff; }
+body .card { overflow: visible; }
+body .card-header { background: transparent !important; border-color: var(--sitra-border); padding: 19px 22px; border-radius: 12px 12px 0 0; }
+body .card-header .card-title { font-size: 16px; }
+body .card-body { padding: 24px; }
+body .card-footer { background: #fcfcfa; border-color: var(--sitra-border); border-radius: 0 0 12px 12px; }
+body .form-control, body .custom-select, body select.form-control, body .postal-search input, body .postal-search textarea { background: #fff; border: 1px solid #dfe2d6 !important; color: #30362a; border-radius: 7px !important; font-size: 13px; min-height: 42px; }
+body .form-control:focus, body .postal-search input:focus, body .postal-search textarea:focus { border-color: #c5a11f !important; outline: 0; box-shadow: 0 0 0 3px #ffce3233 !important; }
+body label, body .form-group label { color: #616955; font-size: 12px; font-weight: 600; }
+body input[type=checkbox], body input[type=radio] { accent-color: #b08a00; }
+body .table { color: #4b5342; font-size: 12px; }
+body .table thead th, body .postal-workspace .table th { background: #f8f9f5; color: #7b826f; font-size: 10px; letter-spacing: .45px; font-weight: 650; border-top: 0; border-bottom: 1px solid #e6e8df; padding: 13px 15px; }
+body .table tbody td, body .postal-workspace .table td { font-size: 12px; padding: 15px; border-top: 1px solid #eef0e8; }
+body .table-striped tbody tr:nth-of-type(odd) { background: #fbfcf8; }
+body .table-hover tbody tr:hover { background: #fffbee; }
+body .table a { font-weight: 600; }
+body .table-responsive { border-radius: 7px; }
+body .page-link { color: #5b624f; background: #fff; border-color: #e5e8dc; font-size: 12px; }
+body .page-item.active .page-link { color: #252821; background: var(--sitra-yellow); border-color: var(--sitra-yellow); }
+body .badge { font-size: 10px; padding: 5px 8px; border-radius: 5px; }
+body .badge-primary, body .bg-primary { background: #fff3c1 !important; color: #6c5400 !important; }
+body .badge-info { background: #edf3f8; color: #3f6586; }
+body .badge-success { background: #edf5e8; color: #4e7138; }
+body .badge-warning { background: #fff3cb; color: #806514; }
+body .alert { border-radius: 9px; font-size: 13px; border-width: 1px; }
+body .alert-warning { background: #fff8dd; color: #776122; border-color: #eee1a7; }
+body .alert-info { background: #f0f4f7; color: #4d6676; border-color: #dce5eb; }
+body .alert-success { background: #f0f6ea; color: #4c683b; border-color: #d9e6cb; }
+body .modal-content { border-radius: 12px; border-color: #e0e4d6; box-shadow: 0 20px 80px #28331f30; }
+body .modal-header, body .modal-footer { border-color: #e8ebdf; padding: 20px 24px; }
+body .modal-body { padding: 24px; }
+body .postal-workspace .postal-hero, body .postal-workspace .postal-overview { border-radius: 12px; background: #fff1b6; border: 1px solid #f0dc95; border-left: 5px solid var(--sitra-yellow); color: #393b2c; padding: 30px; }
+body .postal-workspace .postal-hero h2, body .postal-workspace .postal-overview h2 { color: #2c3122 !important; font-weight: 750; }
+body .postal-workspace .postal-hero p, body .postal-workspace .postal-overview p { color: #82764a; font-size: 13px; }
+body .postal-workspace .postal-hero .postal-eyebrow, body .postal-workspace .postal-overview .postal-eyebrow { color: #8e7011; }
+body .postal-workspace .postal-hero-icon { color: #d4ad31; font-size: 85px; }
+body .postal-workspace .postal-task { border-color: var(--sitra-border); border-radius: 12px; padding: 25px; display: flex; flex-direction: column; align-items: flex-start; }
+body .postal-workspace .postal-task:hover { transform: translateY(-2px); border-color: #dfc25a; box-shadow: 0 8px 22px #363a2010; }
+body .postal-workspace .postal-task h3 { font-size: 17px; }
+body .postal-workspace .postal-task strong { margin-top: auto; color: #6f663c; }
+body .postal-workspace .postal-task-icon, body .postal-workspace .postal-task-icon.teal, body .postal-workspace .postal-task-icon.gold { color: #8b7122; background: #fff6d2; width: 44px; height: 44px; font-size: 18px; border-radius: 10px; }
+body .postal-workspace .postal-section-heading i { color: #a68a33; }
+body .postal-panel, body .postal-search { padding: 26px; margin-bottom: 20px; }
+body .postal-search-row input { padding: 12px 16px; font-size: 16px; letter-spacing: .3px; background: #fbfcf8; }
+body .postal-search-row > i { color: #a9ad99; }
+body .postal-source { color: #7b806f; background: #fafbf6; border: 1px solid #e5e8da; border-radius: 6px; font-size: 10px; }
+body .postal-source.postal-warning { background: #fff7da; color: #816824; }
+body .postal-expedient-nav a { border-color: #e4e7da; border-radius: 8px; background: #fff; color: #5e684e; }
+body .postal-expedient-nav a:hover { background: #fff9e5; border-color: #dfcb85; }
+body .postal-facts > div { border-left-color: #e9cf7b; }
+body .postal-contact-grid > article, body .postal-contact-grid > div, body .postal-declaration { background: #fafbf6; border-color: #e6e9dc; border-radius: 9px; }
+body .postal-workspace .postal-current { background: #faf8eb; border-left-color: #dec251; }
+body .postal-workspace .postal-response { background: #f8f9f3; border-left-color: #d6bf63; }
+body .postal-workspace .postal-flow-step.is-active { background: #fff4c5; color: #554719; border-color: #e3c763; }
+body .postal-workspace .postal-flow-step.is-active strong { color: #554719; }
+body .postal-workspace .postal-flow-number { background: #f3f4eb; color: #7a806c; }
+body .postal-workspace .postal-flow-step.is-active .postal-flow-number { background: var(--sitra-yellow); color: #554719; }
+body .postal-panel, body .postal-subsection { scroll-margin-top: 85px; }
+body .postal-event { border-top-color: #e9ecdf; }
+body .postal-event i { color: #929980; }
+body .postal-workspace summary { color: #666e50; }
+body .postal-empty { padding: 60px 24px; background: #fff; border: 1px dashed #daddcf; border-radius: 12px; margin-bottom: 20px; }
+body .postal-empty > i { color: #d3bd64; }
+body .postal-footer { border-top-color: #e1e5d8; color: #9a9f90; font-size: 10px; letter-spacing: .2px; margin-top: 32px; }
+body .postal-footer strong { color: #8b8261; letter-spacing: 2px; }
+body .sitra-profile-grid { display: grid; grid-template-columns: 260px minmax(0,1fr); gap: 24px; max-width: 1240px; }
+body .sitra-profile-summary { align-self: start; text-align: center; padding-top: 35px; }
+body .sitra-profile-avatar { display: inline-flex; width: 65px; height: 65px; border-radius: 18px; align-items: center; justify-content: center; background: #fff2b9; color: #947a26; font-size: 25px; margin-bottom: 20px; }
+body .sitra-profile-summary h2 { font-size: 18px; }
+body .sitra-profile-summary p { font-size: 11px; overflow-wrap: anywhere; color: #7b846b; }
+body .sitra-profile-summary nav { display: grid; text-align: left; gap: 18px; margin-top: 28px; border-top: 1px solid #e5e9da; padding-top: 24px; }
+body .sitra-profile-summary nav a { color: #717959; font-size: 12px; }
+body .sitra-form-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 18px; margin-top: 25px; padding-top: 18px; border-top: 1px solid #eef0e7; }
+body .box-body { max-width: 850px; }
+body .box-footer { margin-top: 24px; padding-top: 20px; border-top: 1px solid #edf0e5; }
+body .postal-remittance-summary > div { background: #fafbf5; border-color: #e1e6d5; }
+body .postal-remittance-summary strong { color: #685b2d; }
+body .postal-bag-total { background: #fff8da; border-color: #e5d390; }
+body .postal-bag-total strong, body .postal-bag-total span { color: #75642e; }
+body .postal-remittance-package, body .postal-manual-codes > summary { border-color: #e0e5d5; }
+@media(max-width: 767px) { body .sitra-profile-grid { grid-template-columns: 1fr; } body .sitra-profile-summary nav { grid-template-columns: repeat(3,1fr); gap: 10px; text-align: center; } }
+body .sitra-skip-link { position: fixed; top: -100px; left: 16px; background: #ffce32; color: #252821; padding: 14px 20px; z-index: 10000; border-radius: 8px; }
+body .sitra-skip-link:focus { top: 10px; }
+body :is(button,a,input,select,textarea,summary):focus-visible { outline: 3px solid #ac8517; outline-offset: 3px; }
+body .sitra-top-context { display: inline-flex; align-items: center; gap: 9px; font-size: 10px; color: #989d8f; letter-spacing: .4px; }
+body .sitra-top-context strong { color: #6f775f; font-weight: 600; }
+body .sitra-sidebar-note { margin: 28px 10px 12px; padding: 14px 10px; border-top: 1px solid #e8ecdd; color: #a0a58f; font-size: 10px; }
+body .sitra-sidebar-note strong { display: block; color: #818970; font-size: 11px; margin-bottom: 3px; }
+.sidebar-collapse:not(.sidebar-open) .sitra-sidebar-note { display: none; }
+@media (min-width: 992px) { body.sidebar-mini.sidebar-collapse .main-sidebar:hover .sitra-sidebar-note { display: block; } }
+@media (max-width: 1100px) { body .sitra-top-context { display: none; } }
+@media (max-width: 767px) { body .main-header.navbar { padding-inline: 8px; } body .content-wrapper > .content-header { padding-top: 22px !important; } body .postal-panel, body .postal-search { padding: 18px; } body .postal-heading { align-items: flex-start; } body .postal-workspace .postal-overview, body .postal-workspace .postal-hero { padding: 22px; } body .card-body { padding: 18px; } body .navbar-nav > .user-menu > .dropdown-menu { right: 0; left: auto; } body .postal-section-heading { flex-wrap: wrap; } }
+@media (prefers-reduced-motion: reduce) { body * { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }

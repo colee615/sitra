@@ -1,5 +1,9 @@
 @extends('adminlte::page')
-@section('title', 'Paquetes Ordinarios')
+@section('title', 'Crear · Asignaciones de permisos | SITRA')
+@section('content_header')
+<div class="postal-heading"><div><span class="postal-eyebrow">CONFIGURACIÓN Y ACCESOS</span><h1>Crear · Asignaciones de permisos</h1><p>Relaciona los permisos con los roles del sistema.</p></div></div>
+@stop
+
 @section('template_title')
     Paqueteria Postal
 @endsection
@@ -13,7 +17,7 @@
 
                 <div class="card card-default">
                     <div class="card-header">
-                        <span class="card-title">{{ __('Create') }} Role Has Permission</span>
+                        <span class="card-title">{{ __('Create') }} Asignación de permisos</span>
                     </div>
                     <div class="card-body">
                         <form method="POST" action="{{ route('role-has-permissions.store') }}"  role="form" enctype="multipart/form-data">

@@ -1,0 +1,2 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>@yield('title') · SITRA</title><link rel="stylesheet" href="{{ asset('css/sitra-auth.css') }}?v=1"></head><body class="sitra-error-page"><main class="sitra-error-card"><img src="{{ asset('images/correos-bolivia.png') }}" alt="Correos de Bolivia"><p class="sitra-error-code">@yield('code')</p><h1>@yield('title')</h1><p>@yield('message')</p><a class="sitra-btn" href="{{ url('/dashboard') }}">Volver al inicio</a></main></body></html>

@@ -1,5 +1,9 @@
 @extends('adminlte::page')
-@section('title', 'Paquetes Ordinarios')
+@section('title', 'Editar · Permisos del sistema | SITRA')
+@section('content_header')
+<div class="postal-heading"><div><span class="postal-eyebrow">CONFIGURACIÓN Y ACCESOS</span><h1>Editar · Permisos del sistema</h1><p>Administra las capacidades disponibles para el equipo.</p></div></div>
+@stop
+
 @section('template_title')
     Paqueteria Postal
 @endsection
@@ -18,7 +22,7 @@
                     <div class="card-body">
                         <form method="POST" action="{{ route('permissions.update', $permission->id) }}" role="form"
                             enctype="multipart/form-data">
-                            {{ method_field('PATCH') }}
+                            @method('PUT')
                             @csrf
 
                             @include('permission.form')

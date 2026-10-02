@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'connection' => 'sqlsrv',
+    'connection' => 'ips_catalog',
     'expected_database' => 'IPS5Db',
     'totals_cache_seconds' => (int) env('IPS_TOTALS_CACHE_SECONDS', 30),
     'totals_cache_store' => env('IPS_TOTALS_CACHE_STORE'),

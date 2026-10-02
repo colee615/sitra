@@ -1,5 +1,9 @@
 @extends('adminlte::page')
-@section('title', 'Crear Usuarios')
+@section('title', 'Crear · Personal AGBC | SITRA')
+@section('content_header')
+<div class="postal-heading"><div><span class="postal-eyebrow">CONFIGURACIÓN Y ACCESOS</span><h1>Crear · Personal AGBC</h1><p>Administra usuarios, roles y acceso al sistema.</p></div></div>
+@stop
+
 @section('template_title')
     Paqueteria Postal
 @endsection

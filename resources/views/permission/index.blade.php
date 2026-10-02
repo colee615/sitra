@@ -1,5 +1,9 @@
 @extends('adminlte::page')
-@section('title', 'Paquetes Ordinarios')
+@section('title', 'Permisos del sistema | SITRA')
+@section('content_header')
+<div class="postal-heading"><div><span class="postal-eyebrow">CONFIGURACIÓN Y ACCESOS</span><h1>Permisos del sistema</h1><p>Administra las capacidades disponibles para el equipo.</p></div></div>
+@stop
+
 @section('template_title')
     Paqueteria Postal
 @endsection
@@ -13,7 +17,7 @@
                         <div style="display: flex; justify-content: space-between; align-items: center;">
 
                             <span id="card_title">
-                                {{ __('Administracion Permisos TrackinBO') }}
+                                {{ __('Permisos registrados') }}
                             </span>
 
                             <div class="float-right">
@@ -51,7 +55,7 @@
 
                                             <td>
                                                 <form action="{{ route('permissions.destroy', $permission->id) }}"
-                                                    method="POST">
+                                                    method="POST" data-confirm="Se eliminará este permiso y sus asignaciones. Revisa el impacto antes de continuar.">
                                                     <a class="btn btn-sm btn-success"
                                                         href="{{ route('permissions.edit', $permission->id) }}"><i
                                                             class="fa fa-fw fa-edit"></i> {{ __('Editar') }}</a>

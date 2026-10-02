@@ -15,8 +15,6 @@
 
 @section('content')
 <div class="postal-workspace postal-activity-report">
-    @include('postal.sections')
-
     <form class="postal-search postal-report-filters" action="{{ route('postal.operations') }}" method="get">
         <div class="postal-report-filter-grid">
             <div><label for="report-from">Desde</label><input class="form-control" id="report-from" type="date" name="desde" value="{{ $filters['from']->format('Y-m-d') }}" required></div>
@@ -70,6 +68,5 @@
 @stop
 
 @section('css')
-    <link rel="stylesheet" href="{{ asset('css/postal-workspace.css') }}">
     <link rel="stylesheet" href="{{ asset('css/postal-operations.css') }}">
 @stop

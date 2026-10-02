@@ -6,13 +6,12 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
     <title>{{ config('app.name', 'Laravel') }}</title>
-
-    <!-- Fonts -->
-    <link rel="preconnect" href="https://fonts.bunny.net">
-    <link href="https://fonts.bunny.net/css?family=manrope:400,500,700,800&display=swap" rel="stylesheet" />
+    <link rel="icon" type="image/png" href="{{ asset('images/correos-bolivia.png') }}">
 
     <!-- Scripts -->
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <link rel="stylesheet" href="{{ asset('css/correos-brand.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/sitra-auth.css') }}?v=1">
 </head>
 <body class="font-[Manrope] text-slate-900 antialiased">
     @if (request()->routeIs('login'))
@@ -20,12 +19,14 @@
     @else
         <main class="sitra-guest-page">
             <a class="sitra-guest-brand" href="{{ route('login') }}" aria-label="SITRA, ir al inicio de sesión">
-                <span class="sitra-guest-brand-mark" aria-hidden="true">S</span>
+                <img class="sitra-guest-brand-logo" src="{{ asset('images/correos-bolivia.png') }}" alt="Correos de Bolivia">
                 <span>SITRA <span class="font-normal text-slate-500">Postal</span></span>
             </a>
             <section class="sitra-guest-card">
+                <div class="sitra-auth-heading"><span class="sitra-eyebrow">CUENTA INSTITUCIONAL</span><h1>{{ match(true) { request()->routeIs('register') => 'Crear una cuenta', request()->routeIs('password.request') => 'Recuperar acceso', request()->routeIs('password.reset') => 'Nueva contraseña', request()->routeIs('password.confirm') => 'Confirmar identidad', default => 'Verifica tu correo' } }}</h1></div>
                 {{ $slot }}
             </section>
+            <a class="sitra-link" href="{{ route('login') }}">Volver al inicio de sesión</a>
             <p class="sitra-guest-footer">Correos de Bolivia · Gestión postal y aduanera</p>
         </main>
     @endif

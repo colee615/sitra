@@ -1,5 +1,9 @@
 @extends('adminlte::page')
-@section('title', 'Paquetes Ordinarios')
+@section('title', 'Detalle · Roles del equipo | SITRA')
+@section('content_header')
+<div class="postal-heading"><div><span class="postal-eyebrow">CONFIGURACIÓN Y ACCESOS</span><h1>Detalle · Roles del equipo</h1><p>Organiza las responsabilidades y niveles de acceso.</p></div></div>
+@stop
+
 @section('template_title')
     Paqueteria Postal
 @endsection

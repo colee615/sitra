@@ -15,7 +15,7 @@ class User extends Authenticatable
 
     public function adminlte_image()
     {
-        return asset('images/AGBClogo.png');
+        return asset('images/correos-bolivia.png');
     }
     public function adminlte_desc()
     {

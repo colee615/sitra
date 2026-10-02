@@ -1,5 +1,9 @@
 @extends('adminlte::page')
-@section('title', 'Paquetes Ordinarios')
+@section('title', 'Crear · Permisos del sistema | SITRA')
+@section('content_header')
+<div class="postal-heading"><div><span class="postal-eyebrow">CONFIGURACIÓN Y ACCESOS</span><h1>Crear · Permisos del sistema</h1><p>Administra las capacidades disponibles para el equipo.</p></div></div>
+@stop
+
 @section('template_title')
     Paqueteria Postal
 @endsection

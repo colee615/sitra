@@ -30,18 +30,23 @@ Route::middleware('auth')->prefix('operaciones')->group(function () {
     Route::post('/paquetes/{codigo}/entrega', [\App\Http\Controllers\IpsOperationsController::class, 'write'])->middleware('can:ips.deliver')->defaults('ips_event', 'EMI')->name('operaciones.deliver');
 });
 
-Route::get('/dashboard', function () {
-    return view('dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
+Route::get('/dashboard', [\App\Http\Controllers\OperationalDashboardController::class, 'index'])->middleware(['auth', 'verified'])->name('dashboard');
+Route::get('/dashboard/datos', [\App\Http\Controllers\OperationalDashboardController::class, 'data'])->middleware(['auth', 'verified', 'can:postal.access', 'throttle:30,1'])->name('dashboard.data');
+Route::view('/centro-de-trabajo', 'postal.workbench')->middleware(['auth', 'verified'])->name('postal.workbench');
 
 Route::middleware('auth')->group(function () {
     Route::get('/consultas', [PostalIntelligenceController::class, 'index'])->middleware('can:postal.access')->name('consultas.index');
     Route::get('/ips', [PostalIntelligenceController::class, 'ips'])->middleware('can:postal.ips')->name('postal.ips');
     Route::get('/cds', [PostalIntelligenceController::class, 'cds'])->middleware('can:postal.cds')->name('postal.cds');
+    Route::get('/cds/declaracion/imprimir', [PostalIntelligenceController::class, 'customsDeclarationPrint'])->middleware('can:postal.cds')->name('postal.cds.declaration.print');
+    Route::get('/aduana/remision', [PostalIntelligenceController::class, 'customsRemittance'])->middleware('can:postal.cds')->name('postal.customs.remittance');
+    Route::get('/aduana/remision/imprimir', [PostalIntelligenceController::class, 'customsRemittancePrint'])->middleware('can:postal.cds')->name('postal.customs.remittance.print');
+    Route::get('/aduana/remision.csv', [PostalIntelligenceController::class, 'customsRemittanceCsv'])->middleware('can:postal.cds')->name('postal.customs.remittance.csv');
     Route::get('/conjunto', [PostalIntelligenceController::class, 'index'])->middleware('can:postal.access')->name('postal.combined');
     Route::get('/operaciones-postales', [PostalIntelligenceController::class, 'activityReport'])->middleware('can:postal.ips')->name('postal.operations');
     Route::get('/operaciones-postales/reporte.csv', [PostalIntelligenceController::class, 'activityReportCsv'])->middleware('can:postal.ips')->name('postal.operations.csv');
     Route::get('/consultas/expediente.csv', [PostalIntelligenceController::class, 'packageCsv'])->middleware('can:postal.access')->name('postal.package.csv');
+    Route::get('/despachos', [PostalIntelligenceController::class, 'dispatches'])->middleware('can:postal.ips')->name('postal.dispatches');
     Route::get('/marbetes', [PostalIntelligenceController::class, 'receptacles'])->middleware('can:postal.ips')->name('postal.receptacles');
     Route::get('/marbetes/documento/{type}', [PostalIntelligenceController::class, 'receptacleDocument'])->middleware('can:postal.ips')->name('postal.receptacles.document');
     Route::get('/aduana', [PostalIntelligenceController::class, 'cds'])->middleware('can:postal.cds')->name('postal.customs');
@@ -61,6 +66,8 @@ Route::middleware('auth')->group(function () {
     Route::put('/accesos/{role}', [\App\Http\Controllers\PostalAccessController::class, 'update'])->name('postal.access.update');
     Route::get('/users', [UserController::class, 'index'])->name('users.index');
     Route::get('/users/create', [UserController::class, 'create'])->name('users.create');
+    Route::get('/users/excel', [UserController::class, 'excel'])->name('users.excel');
+    Route::get('/users/pdf', [UserController::class, 'pdf'])->name('users.pdf');
     Route::post('/users', [UserController::class, 'store'])->name('users.store');
     Route::get('/users/{user}', [UserController::class, 'show'])->name('users.show');
     Route::get('/users/{user}/edit', [UserController::class, 'edit'])->name('users.edit');
@@ -69,8 +76,6 @@ Route::middleware('auth')->group(function () {
     Route::get('users/{id}/delete', [UserController::class, 'delete'])->name('users.delete');
     Route::post('users/{id}/restore', [UserController::class, 'restore'])->name('users.restore');
     Route::put('utest/{id}/restoring', [UserController::class, 'restoring'])->name('users.restoring');
-    Route::get('users/excel', [UserController::class, 'excel'])->name('users.excel');
-    Route::get('users/pdf', [UserController::class, 'pdf'])->name('users.pdf');
     Route::put('users/{user}', [UserController::class, 'update'])->name('users.update');
 
     // Roles

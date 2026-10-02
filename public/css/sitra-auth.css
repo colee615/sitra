@@ -1,0 +1,34 @@
+:root { --sitra-yellow: #ffce32; --sitra-ink: #303329; --sitra-line: #dfe3d6; }
+body { font-family: 'Segoe UI', Arial, sans-serif !important; color: #303329; }
+.sitra-login-page { min-height: 100vh; background: #f4f5ef; display: grid; place-items: center; padding: 40px 24px; }
+.sitra-login-wrap { width: min(1120px,100%); display: grid; grid-template-columns: 1fr 1fr; background: white; border-radius: 18px; overflow: hidden; border: 1px solid #e3e5d9; box-shadow: 0 25px 65px #353c2410; }
+.sitra-login-left { padding: 60px 52px; }
+.sitra-login-logo { width: 165px; height: auto; margin-bottom: 48px; }
+.sitra-eyebrow { color: #8b7635; font-size: 11px; letter-spacing: 2px; font-weight: 700; text-transform: uppercase; margin: 0; }
+.sitra-title { color: #303329; font-size: 32px; line-height: 1.2; font-weight: 750; letter-spacing: -1px; margin: 13px 0 15px; }
+.sitra-login-intro { color: #7a8270; font-size: 13px; margin-bottom: 34px; }
+.sitra-field { margin: 20px 0; }
+.sitra-label { display: block; color: #687258; font-size: 12px; font-weight: 600; margin-bottom: 9px; }
+.sitra-input-wrap { position: relative; }.sitra-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 17px; height: 17px; color: #a1aa91; pointer-events: none; }
+.sitra-input { width: 100%; padding: 13px 14px 13px 41px; border: 1px solid #dfe4d3; border-radius: 7px; background: #fcfdf9; font-size: 14px; outline: 0; }
+.sitra-input:focus { border-color: #cfac35; box-shadow: 0 0 0 3px #ffce3230; }
+.sitra-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; font-size: 11px; color: #7f886b; margin: 24px 0; }
+.sitra-check { display: flex; align-items: center; gap: 7px; }.sitra-check input { border-color: #bbc4a7; border-radius: 3px; accent-color: #bda129; }
+.sitra-link { color: #77601b; text-decoration: none; font-weight: 600; }.sitra-link:hover { text-decoration: underline; }
+.sitra-btn, .sitra-primary-button { background: #ffce32 !important; color: #403a23 !important; border: 1px solid #ffce32; border-radius: 7px; padding: 13px 20px; font-size: 13px; font-weight: 650; text-transform: none; letter-spacing: 0; }
+.sitra-btn { width: 100%; }.sitra-btn:hover, .sitra-primary-button:hover { background: #efbd24 !important; }
+.sitra-login-right { min-height: 630px; position: relative; background: #ffce32; overflow: hidden; }
+.sitra-grid { position: absolute; inset: 0; background-image: radial-gradient(#ad8c2830 1px, transparent 1px); background-size: 20px 20px; mask-image: linear-gradient(black,transparent); }
+.sitra-copy { position: absolute; bottom: 64px; left: 46px; z-index: 2; }.sitra-brand { font-size: 18px; letter-spacing: 5px; font-weight: 750; color: #897021; margin: 0 0 18px; }
+.sitra-sub { font-size: 29px; font-weight: 700; color: #4b4226; letter-spacing: -1px; margin-bottom: 16px; }.sitra-login-story { font-size: 14px; color: #8c752e; line-height: 1.8; }
+.sitra-route-art { position: absolute; inset: 50px 40px 240px; border: 1px dashed #b899324f; border-radius: 50%; transform: rotate(-24deg); }
+.sitra-route-art::before { content: ''; position: absolute; inset: 34px; border: 1px dashed #b899324f; border-radius: 50%; }
+.route-node { position: absolute; width: 16px; height: 16px; border: 4px solid #ffec9c; background: #8a772f; border-radius: 50%; }.route-node-a { top: 20px; left: 65px; }.route-node-b { right: -4px; top: 50%; }.route-node-c { bottom: 2px; left: 28%; }
+.sitra-parcel { position: absolute; width: 170px; height: 145px; background: #fff4bf; border: 1px solid #e2bd44; box-shadow: 15px 18px 0 #d6ad3033; top: 80px; left: calc(50% - 85px); transform: rotate(12deg); border-radius: 5px; }
+.sitra-parcel::before { content: ''; position: absolute; top: 0; bottom: 0; width: 28px; left: 68px; background: #eccc65; border-inline: 1px solid #d5b752; }.sitra-parcel span { position: absolute; width: 50px; height: 40px; bottom: 20px; right: 15px; background: #fffdfa; border-radius: 2px; }.sitra-parcel i { position: absolute; width: 35px; height: 22px; bottom: 28px; right: 23px; background: repeating-linear-gradient(90deg,#9d936c 0 2px,transparent 2px 4px); }
+.sitra-guest-page { min-height: 100vh; background: #f4f5ef !important; padding: 48px 20px; }.sitra-guest-card { border: 1px solid #e3e6d8; border-top: 4px solid #ffce32; border-radius: 14px; box-shadow: 0 15px 50px #3a442012; }.sitra-guest-brand { color: #454b38; }.sitra-guest-card input { border-color: #dce2ce; border-radius: 7px; }.sitra-guest-card input:focus { border-color: #c7a232; --tw-ring-color: #f9d962; }.sitra-guest-footer { color: #868f75; }
+:is(button,a,input):focus-visible { outline: 3px solid #a68a2d; outline-offset: 3px; }
+.sitra-auth-heading { margin-bottom: 24px; }.sitra-auth-heading h1 { margin: 10px 0; font-size: 24px; font-weight: 700; letter-spacing: -.5px; }
+.sitra-error-page { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; box-sizing: border-box; background: #f4f5ef; }.sitra-error-card { max-width: 440px; text-align: center; padding: 45px; background: #fff; border: 1px solid #e0e5d3; border-top: 5px solid #ffce32; border-radius: 14px; }.sitra-error-card img { width: 150px; }.sitra-error-code { font-size: 64px; margin: 35px 0 10px; font-weight: 700; color: #d8b13a; }.sitra-error-card h1 { font-size: 24px; letter-spacing: -.6px; }.sitra-error-card > p:not(.sitra-error-code) { color: #798268; font-size: 14px; line-height: 1.8; margin-bottom: 25px; }.sitra-error-card .sitra-btn { display: inline-block; text-decoration: none; width: auto; }
+@media(max-width:900px) { .sitra-login-left { padding: 44px 32px; }.sitra-login-wrap { grid-template-columns: 1fr; max-width: 520px; }.sitra-login-right { min-height: 195px; }.sitra-copy { left: 32px; bottom: 26px; }.sitra-brand { font-size: 13px; margin-bottom: 10px; }.sitra-sub { font-size: 24px; margin: 0; }.sitra-login-story { display: none; }.sitra-route-art { display: none; }.sitra-login-logo { margin-bottom: 32px; }.sitra-title { font-size: 30px; } }
+@media(max-width:400px) { .sitra-login-page { padding: 15px; }.sitra-login-left { padding: 32px 23px; }.sitra-title { font-size: 27px; } }

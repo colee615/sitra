@@ -1,0 +1,53 @@
+.postal-logistics-flow{display:flex;align-items:stretch;gap:12px;padding:16px;margin:0 0 22px;background:#eaf0f6;border:1px solid #dbe5ee;border-radius:14px}
+.postal-flow-step{display:flex;flex:1;align-items:center;gap:13px;min-width:0;padding:13px 16px;background:#fff;border:1px solid #dfe7ef;border-radius:11px;color:#18334e;transition:border-color .15s,box-shadow .15s}
+.postal-flow-step:hover{text-decoration:none;color:#174977;border-color:#9ebbd2;box-shadow:0 4px 12px #163c5a0c}
+.postal-flow-step.is-active{background:#174977;border-color:#174977;color:#fff;box-shadow:0 5px 14px #17497726}
+.postal-flow-number{display:flex;flex:0 0 34px;width:34px;height:34px;align-items:center;justify-content:center;border-radius:50%;background:#e9f0fc;color:#215b9d;font-size:14px;font-weight:800}
+.postal-flow-step.is-active .postal-flow-number{background:#fff;color:#174977}
+.postal-flow-step strong,.postal-flow-step em{display:block}
+.postal-flow-step strong{font-size:14px;line-height:1.35}
+.postal-flow-step strong small{margin-left:4px;padding:2px 5px;border-radius:5px;background:#edf2f6;color:#526c83;font-size:10px;font-weight:800}
+.postal-flow-step.is-active strong small{background:#dceafb;color:#174977}
+.postal-flow-step em{margin-top:3px;color:#62758a;font-size:11px;font-style:normal;line-height:1.4}
+.postal-flow-step.is-active em{color:#d9e8f3}
+.postal-flow-arrow{align-self:center;color:#8296aa;font-size:13px}
+.postal-logistics-explainer{padding:18px 20px;margin:0 0 22px;background:#fff;border:1px solid #dfe7ef;border-left:4px solid #087f83;border-radius:12px;color:#526c83;font-size:13px;line-height:1.6}
+.postal-logistics-explainer strong{color:#18334e}
+.postal-logistics-overview{margin:24px 0;padding:22px;background:#f8fbfd;border:1px solid #dfe7ef;border-radius:16px}
+.postal-logistics-overview>div:first-child{margin-bottom:14px}
+.postal-logistics-overview h2{margin:6px 0;font-size:20px;color:#18334e;font-weight:750}
+.postal-logistics-overview p{margin:0;color:#62758a;font-size:13px}
+.postal-logistics-overview .postal-logistics-flow{margin:0;padding:0;background:none;border:0}
+.postal-dispatch-table{min-width:1120px}
+.postal-dispatch-count strong{color:#18334e;font-size:16px}
+.postal-dispatch-count small{display:block;color:#62758a;font-size:11px;line-height:1.45;margin-top:4px}
+.postal-dispatch-filters{padding:22px 24px}
+.postal-dispatch-filter-grid{display:grid;grid-template-columns:minmax(280px,2fr) repeat(3,minmax(145px,1fr));gap:16px;align-items:end}
+.postal-dispatch-filter-grid label{display:block;font-size:12px;font-weight:700;color:#18334e;margin-bottom:7px}
+.postal-dispatch-filter-grid input,.postal-dispatch-filter-grid select{width:100%;min-width:0;height:42px;border:1px solid #cad8e5;border-radius:9px;padding:8px 11px;background:#fbfcfe;color:#18334e}
+.postal-dispatch-filter-grid input:focus,.postal-dispatch-filter-grid select:focus{outline:3px solid #a9d5ef;border-color:#22699f}
+.postal-dispatch-filter-grid small{display:block;color:#62758a;font-size:11px;margin-top:6px}
+.postal-dispatch-input{display:flex;align-items:center;gap:9px;border:1px solid #cad8e5;border-radius:9px;padding:0 11px;background:#fbfcfe}
+.postal-dispatch-input:focus-within{outline:3px solid #a9d5ef;border-color:#22699f}
+.postal-dispatch-input i{color:#8296aa}
+.postal-dispatch-input input{border:0;background:transparent;padding-left:0;outline:0!important}
+.postal-dispatch-filter-actions{display:flex;justify-content:space-between;align-items:center;gap:15px;margin-top:18px;color:#62758a;font-size:12px}
+.postal-dispatch-filter-actions>div{display:flex;gap:8px}
+.postal-dispatch-filter-actions .btn{border-radius:9px}
+.postal-dispatch-summary{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:16px 20px}
+.postal-dispatch-summary>div{display:flex;align-items:center;gap:11px;color:#62758a;font-size:13px}
+.postal-dispatch-summary>div:first-child strong{font-size:20px;color:#18334e}
+.postal-dispatch-summary>div>i{color:#087f83}
+.postal-dispatch-results{padding:20px 22px}
+.postal-dispatch-code{color:#174977;overflow-wrap:anywhere}
+.postal-route-arrow{margin:0 8px;color:#8296aa}
+.postal-dispatch-status{display:inline-flex;margin-top:6px;padding:3px 8px;border-radius:99px;font-size:10px;font-weight:700;white-space:nowrap}
+.postal-dispatch-status.is-ok{background:#e8f6ed;color:#197244}
+.postal-dispatch-status.is-warning{background:#fff3d6;color:#805400}
+.postal-dispatch-status.is-neutral{background:#edf2f6;color:#617385}
+.postal-dispatch-pagination{display:flex;justify-content:flex-end;margin-top:16px}
+.postal-dispatch-pagination nav{display:flex;justify-content:flex-end}
+.postal-dispatch-pagination p{margin:0}
+@media(max-width:991px){.postal-dispatch-filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.postal-dispatch-filter-wide{grid-column:1/-1}}
+@media(max-width:767px){.postal-logistics-flow{flex-direction:column;gap:7px;padding:11px}.postal-flow-arrow{align-self:center;transform:rotate(90deg)}.postal-flow-step{flex:auto}}
+@media(max-width:575px){.postal-dispatch-filter-grid{grid-template-columns:1fr}.postal-dispatch-filter-wide{grid-column:auto}.postal-dispatch-filter-actions,.postal-dispatch-summary{align-items:flex-start;flex-direction:column}.postal-dispatch-filter-actions>div{width:100%}.postal-dispatch-filter-actions .btn{flex:1}.postal-dispatch-results{padding:16px}}

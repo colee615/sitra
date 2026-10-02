@@ -18,7 +18,7 @@
         </div>
 
         <div class="form-group mb-3">
-            <label for="password">Contrasena</label>
+            <label for="password">Contraseña</label>
             <input type="password" id="password" name="password" class="form-control @error('password') is-invalid @enderror" placeholder="Contrasena">
             @error('password')
                 <div class="invalid-feedback">{{ $message }}</div>
@@ -65,6 +65,7 @@
     </div>
 
     <div class="box-footer mt20">
-        <button type="submit" class="btn btn-primary">{{ __('Listo') }}</button>
+        <a class="btn btn-outline-secondary mr-2" href="{{ route('users.index') }}">Volver al personal</a>
+        <button type="submit" class="btn btn-primary">Guardar usuario</button>
     </div>
 </div>

@@ -9,6 +9,22 @@ use Spatie\Permission\Models\Role;
 
 class UserController extends Controller
 {
+    public function excel()
+    {
+        return \Maatwebsite\Excel\Facades\Excel::download(new \App\Exports\UsersExport($this->exportUsers()), 'sitra-personal.xlsx');
+    }
+
+    public function pdf()
+    {
+        return \Barryvdh\DomPDF\Facade\Pdf::loadView('user.export-pdf', ['users' => $this->exportUsers()])
+            ->setPaper('a4', 'landscape')->download('sitra-personal.pdf');
+    }
+
+    private function exportUsers()
+    {
+        return User::withTrashed()->with('roles')->orderBy('name')->get(['id', 'name', 'email', 'deleted_at']);
+    }
+
     public function index()
     {
         $users = User::withTrashed()->paginate();

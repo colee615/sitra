@@ -4,7 +4,6 @@
 .postal-task:has(input:checked) { border-color: #174977; background: #f4f8fd; }
 .postal-declaration h4 { font-size: 14px; }
 .postal-panel .table td small { overflow-wrap: anywhere; }
-.postal-section-nav a[aria-current="page"] { background: #174977; border-color: #174977; color: #fff; }
 .postal-bag-total { display: flex; align-items: center; gap: 14px; padding: 14px 20px; border: 1px solid #ffffff45; border-radius: 14px; background: #ffffff15; }
 .postal-bag-total strong { font-size: 36px; line-height: 1; color: #fff; }
 .postal-bag-total span { font-size: 13px; line-height: 1.3; color: #e3f2f5; }
@@ -20,4 +19,32 @@
 .receptacle-label-stats strong { font-size: 13px; }
 .postal-current { background: #eef6fb; border-left: 4px solid #2973a3; padding: 16px; margin-bottom: 20px; border-radius: 0 10px 10px 0; }
 .postal-current strong { display: block; margin-top: 6px; }
+.postal-search textarea { display:block; width:100%; resize:vertical; border:1px solid #cad8e5; border-radius:10px; padding:14px 16px; color:#18334e; background:#f9fbfd; font-family:inherit; font-size:15px; line-height:1.6; text-transform:uppercase; }
+.postal-search textarea:focus { outline:3px solid #a9d5ef; border-color:#22699f; }
+.postal-remittance-summary { display:grid; grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); gap:12px; margin:18px 0 24px; }
+.postal-remittance-summary>div { display:flex; align-items:baseline; gap:9px; border:1px solid #dfe7ef; border-radius:10px; padding:14px; background:#f8fafc; }
+.postal-remittance-summary strong { color:#174977; font-size:23px; }
+.postal-remittance-summary span,.postal-remittance-meta { color:#62758a; font-size:12px; }
+.postal-remittance-package { padding:20px; margin:22px 0; border:1px solid #dfe7ef; border-radius:14px; background:#fff; }
+.postal-remittance-meta { display:flex; flex-wrap:wrap; gap:8px 22px; margin:10px 0 18px; }
+.postal-remittance-meta strong { color:#18334e; }
+.postal-remittance-missing { padding:18px; border:1px solid #eed58e; border-radius:12px; background:#fff8e4; color:#72500d; }
+.postal-remittance-missing h3 { margin-top:0; }
+.postal-remittance-missing li { margin:6px 0; }
+.postal-bag-search .postal-note { display:block; margin:12px 0 0 44px; }
+.postal-manual-codes { margin-bottom:20px; }
+.postal-manual-codes>summary { padding:13px 16px; border:1px solid #dfe7ef; border-radius:10px; background:#fff; cursor:pointer; color:#174977; font-weight:650; }
+.postal-manual-codes[open]>summary { margin-bottom:14px; }
+.postal-remittance-filters { display:grid; grid-template-columns:minmax(220px,2fr) minmax(170px,1fr) auto; align-items:end; gap:10px 14px; margin:18px 0 12px; }
+.postal-remittance-filters label { margin:0; color:#526c83; font-size:12px; }
+.postal-remittance-filters input { grid-column:1; }
+.postal-remittance-filters label[for="bag-declaration-filter"] { grid-column:2; grid-row:1; }
+.postal-remittance-filters select { grid-column:2; grid-row:2; }
+.postal-remittance-filters>span { grid-column:3; grid-row:2; white-space:nowrap; }
+.postal-selection-actions { display:flex; align-items:center; flex-wrap:wrap; gap:10px; padding:12px 0; }
+.postal-selection-actions>span { margin-right:auto; color:#526c83; font-size:13px; font-weight:600; }
+.postal-remittance-table tr[hidden] { display:none; }
+.postal-remittance-table input[type="checkbox"] { width:18px; height:18px; accent-color:#174977; }
+@media(max-width:767px) { .postal-remittance-package { padding:14px; } .postal-remittance-summary>div { flex-direction:column; gap:2px; } }
+@media(max-width:767px) { .postal-remittance-filters { grid-template-columns:1fr; } .postal-remittance-filters label,.postal-remittance-filters input,.postal-remittance-filters label[for="bag-declaration-filter"],.postal-remittance-filters select,.postal-remittance-filters>span { grid-column:1; grid-row:auto; } .postal-bag-search .postal-note { margin-left:0; } .postal-selection-actions { align-items:stretch; flex-direction:column; } }
 @media print { .main-sidebar, .main-header, .postal-tabs, .postal-search, .postal-actions,.print-toolbar { display: none !important; } .content-wrapper { margin: 0 !important; } .receptacle-label { max-width: 110mm; margin: 0 auto; padding: 5mm; } }

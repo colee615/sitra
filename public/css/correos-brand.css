@@ -1,0 +1,126 @@
+/* Palette sampled from the original Correos de Bolivia logo. */
+:root {
+    --correos-blue: #1a549a;
+    --correos-blue-dark: #124078;
+    --correos-yellow: #fecb34;
+    --correos-yellow-soft: #fff5d3;
+    --correos-blue-soft: #edf3fb;
+    --sitra-accent: var(--correos-blue);
+    --sitra-accent-dark: var(--correos-blue-dark);
+    --sitra-sidebar: var(--correos-blue-dark);
+    --postal-blue: var(--correos-blue);
+    --postal-teal: var(--correos-blue);
+}
+
+.main-header.navbar {
+    background: var(--correos-yellow) !important;
+    border-bottom-color: #edbc2a !important;
+}
+.main-header.navbar .nav-link { color: var(--correos-blue-dark) !important; }
+.main-sidebar {
+    background: linear-gradient(180deg, var(--correos-blue-dark), #102e53) !important;
+}
+.main-sidebar .brand-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 57px;
+    padding: 7px 12px;
+    background: var(--correos-yellow) !important;
+    border-bottom-color: #edbc2a !important;
+}
+.main-sidebar .brand-link .brand-image {
+    float: none;
+    width: 125px;
+    max-width: 100%;
+    height: auto;
+    max-height: 42px;
+    margin: 0;
+    object-fit: contain;
+    border-radius: 0;
+    opacity: 1 !important;
+    box-shadow: none;
+}
+.main-sidebar .brand-link .brand-text {
+    color: var(--correos-blue-dark) !important;
+    font-size: 17px;
+    line-height: 1.2;
+}
+.main-sidebar .brand-text small { font-size: 10px; margin-top: 3px; }
+.main-sidebar .nav-sidebar,
+.main-sidebar .nav-sidebar .nav-item { width: 100%; }
+.main-sidebar .nav-sidebar > .nav-item > .nav-link { width: calc(100% - 16px); }
+.main-sidebar .nav-sidebar .nav-treeview > .nav-item > .nav-link { width: 100%; }
+.main-sidebar .sidebar > form .input-group { flex-wrap: nowrap; width: 100%; }
+.main-sidebar .sidebar > form .form-control-sidebar { min-width: 0; }
+.main-sidebar .nav-sidebar .nav-link.active {
+    background: var(--correos-yellow) !important;
+    color: var(--correos-blue-dark) !important;
+    box-shadow: inset 3px 0 0 var(--correos-blue);
+}
+.main-sidebar .nav-sidebar .nav-link.active .nav-icon { color: var(--correos-blue-dark) !important; }
+.main-sidebar .nav-sidebar .nav-treeview > .nav-item > .nav-link.active {
+    background: var(--correos-yellow-soft) !important;
+    color: var(--correos-blue-dark) !important;
+}
+.main-sidebar .nav-sidebar .nav-treeview > .nav-item > .nav-link:hover {
+    background: #ffffff15 !important;
+}
+.main-sidebar .nav-sidebar > .nav-header { color: #c7d8ef !important; }
+.main-sidebar .form-control-sidebar { background: #ffffff12; color: #fff; border-color: #ffffff45; }
+.main-sidebar .form-control-sidebar::placeholder { color: #d5e1f1; }
+.main-sidebar .btn-sidebar { background: #ffffff12; color: #fff; border-color: #ffffff45; }
+.main-header .user-image,
+.navbar-nav .user-header img {
+    object-fit: contain;
+    background: var(--correos-yellow);
+    border-radius: 6px !important;
+}
+.sidebar-collapse:not(.sidebar-open) .main-sidebar .brand-link { justify-content: center; }
+.sidebar-collapse:not(.sidebar-open) .main-sidebar:not(:hover) .brand-image { width: 50px; }
+.sidebar-collapse .main-sidebar:hover .brand-image { width: 125px; }
+
+.btn-primary { color: #fff !important; }
+.btn-outline-primary { color: var(--correos-blue); border-color: var(--correos-blue); }
+.btn-outline-primary:hover,
+.btn-outline-primary:active { background: var(--correos-blue); border-color: var(--correos-blue); color: #fff; }
+.page-item.active .page-link { background: var(--correos-blue); border-color: var(--correos-blue); }
+.page-link { color: var(--correos-blue); }
+.postal-workspace .postal-hero,
+.postal-workspace .postal-overview {
+    background: linear-gradient(115deg, var(--correos-blue-dark), var(--correos-blue));
+    border-bottom: 4px solid var(--correos-yellow);
+}
+.postal-workspace .postal-hero .postal-eyebrow,
+.postal-workspace .postal-overview .postal-eyebrow { color: var(--correos-yellow); }
+.postal-workspace .postal-hero-icon { color: var(--correos-yellow); }
+.postal-workspace .postal-task-icon { background: var(--correos-blue-soft); color: var(--correos-blue); }
+.postal-workspace .postal-task-icon.teal,
+.postal-workspace .postal-task-icon.gold { background: var(--correos-yellow-soft); color: var(--correos-blue-dark); }
+.postal-workspace .postal-section-heading i { color: var(--correos-blue); }
+.postal-workspace .postal-current { border-left-color: var(--correos-yellow); background: var(--correos-blue-soft); }
+.postal-workspace .postal-response { border-left-color: var(--correos-blue); background: var(--correos-blue-soft); }
+.postal-workspace .postal-flow-step.is-active { background: var(--correos-blue); border-color: var(--correos-blue); }
+.postal-workspace .postal-flow-step.is-active .postal-flow-number { background: var(--correos-yellow); color: var(--correos-blue-dark); }
+.postal-workspace .postal-flow-step.is-active strong small { background: var(--correos-yellow-soft); color: var(--correos-blue-dark); }
+.postal-workspace .postal-flow-number { background: var(--correos-blue-soft); color: var(--correos-blue); }
+.postal-workspace .postal-logistics-explainer { border-left-color: var(--correos-yellow); }
+.postal-workspace input[type="checkbox"] { accent-color: var(--correos-blue); }
+.postal-workspace .postal-search input:focus,
+.postal-workspace .postal-search textarea:focus { outline-color: #fecb3470; border-color: var(--correos-blue); }
+
+.sitra-guest-page {
+    background: radial-gradient(circle at 15% 15%, #fecb3430, transparent 40%), #f3f6fb;
+}
+.sitra-guest-brand { gap: 15px; flex-wrap: wrap; justify-content: center; color: var(--correos-blue-dark); }
+.sitra-guest-brand-logo { width: 160px; height: auto; border-radius: 8px; }
+.sitra-guest-card { border-top: 4px solid var(--correos-yellow); }
+.sitra-primary-button { background: var(--correos-blue); color: #fff; }
+.sitra-primary-button:hover,
+.sitra-primary-button:focus { background: var(--correos-blue-dark); }
+.sitra-account-nav { background: var(--correos-yellow); border-bottom-color: #edbc2a; }
+
+@media print {
+    .postal-expedient-nav { display: none !important; }
+    .postal-subsection:not([open]) > :not(summary) { display: block !important; }
+}
