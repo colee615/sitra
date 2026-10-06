@@ -31,6 +31,9 @@ Route::middleware('auth')->prefix('operaciones')->group(function () {
 });
 
 Route::get('/dashboard', [\App\Http\Controllers\OperationalDashboardController::class, 'index'])->middleware(['auth', 'verified'])->name('dashboard');
+Route::get('/dashboard/conjunto', [\App\Http\Controllers\OperationalDashboardController::class, 'combined'])->middleware(['auth', 'verified', 'can:postal.access'])->name('dashboard.combined');
+Route::get('/dashboard/ips', [\App\Http\Controllers\OperationalDashboardController::class, 'ips'])->middleware(['auth', 'verified', 'can:postal.ips'])->name('dashboard.ips');
+Route::get('/dashboard/cds', [\App\Http\Controllers\OperationalDashboardController::class, 'cds'])->middleware(['auth', 'verified', 'can:postal.cds'])->name('dashboard.cds');
 Route::get('/dashboard/datos', [\App\Http\Controllers\OperationalDashboardController::class, 'data'])->middleware(['auth', 'verified', 'can:postal.access', 'throttle:30,1'])->name('dashboard.data');
 Route::view('/centro-de-trabajo', 'postal.workbench')->middleware(['auth', 'verified'])->name('postal.workbench');
 

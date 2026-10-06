@@ -312,10 +312,11 @@ return [
         ],
         ['header' => 'SITRA POSTAL'],
         [
-            'text' => 'Panorama operativo',
-            'url' => '/dashboard',
+            'text' => 'Panel IPS + CDS',
+            'url' => '/dashboard/conjunto',
             'icon' => 'fas fa-chart-pie',
-            'active' => ['dashboard', 'dashboard/*'],
+            'can' => 'postal.access',
+            'active' => ['dashboard/conjunto'],
         ],
         [
             'text' => 'Gestión diaria',

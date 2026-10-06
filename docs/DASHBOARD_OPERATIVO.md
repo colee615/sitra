@@ -1,6 +1,6 @@
 # Dashboard operativo y diseño de SITRA
 
-El inicio `/dashboard` ofrece resumen ejecutivo y detalle operativo. `/centro-de-trabajo` conserva los accesos a expedientes, IPS, CDS, despachos, sacas, remisiones y operación en oficina. El diseño compartido se carga al final de `resources/views/vendor/adminlte/page.blade.php`; autenticación usa `sitra-auth.css`. Los formatos postales de impresión conservan sus dimensiones y contenido.
+El inicio `/dashboard` conserva el panorama operativo combinado. `/dashboard/ips` y `/dashboard/cds` presentan dashboards independientes con permiso específico por fuente. `/centro-de-trabajo` conserva los accesos a expedientes, IPS, CDS, despachos, sacas, remisiones y operación en oficina. El diseño compartido se carga al final de `resources/views/vendor/adminlte/page.blade.php`; autenticación usa `sitra-auth.css`. Los formatos postales de impresión conservan sus dimensiones y contenido.
 
 ## Fuentes y permisos
 

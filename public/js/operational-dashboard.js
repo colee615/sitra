@@ -8,6 +8,7 @@
     const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const states = { delivered: 'Entregado', transit: 'En tránsito / reparto', customs: 'En aduana', observed: 'Retenido / intento fallido', pending: 'En oficina / pendiente', closed: 'Operación cerrada', other: 'Otros movimientos' };
     const today = root.dataset.today;
+    const scope = root.dataset.scope || 'all';
     const initialQuery = new URLSearchParams(location.search);
     let result = null, controller = null, requestId = 0;
     const text = (id, value) => { if ($(id)) $(id).textContent = value; };
@@ -26,6 +27,21 @@
             if (selected && !Array.from(select.options).some(option => option.value === selected)) select.add(new Option(selected, selected));
             select.value = selected;
         });
+    }
+
+    function fillCdsServices(rows) {
+        const select = $('cds-service');
+        if (!select) return;
+        const selected = select.value;
+        const placeholder = select.options[0]?.text || 'Todos los servicios';
+        select.replaceChildren(new Option(placeholder, ''));
+        rows.forEach(row => {
+            if (row.code == null || String(row.code).trim() === '') return;
+            const code = String(row.code).trim();
+            select.add(new Option(code, code));
+        });
+        if (selected && !Array.from(select.options).some(option => option.value === selected)) select.add(new Option(selected, selected));
+        select.value = selected;
     }
 
     function ranking(id, rows, filter = null) {
@@ -79,6 +95,43 @@
         text('trend-total', `${number(result.ips.totals.entries)} entradas · ${number(result.ips.totals.exits)} salidas`);
     }
 
+    function cdsTrend() {
+        if (!result || result.cds.status !== 'ok' || !$('cds-trend-chart')) return;
+        const group = $('cds-trend-group').value;
+        const axisDate = date => group === 'month'
+            ? new Intl.DateTimeFormat('es-BO', { month: 'short', year: '2-digit', timeZone: 'UTC' }).format(new Date(date + 'T12:00:00Z'))
+            : dateLabel(date);
+        const buckets = new Map();
+        (result.cds.timeline || []).forEach(row => {
+            const key = group === 'month' ? row.date.slice(0, 7) + '-01' : row.date;
+            if (!buckets.has(key)) buckets.set(key, { date: key, objects: 0, declarations: 0, responses: 0 });
+            const bucket = buckets.get(key);
+            for (const metric of ['objects', 'declarations', 'responses']) bucket[metric] += Number(row[metric]);
+        });
+        const rows = [...buckets.values()];
+        const max = Math.max(1, ...rows.flatMap(row => [row.objects, row.declarations, row.responses]));
+        const w = 640, h = 230, left = 46, right = 14, top = 18, bottom = 34;
+        const x = i => left + (rows.length === 1 ? .5 : i / (rows.length - 1)) * (w - left - right);
+        const y = n => h - bottom - n / max * (h - top - bottom);
+        let svg = `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Objetos, declaraciones y respuestas CDS por ${group === 'day' ? 'día' : 'mes'} de fecha postal.">`;
+        for (let i = 0; i < 5; i++) { const n = max * i / 4; svg += `<line x1="${left}" y1="${y(n)}" x2="${w - right}" y2="${y(n)}" stroke="#e8edf2" stroke-dasharray="3 4"/><text x="${left - 10}" y="${y(n) + 3}" text-anchor="end">${number(n)}</text>`; }
+        for (const [key, color] of [['objects', '#0a3766'], ['declarations', '#dfb425'], ['responses', '#16878f']]) {
+            svg += `<polyline points="${rows.map((row, i) => `${x(i)},${y(row[key])}`).join(' ')}" fill="none" stroke="${color}" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/>`;
+            rows.forEach((row, i) => {
+                const label = `${dateLabel(row.date)} · Objetos postales: ${number(row.objects)} · Declaraciones: ${number(row.declarations)} · Respuestas asociadas: ${number(row.responses)}`;
+                svg += `<circle class="dashboard-plot-point" tabindex="0" role="img" aria-label="${escape(label)}" data-tooltip="${escape(label)}" cx="${x(i)}" cy="${y(row[key])}" r="${rows.length > 40 ? 2.2 : 3.8}" fill="${color}" stroke="white" stroke-width="1.5"><title>${escape(label)}</title></circle>`;
+            });
+        }
+        const step = Math.max(1, Math.ceil(rows.length / 7));
+        rows.forEach((row, i) => { if (i % step === 0 || i === rows.length - 1) svg += `<text x="${x(i)}" y="${h - 8}" text-anchor="middle">${escape(axisDate(row.date))}</text>`; });
+        svg += '</svg><div class="dashboard-tooltip" role="status">Pasa sobre un punto para ver el detalle del periodo.</div>';
+        $('cds-trend-chart').innerHTML = svg;
+        $('cds-trend-chart').querySelectorAll('[data-tooltip]').forEach(point => {
+            const show = () => { $('cds-trend-chart').querySelector('.dashboard-tooltip').textContent = point.dataset.tooltip; };
+            point.addEventListener('focus', show); point.addEventListener('mouseenter', show); point.addEventListener('click', show);
+        });
+    }
+
     function table(id, rows, columns) {
         if (!$(id)) return;
         $(id).innerHTML = rows.length ? rows.map(row => `<tr>${columns.map(column => `<td>${column(row)}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${columns.length}">${empty}</td></tr>`;
@@ -114,18 +167,25 @@
             trend();
         }
         const cds = data.cds;
+        fillCdsServices(cds.services || []);
         if ($('cds-metrics')) {
             $('cds-metrics').hidden = cds.status !== 'ok'; $('cds-states').hidden = cds.status !== 'ok';
+            ['cds-chart-grid', 'cds-breakdowns', 'cds-daily-panel'].forEach(id => { if ($(id)) $(id).hidden = cds.status !== 'ok'; });
             text('cds-status', cds.status === 'ok' ? `CDS consultado · ${new Date(cds.generated_at).toLocaleTimeString('es-BO', { timeZone: 'America/La_Paz' })}` : cds.message || (cds.status === 'disabled' ? 'La conexión CDS está deshabilitada en la configuración.' : 'CDS no disponible.'));
             if (cds.status === 'ok') {
                 root.querySelectorAll('[data-cds]').forEach(node => node.textContent = number(cds[node.dataset.cds]));
                 ranking('cds-states', cds.states);
+                ranking('cds-services', cds.services || []);
+                ranking('cds-origins', cds.origins || []);
+                ranking('cds-destinations', cds.destinations || []);
+                cdsTrend();
+                table('cds-daily-table', cds.timeline || [], [row => escape(row.date), ...['objects', 'declarations', 'responses'].map(key => row => number(row[key]))]);
             }
         }
         const ready = [['IPS', ips], ['CDS', cds]].filter(([, source]) => source.status === 'ok');
         const timestamp = ready.length ? new Date(ready[0][1].generated_at).toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/La_Paz' }) : '';
         text('dashboard-status', ready.length ? `${ready.map(([name]) => name).join(' + ')} · Datos consultados a las ${timestamp} · Bolivia` : 'No hay fuentes disponibles para estos filtros.');
-        text('filter-summary', `${data.filters.from} — ${data.filters.to} · Hora de Bolivia`);
+        text('filter-summary', `${data.filters.from} — ${data.filters.to} · ${scope === 'cds' ? 'Fecha postal CDS · zona horaria no informada' : 'Hora de Bolivia'}`);
         $('dashboard-export').disabled = !ready.length;
     }
 
@@ -133,8 +193,9 @@
         if (!form.reportValidity()) return;
         controller?.abort(); controller = new AbortController(); const currentId = ++requestId;
         $('dashboard-results').setAttribute('aria-busy', 'true'); $('dashboard-error').hidden = true; $('dashboard-export').disabled = true;
-        text('dashboard-status', 'Consultando los indicadores de IPS y CDS…');
+        text('dashboard-status', scope === 'cds' ? 'Consultando los indicadores de CDS…' : scope === 'ips' ? 'Consultando los indicadores de IPS…' : 'Consultando los indicadores de IPS y CDS…');
         const params = new URLSearchParams();
+        params.set('scope', scope);
         new FormData(form).forEach((value, key) => { if (value) params.set(key, value); });
         try {
             const response = await fetch(`${root.dataset.url}?${params}`, { headers: { Accept: 'application/json' }, signal: controller.signal, credentials: 'same-origin' });
@@ -183,9 +244,10 @@
     form.addEventListener('change', event => {
         if (['from', 'to'].includes(event.target.name)) root.querySelectorAll('[data-period]').forEach(button => { button.classList.remove('is-active'); button.setAttribute('aria-pressed', 'false'); });
     });
-    $('filters-reset').addEventListener('click', () => { form.reset(); preset('month'); form.querySelectorAll('select').forEach(select => select.value = ''); load(); });
+    $('filters-reset').addEventListener('click', () => { form.reset(); preset(scope === 'cds' ? 'year' : 'month'); form.querySelectorAll('select').forEach(select => select.value = ''); load(); });
     $('dashboard-refresh').addEventListener('click', load);
     $('trend-group')?.addEventListener('change', trend);
+    $('cds-trend-group')?.addEventListener('change', cdsTrend);
     $('advanced-toggle')?.addEventListener('click', () => { const panel = $('advanced-filters'); panel.hidden = !panel.hidden; $('advanced-toggle').setAttribute('aria-expanded', String(!panel.hidden)); });
     root.addEventListener('click', event => {
         const button = event.target.closest('[data-filter]'); if (!button) return;
@@ -207,10 +269,12 @@
             ips.timeline.forEach(row => rows.push([row.date, row.packages, row.entries, row.exits, row.deliveries, row.movements]));
             for (const [label, data] of [['Servicios', ips.services], ['Oficinas (movimientos)', ips.offices], ['Origen', ips.geography.origin], ['Destino', ips.geography.destination], ['Tipo de envío', ips.types], ['Eventos', ips.frequent]]) { rows.push([], [label, 'Total']); data.forEach(row => rows.push([row.name || row.code || 'Sin dato', row.total])); }
         }
-        if (result.cds.status === 'ok') { rows.push([], ['Fuente', 'CDS', 'Consultado', result.cds.generated_at], ['Fecha', 'Fecha postal CDS; zona horaria no informada']); for (const [key, label] of Object.entries({ objects: 'Objetos', declarations: 'Declaraciones', responses: 'Respuestas', withoutResponse: 'Objetos sin respuesta' })) rows.push([label, result.cds[key]]); }
+        if (result.cds.status === 'ok') { rows.push([], ['Fuente', 'CDS', 'Consultado', result.cds.generated_at], ['Fecha', 'Fecha postal CDS; zona horaria no informada']); for (const [key, label] of Object.entries({ objects: 'Objetos', declarations: 'Declaraciones', responses: 'Respuestas', withoutResponse: 'Objetos sin respuesta' })) rows.push([label, result.cds[key]]); rows.push([], ['Fecha postal', 'Objetos', 'Declaraciones', 'Respuestas']); result.cds.timeline.forEach(row => rows.push([row.date, row.objects, row.declarations, row.responses])); }
         rows.push([], ['Notas', 'Recepciones, despachos y entregas no se suman. Los envíos únicos diarios no se suman para obtener los del periodo. El estado es el último evento operativo del periodo y oficina.']);
         const csv = '\uFEFF' + rows.map(row => row.map(value => { let v = String(value ?? ''); if (/^[=+\-@\t\r\n]/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"'; }).join(';')).join('\r\n');
-        const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' })); const a = document.createElement('a'); a.href = url; a.download = `sitra-resumen-${result.filters.from}-${result.filters.to}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+        const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' })); const a = document.createElement('a'); a.href = url; a.download = scope === 'all'
+            ? `sitra-resumen-${result.filters.from}-${result.filters.to}.csv`
+            : `sitra-dashboard-${scope}-${result.filters.from}-${result.filters.to}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     });
     initialQuery.forEach((value, key) => {
         const input = form.elements.namedItem(key); if (!input) return;
@@ -219,5 +283,6 @@
     });
     if (['state', 'origin', 'destination', 'type'].some(key => initialQuery.get(key)) && $('advanced-filters')) { $('advanced-filters').hidden = false; $('advanced-toggle').setAttribute('aria-expanded', 'true'); }
     if (initialQuery.has('from') || initialQuery.has('to')) root.querySelectorAll('[data-period]').forEach(button => { button.classList.remove('is-active'); button.setAttribute('aria-pressed', 'false'); });
+    if (scope === 'cds' && !initialQuery.has('from') && !initialQuery.has('to')) preset('year');
     load();
 })();
