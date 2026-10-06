@@ -261,12 +261,23 @@
         if (onSelect) container.querySelectorAll('[data-donut-code]').forEach(button => button.addEventListener('click', () => onSelect(button.dataset.donutCode)));
     }
 
-    function renderTable(rows, fields) {
-        const head = $('volume-table-head'), body = $('volume-table-body');
-        head.innerHTML = `<tr>${fields.map(field => `<th scope="col">${escape(field.label)}</th>`).join('')}</tr>`;
-        body.innerHTML = rows.length ? rows.map(row => `<tr>${fields.map(field => `<td>${escape(field.format ? field.format(row[field.key]) : number(row[field.key]))}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${fields.length}" class="text-center text-muted py-4">Sin registros para mostrar</td></tr>`;
+    function renderTable(rows, fields, headId = 'volume-table-head', bodyId = 'volume-table-body', exportable = true) {
+        const head = $(headId), body = $(bodyId);
+        const formatCell = (field, row) => {
+            const value = row[field.key];
+            if (field.format) return field.format(value);
+            return field.key === 'date' ? (value ? String(value) : '—') : number(value);
+        };
+        head.innerHTML = `<tr>${fields.map(field => `<th scope="col" title="${escape(field.hint || field.label)}"><span class="volume-table-heading"><i class="${escape(field.icon || 'fas fa-chart-bar')}" aria-hidden="true"></i><span>${escape(field.label)}</span></span></th>`).join('')}</tr>`;
+        body.innerHTML = rows.length ? rows.map(row => `<tr>${fields.map(field => {
+            const value = escape(formatCell(field, row));
+            if (field.type === 'date') return `<td><span class="volume-table-date"><i class="${escape(field.icon || 'fas fa-calendar-day')}" aria-hidden="true"></i>${value}</span></td>`;
+            if (field.type === 'metric') return `<td><span class="volume-table-value ${escape(field.tone || '')}"><i aria-hidden="true"></i><strong>${value}</strong></span></td>`;
+            return `<td>${value}</td>`;
+        }).join('')}</tr>`).join('') : `<tr><td colspan="${fields.length}" class="text-center text-muted py-4"><i class="fas fa-inbox mr-1" aria-hidden="true"></i> Sin actividad para el periodo seleccionado</td></tr>`;
+        if (!exportable) return;
         exportHeaders = fields.map(field => field.label);
-        exportRows = rows.map(row => fields.map(field => field.format ? field.format(row[field.key]) : number(row[field.key])));
+        exportRows = rows.map(row => fields.map(field => formatCell(field, row)));
         $('volume-export').disabled = !rows.length;
     }
 
@@ -301,10 +312,16 @@
         return new Intl.DateTimeFormat('es-BO', { month: 'short', year: '2-digit', timeZone: 'UTC' }).format(date).replace('.', '');
     }
     function updateTrendRange(period) {
-        if (mode !== 'daily') return;
         const multipleDays = period.from !== period.to;
-        $('trend-title').textContent = multipleDays ? 'Tendencia diaria' : 'Tendencia horaria';
-        $('trend-subtitle').textContent = multipleDays ? 'Volumen postal agrupado por día' : 'Volumen por hora · hora de Bolivia';
+        const source = scope === 'cds' ? 'aduanera' : 'postal';
+        if (mode === 'monthly') {
+            $('trend-title').textContent = `Tendencia mensual ${source}`;
+            $('trend-subtitle').textContent = 'Volumen agrupado por mes del periodo';
+            $('trend-caption').textContent = 'Por mes';
+            return;
+        }
+        $('trend-title').textContent = multipleDays ? `Tendencia diaria ${source}` : `Tendencia horaria ${source}`;
+        $('trend-subtitle').textContent = multipleDays ? 'Volumen agrupado por día' : 'Volumen por hora · hora de Bolivia';
         $('trend-caption').textContent = multipleDays ? 'Por día' : 'Por hora';
     }
     function formattedPeriod(period) {
@@ -321,7 +338,6 @@
             ['received', current.totals?.received, previous.totals?.received],
             ['returns', current.returns, current.previous_returns],
             ['transit', current.states?.transit || 0, current.previous_states?.transit || 0],
-            [scope === 'all' ? 'no_imtatt' : 'no_product', scope === 'all' ? null : current.no_product, scope === 'all' ? null : current.previous_no_product],
         ] : [
             ['objects', current.objects, previous.objects],
             ['declaredObjects', current.declaredObjects, previous.declaredObjects],
@@ -333,13 +349,8 @@
         values.forEach(([key, value, oldValue]) => {
             const output = document.querySelector(`[data-kpi="${key}"]`);
             const change = document.querySelector(`[data-change="${key}"]`);
-            if (output) output.textContent = key === 'no_imtatt' ? 'N/D' : number(value);
+            if (output) output.textContent = number(value);
             if (!change) return;
-            if (key === 'no_imtatt') {
-                change.textContent = 'No disponible en IPS/CDS';
-                change.className = '';
-                return;
-            }
             const now = Number(value) || 0, before = Number(oldValue) || 0;
             if (!Number.isFinite(Number(oldValue)) || Number(oldValue) === undefined || (before === 0 && now === 0)) {
                 change.textContent = 'Sin actividad en la comparación';
@@ -352,7 +363,7 @@
                 return;
             }
             const pct = (now - before) / before * 100;
-            const lowerIsBetter = ['returns', 'no_product', 'withoutResponse'].includes(key);
+            const lowerIsBetter = ['returns', 'withoutResponse'].includes(key);
             const favorable = lowerIsBetter ? pct < 0 : pct > 0;
             const comparisonLabel = mode === 'monthly' ? 'vs mismo periodo año anterior' : 'vs periodo anterior';
             change.className = favorable ? 'is-up' : (pct === 0 ? '' : 'is-down');
@@ -378,11 +389,41 @@
         const messages = { forbidden: 'Tu cuenta no tiene permiso para consultar CDS.', disabled: 'CDS no está habilitado en este entorno.', unavailable: 'CDS no está disponible en este momento.' };
         document.querySelectorAll('[data-cds-kpi]').forEach(output => {
             const key = output.dataset.cdsKpi;
-            output.textContent = status === 'ok' ? number(source[key]) : 'N/D';
+            const value = Number(source?.[key]) || 0;
+            output.textContent = status === 'ok' ? number(value) : 'N/D';
             const note = document.querySelector(`[data-cds-change="${key}"]`);
-            if (note) note.textContent = status === 'ok' ? 'Objetos postales CDS' : (messages[status] || 'Fuente no disponible');
+            if (!note) return;
+            if (status !== 'ok') {
+                note.textContent = messages[status] || 'Fuente no disponible';
+                note.className = '';
+                return;
+            }
+            const oldValue = source.previous?.[key];
+            if (oldValue === null || oldValue === undefined || !Number.isFinite(Number(oldValue))) {
+                note.textContent = 'Sin comparación disponible';
+                note.className = '';
+            } else if (Number(oldValue) === 0 && value === 0) {
+                note.textContent = 'Sin actividad en la comparación';
+                note.className = '';
+            } else if (Number(oldValue) === 0) {
+                note.textContent = mode === 'monthly' ? 'Nuevo vs mismo periodo año anterior' : 'Nuevo en el periodo';
+                note.className = 'is-up';
+            } else {
+                const change = (value - Number(oldValue)) / Number(oldValue) * 100;
+                const lowerIsBetter = key === 'withoutResponse';
+                const favorable = lowerIsBetter ? change < 0 : change > 0;
+                note.className = favorable ? 'is-up' : (change === 0 ? '' : 'is-down');
+                const comparison = mode === 'monthly' ? 'vs mismo periodo año anterior' : 'vs periodo anterior';
+                note.textContent = `${change > 0 ? '▲' : change < 0 ? '▼' : '•'} ${percent(Math.abs(change))}% ${comparison}`;
+            }
         });
         if (status !== 'ok') {
+            const tableHead = $('cds-volume-table-head');
+            const tableBody = $('cds-volume-table-body');
+            if (tableHead && tableBody) {
+                tableHead.innerHTML = '<tr><th scope="col">Fecha</th><th scope="col">Objetos postales</th><th scope="col">Declaraciones</th><th scope="col">Respuestas</th></tr>';
+                tableBody.innerHTML = `<tr><td colspan="4" class="text-center text-muted py-4">${escape(messages[status] || 'No hay datos CDS disponibles')}</td></tr>`;
+            }
             ['cds-volume-trend', 'cds-volume-states', 'cds-volume-origins', 'cds-volume-destinations'].forEach(id => {
                 const element = $(id);
                 if (element) element.innerHTML = svgEmpty(messages[status] || 'No hay datos CDS disponibles');
@@ -392,6 +433,23 @@
 
         const multipleDays = fromInput.value !== toInput.value;
         const rows = mode === 'monthly' ? source.monthly || [] : (multipleDays ? source.timeline || [] : source.hourly || []);
+        const detailRows = mode === 'monthly' ? source.monthly || [] : source.timeline || [];
+        renderTable(detailRows, mode === 'monthly' ? [
+            { key: 'date', label: 'Mes', type: 'date', icon: 'fas fa-calendar-alt', hint: 'Mes de la fecha postal', format: value => String(value || '').slice(0, 7) },
+            { key: 'objects', label: 'Objetos postales', type: 'metric', tone: 'is-navy', icon: 'fas fa-box', hint: 'Objetos postales contabilizados en el mes' },
+            { key: 'declarations', label: 'Declaraciones', type: 'metric', tone: 'is-teal', icon: 'fas fa-file-signature', hint: 'Registros de declaración aduanera' },
+            { key: 'responses', label: 'Respuestas', type: 'metric', tone: 'is-blue', icon: 'fas fa-reply', hint: 'Registros de respuesta asociados' },
+        ] : [
+            { key: 'date', label: 'Fecha', type: 'date', icon: 'fas fa-calendar-day', hint: 'Fecha postal del objeto' },
+            { key: 'objects', label: 'Objetos postales', type: 'metric', tone: 'is-navy', icon: 'fas fa-box', hint: 'Objetos postales contabilizados en la fecha' },
+            { key: 'declarations', label: 'Declaraciones', type: 'metric', tone: 'is-teal', icon: 'fas fa-file-signature', hint: 'Registros de declaración aduanera' },
+            { key: 'responses', label: 'Respuestas', type: 'metric', tone: 'is-blue', icon: 'fas fa-reply', hint: 'Registros de respuesta asociados' },
+        ], 'cds-volume-table-head', 'cds-volume-table-body', false);
+        $('cds-volume-table-title').textContent = mode === 'monthly' ? 'Actividad CDS por mes' : 'Actividad CDS por fecha';
+        $('cds-volume-table-caption').textContent = mode === 'monthly'
+            ? 'Los indicadores resumen el rango completo; la tabla desglosa cada mes.'
+            : 'Objetos, declaraciones y respuestas organizados por fecha postal.';
+        $('cds-volume-table-grain').textContent = mode === 'monthly' ? 'Cada fila es un mes.' : 'Cada fila es una fecha postal.';
         const label = row => {
             if (mode === 'daily' && !multipleDays) return `${String(row.hour).padStart(2, '0')}:00`;
             const date = new Date(`${row.date}T00:00:00Z`);
@@ -419,10 +477,12 @@
             const messages = { unavailable: 'La fuente está temporalmente fuera de servicio. Intenta actualizar en unos minutos.', disabled: 'El reporte CDS no está habilitado en este entorno.', unsupported: current?.message || 'El filtro seleccionado no está disponible para esta fuente.', forbidden: 'Tu cuenta no tiene permiso para consultar este reporte.' };
             if (scope === 'all' && data.cds?.status === 'ok') {
                 $('volume-primary-content').hidden = true;
+                $('volume-analytics').hidden = true;
                 $('volume-error').textContent = `IPS: ${messages[current?.status] || 'no disponible'}`;
                 $('volume-error').hidden = false;
                 $('volume-results').hidden = false;
                 $('volume-results').setAttribute('aria-busy', 'false');
+                updateCurrentSection();
                 renderCombinedCds(data.cds);
                 prepareCombinedExport(null, data.cds, mode === 'daily' && fromInput.value !== toInput.value);
                 setStatus('CDS consultado · IPS no disponible');
@@ -435,9 +495,11 @@
             return;
         }
         $('volume-primary-content').hidden = false;
+        $('volume-analytics').hidden = false;
         $('volume-error').hidden = true;
         $('volume-results').hidden = false;
         $('volume-results').setAttribute('aria-busy', 'false');
+        updateCurrentSection();
         const previous = isPostalVolume ? { totals: current.previous } : (current.previous || {});
         renderKpis(current, previous, data);
         const multipleDays = mode === 'daily' && fromInput.value !== toInput.value;
@@ -520,24 +582,40 @@
         if (isPostalVolume) {
             const rows = mode === 'daily' ? current.timeline || [] : current.monthly || [];
             renderTable(rows, mode === 'daily' ? [
-                { key: 'date', label: 'Fecha' }, { key: 'packages', label: 'Envíos únicos' },
-                { key: 'received', label: 'Recibidos' }, { key: 'dispatched', label: 'Despachados' },
-                { key: 'movements', label: 'Movimientos' },
+                { key: 'date', label: 'Fecha', type: 'date', icon: 'fas fa-calendar-day', hint: 'Fecha local de Bolivia' },
+                { key: 'packages', label: 'Envíos únicos', type: 'metric', tone: 'is-navy', icon: 'fas fa-box', hint: 'Identificadores postales distintos con actividad' },
+                { key: 'received', label: 'Recibidos', type: 'metric', tone: 'is-teal', icon: 'fas fa-inbox', hint: 'Envíos con destino asociado a Bolivia' },
+                { key: 'dispatched', label: 'Despachados', type: 'metric', tone: 'is-blue', icon: 'fas fa-paper-plane', hint: 'Envíos con origen asociado a Bolivia' },
+                { key: 'movements', label: 'Movimientos', type: 'metric', tone: 'is-muted', icon: 'fas fa-route', hint: 'Eventos de seguimiento; no equivale a envíos únicos' },
             ] : [
-                { key: 'date', label: 'Mes' }, { key: 'items', label: 'Envíos únicos' },
-                { key: 'received', label: 'Recibidos' }, { key: 'dispatched', label: 'Despachados' },
+                { key: 'date', label: 'Mes', type: 'date', icon: 'fas fa-calendar-alt', hint: 'Mes local de Bolivia', format: value => String(value || '').slice(0, 7) },
+                { key: 'items', label: 'Envíos únicos', type: 'metric', tone: 'is-navy', icon: 'fas fa-box', hint: 'Identificadores postales distintos con actividad' },
+                { key: 'received', label: 'Recibidos', type: 'metric', tone: 'is-teal', icon: 'fas fa-inbox', hint: 'Envíos con destino asociado a Bolivia' },
+                { key: 'dispatched', label: 'Despachados', type: 'metric', tone: 'is-blue', icon: 'fas fa-paper-plane', hint: 'Envíos con origen asociado a Bolivia' },
             ]);
         } else {
             const rows = mode === 'daily' ? current.timeline || [] : current.monthly || [];
-            renderTable(rows, [
-                { key: 'date', label: 'Fecha' }, { key: 'objects', label: 'Objetos postales' },
-                { key: 'declarations', label: 'Declaraciones' }, { key: 'responses', label: 'Respuestas' },
+            renderTable(rows, mode === 'monthly' ? [
+                { key: 'date', label: 'Mes', type: 'date', icon: 'fas fa-calendar-alt', hint: 'Mes de la fecha postal', format: value => String(value || '').slice(0, 7) },
+                { key: 'objects', label: 'Objetos postales', type: 'metric', tone: 'is-navy', icon: 'fas fa-box', hint: 'Objetos postales contabilizados en el mes' },
+                { key: 'declarations', label: 'Declaraciones', type: 'metric', tone: 'is-teal', icon: 'fas fa-file-signature', hint: 'Registros de declaración aduanera' },
+                { key: 'responses', label: 'Respuestas', type: 'metric', tone: 'is-blue', icon: 'fas fa-reply', hint: 'Registros de respuesta asociados' },
+            ] : [
+                { key: 'date', label: 'Fecha', type: 'date', icon: 'fas fa-calendar-day', hint: 'Fecha postal del objeto' },
+                { key: 'objects', label: 'Objetos postales', type: 'metric', tone: 'is-navy', icon: 'fas fa-box', hint: 'Objetos postales contabilizados en la fecha' },
+                { key: 'declarations', label: 'Declaraciones', type: 'metric', tone: 'is-teal', icon: 'fas fa-file-signature', hint: 'Registros de declaración aduanera' },
+                { key: 'responses', label: 'Respuestas', type: 'metric', tone: 'is-blue', icon: 'fas fa-reply', hint: 'Registros de respuesta asociados' },
             ]);
         }
-        $('volume-table-title').textContent = mode === 'monthly' ? 'Meses seleccionados' : 'Detalle del periodo';
-        $('volume-table-caption').textContent = mode === 'monthly'
-            ? 'Serie mensual; las tarjetas resumen el rango seleccionado.'
-            : 'Registros exactos que alimentan las gráficas.';
+        $('volume-table-title').textContent = scope === 'cds'
+            ? `Actividad CDS por ${mode === 'monthly' ? 'mes' : 'fecha'}`
+            : `Actividad IPS por ${mode === 'monthly' ? 'mes' : 'día'}`;
+        $('volume-table-caption').textContent = scope === 'cds'
+            ? (mode === 'monthly' ? 'La tabla desglosa cada mes; las tarjetas resumen el rango completo.' : 'Objetos, declaraciones y respuestas organizados por fecha postal.')
+            : (mode === 'monthly' ? 'La tabla desglosa cada mes; las tarjetas resumen el rango completo.' : 'Envíos y eventos agrupados por fecha local de Bolivia.');
+        $('volume-table-grain').textContent = scope === 'cds'
+            ? (mode === 'monthly' ? 'Cada fila es un mes.' : 'Cada fila es una fecha postal.')
+            : (mode === 'monthly' ? 'Cada fila es un mes.' : 'Cada fila es un día local de Bolivia.');
         $('volume-generated').textContent = current.generated_at ? `Datos consultados: ${new Intl.DateTimeFormat('es-BO', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/La_Paz' }).format(new Date(current.generated_at))} · Bolivia` : '';
         if (scope === 'all') {
             renderCombinedCds(data.cds);
@@ -572,7 +650,7 @@
         $('volume-results').setAttribute('aria-busy', 'true');
         setLoading(true);
         $('volume-export').disabled = true;
-        setStatus('Consultando la fuente postal…');
+        setStatus(scope === 'all' ? 'Consultando IPS y CDS por separado…' : 'Consultando la fuente postal…');
         const query = new URLSearchParams({ scope, from: period.from, to: period.to, comparison: mode === 'monthly' ? 'year' : 'period' });
         const operator = form.elements.operator?.value;
         const office = form.elements.office?.value;
@@ -645,6 +723,32 @@
         updateActiveFilters();
         load();
     });
+
+    const sectionLinks = [...root.querySelectorAll('.volume-section-nav a')];
+    const updateCurrentSection = () => {
+        let current = null;
+        let currentTop = Number.NEGATIVE_INFINITY;
+        sectionLinks.forEach(link => {
+            const section = root.querySelector(link.hash);
+            if (!section || section.closest('[hidden]')) { link.hidden = true; return; }
+            link.hidden = false;
+            if (!current) current = link;
+            const top = section.getBoundingClientRect().top;
+            if (top <= 175 && top > currentTop) {
+                current = link;
+                currentTop = top;
+            }
+        });
+        sectionLinks.forEach(link => link.classList.toggle('is-current', link === current));
+    };
+    if (sectionLinks.length) {
+        window.addEventListener('scroll', updateCurrentSection, { passive: true });
+        window.addEventListener('resize', updateCurrentSection, { passive: true });
+        sectionLinks.forEach(link => link.addEventListener('click', () => {
+            sectionLinks.forEach(item => item.classList.toggle('is-current', item === link));
+        }));
+        updateCurrentSection();
+    }
     setMode(initialMode);
     updateActiveFilters();
     load();
