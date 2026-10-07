@@ -419,6 +419,80 @@ class SqlServerSearchService
             ->all();
     }
 
+    /**
+     * Consulta solo los datos de destino para varios codigos, sin cargar el
+     * historial de eventos. Se usa desde reportes que necesitan enriquecer
+     * muchos paquetes internacionales de una sola vez.
+     */
+    public function searchManyDestinations(array $codigos): array
+    {
+        $codes = collect($codigos)
+            ->map(fn ($codigo) => strtoupper(trim((string) $codigo)))
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($codes->isEmpty()) {
+            return [];
+        }
+
+        $connection = $this->connectionName();
+        $placeholders = implode(',', array_fill(0, $codes->count(), '?'));
+        $bindings = array_merge($codes->all(), $codes->all());
+        $rows = collect(DB::connection($connection)->select(
+            "
+            SELECT
+                UPPER(RTRIM(LTRIM(mi.MAILITM_FID))) AS MAILITM_FID,
+                UPPER(RTRIM(LTRIM(mi.MAILITM_LOCAL_ID))) AS MAILITM_LOCAL_ID,
+                mi.DEST_COUNTRY_CD,
+                cod.COUNTRY_NM AS DEST_COUNTRY_NM,
+                recipient.CUSTOMER_CITY AS DESTINATION_CITY
+            FROM dbo.L_MAILITMS mi
+            LEFT JOIN dbo.C_COUNTRIES cod ON cod.COUNTRY_CD = mi.DEST_COUNTRY_CD
+            OUTER APPLY (
+                SELECT TOP 1 mc.CUSTOMER_CITY
+                FROM dbo.L_MAILITM_CUSTOMERS mc
+                WHERE mc.MAILITM_PID = mi.MAILITM_PID
+                  AND mc.SENDER_PAYEE_IND = 'A'
+            ) recipient
+            WHERE mi.MAILITM_FID IN ($placeholders)
+               OR mi.MAILITM_LOCAL_ID IN ($placeholders)
+            ORDER BY mi.EVT_GMT_DT DESC, mi.MAILITM_PID DESC
+            ",
+            $bindings
+        ));
+
+        $requested = array_fill_keys($codes->all(), true);
+        $destinations = [];
+
+        foreach ($codes as $code) {
+            $destinations[$code] = [
+                'codigo' => $code,
+                'ciudad' => null,
+                'pais' => null,
+                'pais_codigo' => null,
+                'destino' => null,
+            ];
+        }
+
+        foreach ($rows as $row) {
+            foreach ($this->matchingRequestedCodes($row, $requested) as $code) {
+                $destination = $destinations[$code];
+                $city = trim((string) ($row->DESTINATION_CITY ?? ''));
+                $country = trim((string) ($row->DEST_COUNTRY_NM ?? ''));
+                $countryCode = strtoupper(trim((string) ($row->DEST_COUNTRY_CD ?? '')));
+                $destination['ciudad'] = $destination['ciudad'] ?: ($city !== '' ? $city : null);
+                $destination['pais'] = $destination['pais'] ?: ($country !== '' ? $country : null);
+                $destination['pais_codigo'] = $destination['pais_codigo'] ?: ($countryCode !== '' ? $countryCode : null);
+                $label = trim(implode(' / ', array_filter([$destination['ciudad'], $destination['pais']])));
+                $destination['destino'] = $label !== '' ? $label : null;
+                $destinations[$code] = $destination;
+            }
+        }
+
+        return $destinations;
+    }
+
     public function listPackages(?int $page = 1, ?int $perPage = 50, ?string $search = null): array
     {
         $page = $page !== null ? max(1, $page) : null;

@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\IpsController;
 use App\Http\Controllers\Api\SqlServerExternalSearchAllController;
 use App\Http\Controllers\Api\SqlServerExternalSearchBatchController;
 use App\Http\Controllers\Api\SqlServerExternalSearchSafeController;
+use App\Http\Controllers\Api\SqlServerExternalDestinationsBatchController;
 use App\Http\Controllers\Api\SqlServerPackageListController;
 use App\Http\Middleware\AuthorizeIps;
 use Illuminate\Support\Facades\Route;
@@ -28,6 +29,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Ruta canonica de negocio: no expone el backend tecnico en la URL.
     Route::get('/tracking/eventos', SqlServerExternalSearchSafeController::class);
     Route::post('/tracking/eventos/batch', SqlServerExternalSearchBatchController::class);
+    Route::post('/tracking/destinos/batch', SqlServerExternalDestinationsBatchController::class);
     Route::get('/tracking/eventos-todos', SqlServerExternalSearchAllController::class);
     Route::get('/tracking/paquetes', SqlServerPackageListController::class);
 });
