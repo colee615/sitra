@@ -8,5 +8,6 @@ return [
     'operator_code' => 'AGBC',
     'record_limit' => 100,
     'report_max_days' => 31,
+    'delivery_report_max_days' => 366,
     'stale_after_days' => (int) env('POSTAL_STALE_AFTER_DAYS', 7),
 ];

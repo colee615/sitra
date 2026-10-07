@@ -349,6 +349,7 @@ return [
             'can' => 'postal.ips',
             'submenu' => [
                 ['text'=>'Actividad por oficina','url'=>'/operaciones-postales','icon'=>'fas fa-clipboard-check','can'=>'postal.ips'],
+                ['text'=>'Rendimiento de entregas','url'=>'/reporte-entregas','active'=>['reporte-entregas','reporte-entregas/*','reporte-entregas.csv'],'icon'=>'fas fa-chart-bar','can'=>'postal.ips'],
                 ['text'=>'Movimientos y entregas','url'=>'/operaciones','icon'=>'fas fa-truck','can'=>'ips.read'],
             ],
         ],
