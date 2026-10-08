@@ -65,6 +65,14 @@ class SqlServerSearchService
                     mi.CURRENCY_CD,
                     cur.CURRENCY_NM,
                     mi.EVT_GMT_DT,
+                    (
+                        SELECT TOP 1 event_time.EVENT_LOCAL_OFFSET
+                        FROM dbo.L_MAILITM_EVENTS event_time
+                        WHERE event_time.MAILITM_PID = mi.MAILITM_PID
+                          AND event_time.EVENT_GMT_DT = mi.EVT_GMT_DT
+                          AND event_time.EVENT_TYPE_CD = mi.EVT_TYPE_CD
+                        ORDER BY event_time.EVENT_GMT_DT DESC
+                    ) AS EVT_LOCAL_OFFSET,
                     mi.EVT_TYPE_CD,
                     COALESCE(cte.LOCAL_EVENT_TYPE_NM, ce.EVENT_TYPE_NM) AS EVT_TYPE_NM_ES,
                     mi.EVT_OFFICE_CD,
@@ -217,6 +225,7 @@ class SqlServerSearchService
                 SELECT
                     di.MAILITM_PID,
                     di.EVENT_GMT_DT,
+                    event_time.EVENT_LOCAL_OFFSET,
                     di.EVENT_TYPE_CD,
                     COALESCE(ct.LOCAL_EVENT_TYPE_NM, c.EVENT_TYPE_NM) AS EVENT_TYPE_NM_ES,
                     di.NON_DELIVERY_REASON_CD,
@@ -226,6 +235,14 @@ class SqlServerSearchService
                     di.DELIV_POSTCODE
                 FROM dbo.L_MAILITMS mi
                 INNER JOIN dbo.L_MAILITM_DELIV_INFOS di ON di.MAILITM_PID = mi.MAILITM_PID
+                OUTER APPLY (
+                    SELECT TOP 1 e.EVENT_LOCAL_OFFSET
+                    FROM dbo.L_MAILITM_EVENTS e
+                    WHERE e.MAILITM_PID = di.MAILITM_PID
+                      AND e.EVENT_TYPE_CD = di.EVENT_TYPE_CD
+                      AND e.EVENT_GMT_DT = di.EVENT_GMT_DT
+                    ORDER BY e.EVENT_GMT_DT DESC
+                ) event_time
                 LEFT JOIN dbo.C_EVENT_TYPES c ON c.EVENT_TYPE_CD = di.EVENT_TYPE_CD
                 LEFT JOIN dbo.CT_EVENT_TYPES ct ON ct.EVENT_TYPE_CD = di.EVENT_TYPE_CD AND ct.LANGUAGE_CD = 'ES'
                 WHERE UPPER(RTRIM(LTRIM(mi.MAILITM_FID))) = ?
