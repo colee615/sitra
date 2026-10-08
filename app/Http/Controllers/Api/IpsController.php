@@ -53,6 +53,11 @@ class IpsController extends Controller
         return $this->respond(fn () => ['data' => $ips->catalog()]);
     }
 
+    public function deliveryCatalog(IpsRepository $ips)
+    {
+        return $this->respond(fn () => ['data' => $ips->deliveryCatalog()]);
+    }
+
     public function users(Request $request, IpsRepository $ips)
     {
         $filters = $request->validate([

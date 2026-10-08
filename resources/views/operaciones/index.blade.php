@@ -36,9 +36,9 @@
         </form>
     </div></div>
     <div class="card"><div class="card-header">Paquetes</div><div class="table-responsive">
-        <table class="table table-striped mb-0"><thead><tr><th>Código</th><th>Último evento</th><th>Oficina</th><th>Fecha UTC</th><th></th></tr></thead><tbody>
+        <table class="table table-striped mb-0"><thead><tr><th>Código</th><th>Último evento</th><th>Oficina</th><th>Hora local del evento</th><th></th></tr></thead><tbody>
         @forelse($result['data'] as $item)
-            <tr><td><a href="{{ route('consultas.index', ['codigo'=>$item['codigo']]) }}"><i class="fas fa-box"></i> {{ $item['codigo'] }}</a></td><td>{{ $item['event_name'] }} ({{ $item['event_cd'] }})</td><td>{{ $item['office_name'] }}</td><td>{{ $item['event_at'] }}</td>
+            <tr><td><a href="{{ route('consultas.index', ['codigo'=>$item['codigo']]) }}"><i class="fas fa-box"></i> {{ $item['codigo'] }}</a></td><td>{{ $item['event_name'] }} ({{ $item['event_cd'] }})</td><td>{{ $item['office_name'] }}</td><td>{{ $item['event_at_local'] ?? $item['event_at'] }}<small class="d-block text-muted">{{ $item['event_timezone_label'] ?? 'UTC' }}</small></td>
                 <td><a href="{{ route('operaciones.index', ['q' => $item['codigo'], 'status' => 'all']) }}">Abrir</a></td></tr>
         @empty<tr><td colspan="5">No hay paquetes para estos filtros.</td></tr>@endforelse
         </tbody></table>
@@ -50,7 +50,7 @@
     @if($detail)
         @php($package = $detail['package'])
         <div class="card"><div class="card-header"><h2 class="h5 mb-0">{{ $package['codigo'] }} · Registrar movimiento</h2></div><div class="card-body">
-            <p>Último evento: {{ $package['event_cd'] }} · {{ $package['event_at'] }}. La entrega registra al receptor y cierra el flujo del paquete.</p>
+            <p>Último evento: {{ $package['event_cd'] }} · {{ $package['event_at_local'] ?? $package['event_at'] }} ({{ $package['event_timezone_label'] ?? 'UTC' }}). La hora se conserva en UTC y con el offset de la oficina.</p>
             @canany(['ips.events', 'ips.deliver'])
             @php($movementUrl = auth()->user()->can('ips.events')
                 ? route('operaciones.event', $package['codigo'])
@@ -79,7 +79,8 @@
                     <div class="col-md-4 form-group"><label for="event-office">Oficina</label><select id="event-office" name="office_cd" class="form-control" required>
                         @foreach($catalog['offices'] as $office)<option value="{{ $office->OWN_OFFICE_CD }}" @selected(old('office_cd', $package['office_cd']) == $office->OWN_OFFICE_CD)>{{ $office->OFFICE_NM }}</option>@endforeach
                     </select></div>
-                    <div class="col-md-4 form-group"><label for="event-at">Fecha y hora con zona</label><input id="event-at" name="occurred_at" class="form-control" required value="{{ old('occurred_at', now('America/La_Paz')->format('Y-m-d\TH:i:sP')) }}"><small>Formato: 2026-09-10T14:30:00-04:00</small></div>
+                    <div class="col-md-4 form-group"><label for="event-at">Fecha y hora efectiva (La Paz)</label><input id="event-at" name="occurred_at" type="datetime-local" step="60" class="form-control" required value="{{ old('occurred_at') ? \Illuminate\Support\Carbon::parse(old('occurred_at'))->timezone('America/La_Paz')->format('Y-m-d\\TH:i') : now('America/La_Paz')->format('Y-m-d\\TH:i') }}"><small>Hora local de la oficina · UTC−04:00. Si la registras con retraso, indica el motivo.</small></div>
+                    <div class="col-md-6 form-group"><label for="delivery-mode">Modalidad de entrega (EMI)</label><select id="delivery-mode" name="delivery_mode" class="form-control"><option value="">Seleccionar</option><option value="NO_DOMICILIARIA" @selected(old('delivery_mode') === 'NO_DOMICILIARIA')>Ventanilla · no domiciliaria</option><option value="DOMICILIARIA" @selected(old('delivery_mode') === 'DOMICILIARIA')>Cartero · domiciliaria</option></select></div>
                     <div class="col-md-6 form-group"><label for="signatory">Nombre de quien recibe (entrega EMI)</label><input id="signatory" name="signatory" maxlength="64" class="form-control" value="{{ old('signatory') }}"></div>
                     <div class="col-md-6 form-group"><label for="delivery-location">Lugar de entrega</label><input id="delivery-location" name="delivery_location" maxlength="25" class="form-control" value="{{ old('delivery_location') }}"></div>
                     <div class="col-md-6 form-group"><label for="reason">Motivo de intento fallido (EMH)</label><select id="reason" name="non_delivery_reason" class="form-control"><option value="">Seleccionar</option>
@@ -88,6 +89,7 @@
                     <div class="col-md-6 form-group"><label for="measure">Medida aplicada (EMH)</label><select id="measure" name="non_delivery_measure" class="form-control"><option value="">Seleccionar</option>
                         @foreach($catalog['non_delivery_measures'] as $measure)<option value="{{ $measure->NON_DELIVERY_MEASURE_CD }}">{{ $measure->NON_DELIVERY_MEASURE_NM }}</option>@endforeach
                     </select></div>
+                    <div class="col-md-12 form-group"><label for="time-reason">Motivo si registra el evento con retraso</label><input id="time-reason" name="time_reason" maxlength="255" class="form-control" value="{{ old('time_reason') }}"><small class="text-muted">Se conserva aparte la hora efectiva y la hora de registro en SITRA.</small></div>
                 </div>
                 <button class="btn btn-primary" @disabled(!config('ips.writes_enabled') || $package['state_cd'] === 5)>Registrar movimiento</button>
             </form>
@@ -110,8 +112,8 @@
             </script>
             @endcanany
         </div></div>
-        <div class="card"><div class="card-header">Historial IPS</div><div class="table-responsive"><table class="table"><thead><tr><th>Evento</th><th>Fecha UTC</th><th>Oficina</th></tr></thead><tbody>
-            @foreach($detail['events'] as $event)<tr><td>{{ $event->EVENT_TYPE_NM }} ({{ $event->EVENT_TYPE_CD }})</td><td>{{ $event->EVENT_GMT_DT }}</td><td>{{ $event->EVENT_OFFICE_CD }}</td></tr>@endforeach
+        <div class="card"><div class="card-header">Historial IPS</div><div class="table-responsive"><table class="table"><thead><tr><th>Evento</th><th>Hora local del evento</th><th>Oficina</th></tr></thead><tbody>
+            @foreach($detail['events'] as $event)<tr><td>{{ $event->EVENT_TYPE_NM }} ({{ $event->EVENT_TYPE_CD }})</td><td>{{ $event->event_at_local ?? $event->EVENT_GMT_DT }}<small class="d-block text-muted">{{ $event->event_timezone_label ?? 'UTC' }}</small></td><td>{{ $event->EVENT_OFFICE_CD }}</td></tr>@endforeach
         </tbody></table></div></div>
     @endif
 
@@ -123,7 +125,7 @@
             <div class="row">
                 <div class="col-md-4 form-group"><label for="create-code">Código asignado al paquete</label><input id="create-code" name="codigo" maxlength="35" class="form-control" required value="{{ old('codigo') }}"></div>
                 <div class="col-md-4 form-group"><label for="create-event">Operación inicial</label><select id="create-event" name="event" class="form-control"><option value="EMA">EMA · Admisión</option><option value="EMD" @selected(old('event') === 'EMD')>EMD · Recepción internacional</option></select></div>
-                <div class="col-md-4 form-group"><label for="create-at">Fecha y hora con zona</label><input id="create-at" name="occurred_at" class="form-control" required value="{{ old('occurred_at', now('America/La_Paz')->format('Y-m-d\TH:i:sP')) }}"></div>
+                <div class="col-md-4 form-group"><label for="create-at">Fecha y hora efectiva (La Paz)</label><input id="create-at" name="occurred_at" type="datetime-local" step="60" class="form-control" required value="{{ old('occurred_at') ? \Illuminate\Support\Carbon::parse(old('occurred_at'))->timezone('America/La_Paz')->format('Y-m-d\\TH:i') : now('America/La_Paz')->format('Y-m-d\\TH:i') }}"><small>Hora local de la oficina · UTC−04:00.</small></div>
                 <div class="col-md-4 form-group"><label for="create-office">Oficina</label><select id="create-office" name="office_cd" class="form-control" required>@foreach($catalog['offices'] as $office)<option value="{{ $office->OWN_OFFICE_CD }}" @selected(old('office_cd') == $office->OWN_OFFICE_CD)>{{ $office->OFFICE_NM }}</option>@endforeach</select></div>
                 <div class="col-md-4 form-group"><label for="mail-class">Clase postal</label><select id="mail-class" name="mail_class" class="form-control" required>@foreach($catalog['mail_classes'] as $class)<option value="{{ $class->MAIL_CLASS_CD }}" @selected(old('mail_class') === trim($class->MAIL_CLASS_CD))>{{ $class->MAIL_CLASS_NM }}</option>@endforeach</select></div>
                 <div class="col-md-4 form-group"><label for="weight">Peso (kg)</label><input id="weight" name="weight_kg" type="number" min="0.001" max="999.999" step="0.001" class="form-control" required value="{{ old('weight_kg') }}"></div>
@@ -146,9 +148,9 @@
     @endcan
 
     @can('ips.operations')
-    <div class="card"><div class="card-header">Mis últimas operaciones</div><div class="table-responsive"><table class="table"><thead><tr><th>Referencia</th><th>Paquete</th><th>Evento</th><th>Resultado</th><th>Fecha</th></tr></thead><tbody>
-        @forelse($operations as $operation)<tr><td><code>{{ $operation->id }}</code></td><td>{{ $operation->codigo }}</td><td>{{ $operation->event }}</td><td>{{ $operation->status }}</td><td>{{ $operation->created_at }}</td></tr>
-        @empty<tr><td colspan="5">Todavía no hay operaciones registradas.</td></tr>@endforelse
+    <div class="card"><div class="card-header">Mis últimas operaciones</div><div class="table-responsive"><table class="table"><thead><tr><th>Referencia</th><th>Paquete</th><th>Evento</th><th>Resultado</th><th>Hora efectiva local</th><th>Instante enviado a IPS (UTC)</th><th>Registrado en SITRA (UTC)</th></tr></thead><tbody>
+        @forelse($operations as $operation)<tr><td><code>{{ $operation->id }}</code></td><td>{{ $operation->codigo }}</td><td>{{ $operation->event }} @if($operation->delivery_mode)<small class="d-block">{{ $operation->delivery_mode === 'DOMICILIARIA' ? 'Cartero · domiciliaria' : 'Ventanilla · no domiciliaria' }}</small>@endif</td><td>{{ $operation->status }}</td><td>{{ $operation->event_at_local ?? "-" }}<small class="d-block">{{ $operation->event_timezone_label ?? "Zona no informada" }}</small></td><td>{{ $operation->event_at_utc ?? "-" }}</td><td>{{ $operation->registered_at_utc ?? $operation->created_at }}</td></tr>
+        @empty<tr><td colspan="7">Todavía no hay operaciones registradas.</td></tr>@endforelse
     </tbody></table></div></div>
     @endcan
 @stop

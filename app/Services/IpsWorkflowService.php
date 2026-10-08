@@ -97,13 +97,15 @@ class IpsWorkflowService
         }
 
         $office = isset($item->EVT_OFFICE_CD) ? $this->ips->ownOffice((int) $item->EVT_OFFICE_CD) : null;
+        $deliveryMode = app(IpsStagePolicy::class)->inferDeliveryMode($this->ips->present($item));
 
         return array_replace([
-            'occurred_at' => Carbon::now(config('app.timezone'))->format('Y-m-d\TH:i:sP'),
+            'occurred_at' => Carbon::now(config('ips.operation_timezone', 'America/La_Paz'))->format('Y-m-d\TH:i:sP'),
             'office_cd' => isset($item->EVT_OFFICE_CD) ? (int) $item->EVT_OFFICE_CD : null,
             'expected_event_cd' => isset($item->EVT_TYPE_CD) ? (int) $item->EVT_TYPE_CD : null,
             'expected_event_at' => isset($item->EVT_GMT_DT) ? Carbon::parse($item->EVT_GMT_DT, 'UTC')->format('Y-m-d\TH:i:s.vP') : null,
             'delivery_location' => $office ? Str::limit(trim($office->OFFICE_NM), 25, '') : null,
+            'delivery_mode' => $deliveryMode,
         ], array_filter($input, fn ($value) => $value !== null && $value !== ''));
     }
 
@@ -181,7 +183,7 @@ class IpsWorkflowService
                 throw new IpsOperationException('La oficina no corresponde al usuario IPS vinculado.', 403);
             }
         }
-        if (in_array($input['event'], ['EMG', 'EDH', 'EDG', 'EMI'], true)) {
+        if (in_array($input['event'], ['EMG', 'EDH', 'EDG', 'EMH', 'EMI'], true)) {
             $package = $this->ips->present($item);
             if (!in_array($input['event'], app(IpsStagePolicy::class)->actions($package, (int) $input['office_cd']), true)) {
                 throw new IpsOperationException('La etapa u oficina actual no está habilitada para esta operación.');
@@ -191,10 +193,17 @@ class IpsWorkflowService
             }
         }
         if ($input['event'] === 'EMH') {
+            $package = $this->ips->present($item);
+            if (!in_array('EMH', app(IpsStagePolicy::class)->actions($package, (int) $input['office_cd']), true)) {
+                throw new IpsOperationException('El paquete no está en reparto o la oficina no puede registrar este intento fallido.');
+            }
             if (! $this->ips->reference('C_NON_DELIVERY_REASONS', 'NON_DELIVERY_REASON_CD', $input['non_delivery_reason']) ||
                 ! $this->ips->reference('C_NON_DELIVERY_MEASURES', 'NON_DELIVERY_MEASURE_CD', $input['non_delivery_measure'])) {
                 throw new IpsOperationException('Motivo o medida de entrega fallida inválidos.', 422);
             }
+        }
+        if ($input['event'] === 'EMI' && empty($input['delivery_mode'])) {
+            throw new IpsOperationException('Seleccione si la entrega fue por ventanilla o por cartero.', 422);
         }
     }
 

@@ -11,6 +11,7 @@ return [
     'user_pid' => env('IPS_USER_PID'),
     'workstation_pid' => env('IPS_WORKSTATION_PID'),
     'destination_country' => 'BO',
+    'operation_timezone' => env('IPS_OPERATION_TIMEZONE', 'America/La_Paz'),
     // IDs verified in this installation's C_EVENT_TYPES on 2026-09-10.
     'events' => [
         'EMA' => ['id' => 1, 'name' => 'Admisión del envío', 'create' => true, 'direction' => 'O'],

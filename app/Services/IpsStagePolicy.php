@@ -69,6 +69,26 @@ class IpsStagePolicy
             && in_array($event, [32, 36, 39, 74, 75], true)) {
             $actions[] = 'EMI';
         }
+        if ($currentOffice === $office && in_array($state, [0, 8], true) && $event === 74) {
+            $actions[] = 'EMH';
+        }
+
         return $actions;
+    }
+
+    public function inferDeliveryMode(array $package): ?string
+    {
+        $event = (int) ($package['operational_event_cd'] ?? $package['event_cd'] ?? 0);
+        $state = isset($package['state_cd']) ? (int) $package['state_cd'] : null;
+
+        if ($state === 1 && in_array($event, [31, 34], true)) {
+            return 'NO_DOMICILIARIA';
+        }
+
+        return match ($event) {
+            36, 39, 67, 74 => 'DOMICILIARIA',
+            73, 75 => 'NO_DOMICILIARIA',
+            default => null,
+        };
     }
 }

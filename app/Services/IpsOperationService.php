@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Exceptions\IpsOperationException;
+use App\Support\IpsEventTime;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -16,6 +18,11 @@ class IpsOperationService
     {
         $key = hash('sha256', $input['idempotency_key']);
         unset($input['idempotency_key']);
+        $effectiveTime = Carbon::parse($input['occurred_at']);
+        $registeredAtUtc = now('UTC');
+        if ($effectiveTime->lt($registeredAtUtc->copy()->subMinutes(2)) && empty($input['time_reason'])) {
+            throw new IpsOperationException('Indique por qué se registra un evento con más de dos minutos de retraso.', 422);
+        }
         $hash = hash('sha256', json_encode($this->canonicalize(['action' => $action, 'input' => $input]), JSON_THROW_ON_ERROR));
         $id = (string) Str::uuid();
         // This reservation is committed BEFORE touching IPS. A process crash leaves a durable
@@ -24,6 +31,14 @@ class IpsOperationService
             'id' => $id, 'user_id' => $userId, 'key_hash' => $key, 'request_hash' => $hash,
             'action' => $action, 'codigo' => $input['codigo'], 'event' => $input['event'],
             'status' => 'processing', 'created_at' => now(), 'updated_at' => now(),
+            'event_at_utc' => $effectiveTime->copy()->utc()->toIso8601String(),
+            'event_local_offset_minutes' => $effectiveTime->utcOffset(),
+            'registered_at_utc' => $registeredAtUtc->toIso8601String(),
+            'delivery_mode' => $input['delivery_mode'] ?? null,
+            'time_reason' => $input['time_reason'] ?? null,
+            'customs_return_event_at_utc' => !empty($input['customs_return_confirmed'])
+                ? $effectiveTime->copy()->subSecond()->utc()->toIso8601String()
+                : null,
         ]);
         $operation = DB::table('ips_operations')->where('user_id', $userId)->where('key_hash', $key)->first();
         if (! $operation) {
@@ -92,11 +107,53 @@ class IpsOperationService
             throw new IpsOperationException('Operación no encontrada.', 404);
         }
 
+        $eventTime = IpsEventTime::present(
+            $row->event_at_utc ?? null,
+            isset($row->event_local_offset_minutes) ? ((int) $row->event_local_offset_minutes / 60) : null
+        );
+
         return [
             'operation_id' => $row->id, 'codigo' => $row->codigo, 'event' => $row->event,
             'status' => $row->status, 'created_at' => $row->created_at, 'updated_at' => $row->updated_at,
+            'event_at_utc' => $row->event_at_utc ?? null,
+            'event_at_local' => $eventTime['event_at_local'],
+            'event_timezone_label' => $eventTime['event_timezone_label'],
+            'event_local_offset_minutes' => $row->event_local_offset_minutes ?? null,
+            'registered_at_utc' => $row->registered_at_utc ?? null,
+            'delivery_mode' => $row->delivery_mode ?? null,
+            'time_reason' => $row->time_reason ?? null,
+            'customs_return_event_at_utc' => $row->customs_return_event_at_utc ?? null,
             'result' => $row->result ? json_decode($row->result, true) : null,
         ];
+    }
+
+    /** @return array<string, string> Successful EMI delivery mode keyed by tracking code. */
+    public function deliveryModesForCodes(array $codes): array
+    {
+        $codes = collect($codes)
+            ->map(fn ($code) => strtoupper(trim((string) $code)))
+            ->filter(fn (string $code) => $code !== '')
+            ->unique()
+            ->values();
+        if ($codes->isEmpty()) {
+            return [];
+        }
+
+        try {
+            return DB::table('ips_operations')
+                ->where('event', 'EMI')
+                ->where('status', 'succeeded')
+                ->whereNotNull('delivery_mode')
+                ->whereIn(DB::raw('UPPER(codigo)'), $codes->all())
+                ->orderByDesc('registered_at_utc')
+                ->get(['codigo', 'delivery_mode'])
+                ->unique(fn ($row) => strtoupper(trim((string) $row->codigo)))
+                ->mapWithKeys(fn ($row) => [strtoupper(trim((string) $row->codigo)) => (string) $row->delivery_mode])
+                ->all();
+        } catch (Throwable) {
+            // Tracking must remain available if the audit migration is not installed yet.
+            return [];
+        }
     }
 
     private function finish(string $id, string $state, array $body, int $status): void
