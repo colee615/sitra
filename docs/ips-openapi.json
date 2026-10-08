@@ -57,6 +57,9 @@
               "enum": [
                 "all",
                 "pending",
+                "reception",
+                "returns",
+                "warehouse",
                 "delivered"
               ]
             }
@@ -778,6 +781,10 @@
           "delivery_location": {
             "type": "string",
             "maxLength": 25
+          },
+          "customs_return_confirmed": {
+            "type": "boolean",
+            "description": "Obligatorio para EMI cuando el paquete sigue en Aduana (evento 31/34, estado 1): confirma retorno físico. SITRA registra el evento 38 antes del 37."
           }
         }
       },

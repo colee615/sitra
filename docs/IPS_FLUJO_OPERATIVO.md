@@ -10,7 +10,8 @@ El flujo internacional termina en Bolivia con `EMG` (32, llegada a la oficina de
 2. El usuario pulsa **Recepcionar**. Bolipost envía a SITRA `event=EMG`, `occurred_at`, `office_cd`, `expected_event_cd`, `expected_event_at` e idempotencia. SITRA valida la transición y registra el evento con el usuario técnico y estación configurados.
 3. **Mis paquetes IPS** consulta solo paquetes de la oficina vinculada al usuario, con eventos `EMG`, `EDG`, `EDH` o `EMH`, estado pendiente y sin `EMI`/`EMH` terminal incompatible.
 4. El usuario pulsa **Baja**. Bolipost envía `event=EMI`, fecha actual, oficina IPS, firmante y lugar de entrega. SITRA vuelve a validar existencia, oficina, estado, transición e idempotencia antes de ejecutar los procedimientos de IPS.
-5. Una operación confirmada queda registrada en la bitácora PostgreSQL y en `L_MAILITM_EVENTS`; al refrescar, desaparece de pendientes.
+5. **Almacén internacional** también muestra paquetes que siguen en Aduana (`31` o `34`, estado interno 1). Si el operador confirma que Aduana ya devolvió físicamente el envío y lo entrega en ese momento, SITRA registra en una sola operación el evento `38` (devolución desde Aduana) y después `EMI` (entrega final).
+6. Una operación confirmada queda registrada en la bitácora PostgreSQL y en `L_MAILITM_EVENTS`; al refrescar, desaparece de pendientes.
 
 ## Datos automáticos
 
@@ -18,7 +19,7 @@ El usuario solo selecciona el código. `USER_PID` se obtiene de la vinculación 
 
 ## Límites
 
-La recepción y la baja son acciones separadas. Bolipost no inventa eventos internacionales ni modifica directamente tablas IPS. Los códigos de recepción previos deben mantenerse alineados con el catálogo real de la instalación (`C_EVENT_TYPES`); si IPS utiliza otra transición para llegada previa, se actualiza `reception_candidate_events` después de verificarla en el catálogo.
+La recepción y la baja normalmente son acciones separadas. La excepción es Aduana: con confirmación física explícita, SITRA encadena el evento de devolución 38 y la entrega 37 dentro de la misma transacción. Bolipost no inventa eventos internacionales ni modifica directamente tablas IPS. Los códigos deben mantenerse alineados con el catálogo real de la instalación (`C_EVENT_TYPES`).
 
 ## Contratos HTTP
 
@@ -57,12 +58,15 @@ Registro de baja/entrega:
 
 El cliente Bolipost no solicita `USER_PID`, `WORKSTATION_PID`, nombres de procedimientos ni estados internos. SITRA los resuelve con su configuración y aplica el contrato de IPS.
 
+Para un envío todavía en Aduana, `POST /paquetes/{codigo}/entrega` admite `customs_return_confirmed: true` únicamente como confirmación explícita del operador. SITRA valida las transiciones `estado 1 → evento 38 → estado 0 → evento 37`; ambos eventos se escriben dentro de la transacción IPS y se revierten juntos si falla la verificación.
+
 ## Matriz de decisión
 
 | Último evento | Estado | Pantalla | Acción |
 |---|---:|---|---|
 | EMD 30 | pendiente | Ninguna; continúa expedición/intercambio | Esperar despacho hacia destino |
 | Evento 35 o 38 | pendiente | Recepción IPS | Registrar EMG |
+| Evento 31 o 34, estado 1 | Aduana | Almacén internacional | Confirmar devolución física y entrega: registrar 38 y luego EMI |
 | EMG | 0 u 8 | Mis paquetes IPS | Baja EMI |
 | EDH | 0 u 8 | Mis paquetes IPS | Baja EMI |
 | EDG | 0 u 8 | Mis paquetes IPS | Baja EMI |

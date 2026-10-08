@@ -90,6 +90,19 @@ class IpsRepository
                     $q->selectRaw('1')->from('dbo.L_MAILITM_EVENTS as terminal')
                         ->whereColumn('terminal.MAILITM_PID', 'm.MAILITM_PID')->whereIn('terminal.EVENT_TYPE_CD', [37, 76]);
                 });
+        } elseif ($status === 'warehouse') {
+            $eventColumn = DB::raw('COALESCE(op.EVENT_TYPE_CD, m.EVT_TYPE_CD)');
+            $warehouseEvents = config('ips.delivery_candidate_events');
+            $query->where(function ($q) use ($eventColumn, $warehouseEvents) {
+                $q->where(function ($customs) use ($eventColumn) {
+                    $customs->whereIn($eventColumn, [31, 34])->where('m.STATE_IND_CD', 1);
+                })->orWhere(function ($available) use ($eventColumn, $warehouseEvents) {
+                    $available->whereIn($eventColumn, $warehouseEvents)->whereIn('m.STATE_IND_CD', [0, 8]);
+                });
+            })->whereNotExists(function ($q) {
+                $q->selectRaw('1')->from('dbo.L_MAILITM_EVENTS as terminal')
+                    ->whereColumn('terminal.MAILITM_PID', 'm.MAILITM_PID')->whereIn('terminal.EVENT_TYPE_CD', [37, 76]);
+            });
         } elseif ($status === 'returns') {
             $query->whereIn('m.POSTAL_STATUS_CD', [6, 7, 22, 23]);
         } elseif ($status === 'delivered') {
@@ -99,7 +112,7 @@ class IpsRepository
             $office = (int) $filters['office_cd'];
             $query->where(function ($q) use ($office, $status) {
                 $q->whereRaw('COALESCE(op.EVENT_OFFICE_CD, m.EVT_OFFICE_CD) = ?', [$office]);
-                if ($status !== 'pending') {
+                if (! in_array($status, ['pending', 'warehouse'], true)) {
                     $q->orWhere('op.NEXT_OFFICE_CD', $office);
                 }
             });

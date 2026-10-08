@@ -26,7 +26,7 @@ class IpsController extends Controller
     public static function filterRules(): array
     {
         return [
-            'status' => ['nullable', 'in:all,pending,reception,returns,delivered'],
+            'status' => ['nullable', 'in:all,pending,reception,returns,delivered,warehouse'],
             'q' => ['nullable', 'string', 'max:35'],
             'office_cd' => ['nullable', 'integer', 'min:1', 'max:32767'],
             'event_cd' => ['nullable', 'integer', 'min:1', 'max:32767'],

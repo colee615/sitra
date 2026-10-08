@@ -23,6 +23,8 @@ return [
     ],
     // Local operational policy, not a universal UPU transition requirement.
     'delivery_candidate_events' => [32, 39, 74, 75, 36],
+    // Confirmación compuesta desde Almacén: devolución física de Aduana seguida de entrega.
+    'customs_return_event' => ['id' => 38, 'direction' => 'I', 'result_state' => 0],
     // Receipt requires physical confirmation and office routing; 35 is not mandatory.
     'reception_candidate_events' => [30, 33, 35, 38, 42, 43, 44, 71, 72],
 ];

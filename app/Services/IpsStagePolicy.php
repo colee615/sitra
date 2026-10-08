@@ -42,6 +42,12 @@ class IpsStagePolicy
         $state = $package['state_cd'];
         $currentOffice = (int) ($package['operational_office_cd'] ?? $package['office_cd']);
         $next = $package['next_office_cd'] ?? null;
+        if (($package['destination_country'] ?? '') === 'BO' && empty($package['terminal'])
+            && $state === 1 && in_array($event, [31, 34], true) && $currentOffice === $office) {
+            // Aduana mantiene el paquete en estado 1. La oficina solo puede
+            // darlo de baja mediante EMI después de confirmar la devolución física.
+            return ['EMI'];
+        }
         if (($package['destination_country'] ?? '') !== 'BO' || ! empty($package['terminal']) || in_array($state, [1, 4, 5, 7], true)) {
             return [];
         }
@@ -63,7 +69,6 @@ class IpsStagePolicy
             && in_array($event, [32, 36, 39, 74, 75], true)) {
             $actions[] = 'EMI';
         }
-
         return $actions;
     }
 }

@@ -42,6 +42,9 @@ class IpsOperationService
         try {
             $result = $this->workflow->execute($action, $input);
             $body = ['operation_id' => $id, 'status' => 'succeeded', 'data' => $result];
+            if (! empty($result['customs_return'])) {
+                $body['message'] = 'Retorno de Aduana y entrega registrados en IPS.';
+            }
             $status = $action === 'create' ? 201 : 200;
             $this->finish($id, 'succeeded', $body, $status);
         } catch (IpsOperationException $e) {
