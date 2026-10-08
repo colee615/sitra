@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Support\UtcTimestamp;
 use App\Services\TrackingEventRuleService;
 use App\Services\TrackingSearchCacheService;
 use Illuminate\Http\JsonResponse;
@@ -133,6 +134,7 @@ class SqlServerExternalSearchSafeController extends Controller
                     'origen_evento' => trim((string) ($row->SOURCE_DB ?? 'IPS5Db')),
                     'eventType' => $eventType,
                     'eventDate' => $this->formatEventDate($row->EVENT_GMT_DT ?? null),
+                    'eventDateUtc' => UtcTimestamp::iso8601($row->EVENT_GMT_DT ?? null),
                     'office' => $office,
                     'scanned' => $this->cleanLabel(isset($row->SCANNED_TXT) ? (string) $row->SCANNED_TXT : ''),
                     'workstation' => $this->cleanLabel(isset($row->WORKSTATION_TXT) ? (string) $row->WORKSTATION_TXT : ''),
