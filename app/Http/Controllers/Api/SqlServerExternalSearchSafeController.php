@@ -101,7 +101,7 @@ class SqlServerExternalSearchSafeController extends Controller
         ?string $deliveryMode = null
     ) {
         return collect($trackingRows)
-            ->map(function ($row) use ($originCountry, $eventRuleService) {
+            ->map(function ($row) use ($originCountry, $eventRuleService, $deliveryMode) {
                 $eventType = $eventRuleService->present(
                     isset($row->EVENT_TYPE_NM_ES) ? (string) $row->EVENT_TYPE_NM_ES : '',
                     isset($row->SOURCE_DB) ? (string) $row->SOURCE_DB : '',

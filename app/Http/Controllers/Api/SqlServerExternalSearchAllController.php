@@ -88,7 +88,7 @@ class SqlServerExternalSearchAllController extends Controller
         ?string $deliveryMode = null
     ) {
         return collect($trackingRows)
-            ->map(function ($row) use ($originCountry) {
+            ->map(function ($row) use ($originCountry, $deliveryMode) {
                 $eventType = $this->normalizeText(isset($row->EVENT_TYPE_NM_ES) ? (string) $row->EVENT_TYPE_NM_ES : '');
                 $condition = $this->normalizeText(isset($row->CONDITION_TXT) ? (string) $row->CONDITION_TXT : '');
                 $detail = $this->normalizeText(isset($row->DETAIL_TXT) ? (string) $row->DETAIL_TXT : '');
