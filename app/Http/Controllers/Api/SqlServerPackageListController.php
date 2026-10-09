@@ -41,7 +41,10 @@ class SqlServerPackageListController extends Controller
         $page = (int) ($validated['page'] ?? 1);
         $perPage = (int) ($validated['per_page'] ?? 50);
         $search = isset($validated['q']) ? trim((string) $validated['q']) : null;
-        $includeDeclaration = $request->boolean('include_declaration');
+        $includeDeclaration = $request->boolean(
+            'include_declaration',
+            $request->user()->tokenCan('cds.read') && config('postal.cds_enabled')
+        );
 
         if ($includeDeclaration && !$request->user()->tokenCan('cds.read')) {
             return response()->json([

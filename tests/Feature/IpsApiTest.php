@@ -195,7 +195,7 @@ class IpsApiTest extends TestCase
         $this->assertTrue($uris->contains('api/tracking/paquetes'));
     }
 
-    public function test_tracking_package_list_can_include_cds_declarations_with_explicit_permission(): void
+    public function test_tracking_package_list_includes_cds_declarations_by_default_with_permission(): void
     {
         config(['postal.cds_enabled' => true]);
         $row = (object) [
@@ -255,7 +255,7 @@ class IpsApiTest extends TestCase
         $this->app->instance(CdsRepository::class, $cds);
 
         $response = $this->withToken($this->token(['sqlserver.read', 'cds.read']))
-            ->getJson('/api/tracking/paquetes?include_declaration=1');
+            ->getJson('/api/tracking/paquetes');
         $response->assertOk()
             ->assertJsonPath('meta.declaracion_cds_incluida', true)
             ->assertJsonPath('meta.cds_truncado', false)
@@ -275,7 +275,7 @@ class IpsApiTest extends TestCase
             ->assertJsonPath('message', 'El token no tiene permiso para consultar declaraciones de CDS.');
     }
 
-    public function test_tracking_package_list_does_not_query_cds_unless_declarations_are_requested(): void
+    public function test_tracking_package_list_keeps_legacy_shape_without_cds_permission(): void
     {
         $search = Mockery::mock(SqlServerSearchService::class);
         $search->shouldReceive('listPackages')->once()->with(1, 50, null)->andReturn([
