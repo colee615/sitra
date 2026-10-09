@@ -104,7 +104,14 @@ Accept: application/json
 
 Se exige usuario administrador y token personal de Sanctum. Una sesión web no sustituye al Bearer token de integración. Hay un límite de 60 solicitudes por minuto. El endpoint general de eventos exige también `ips.deliver` cuando se solicita EMI; `ips.events` solo no permite entregar.
 
-Las rutas antiguas `/api/tracking/eventos`, `/api/tracking/eventos-todos` y `/api/tracking/paquetes` conservan su permiso `sqlserver.read`.
+Las rutas antiguas `/api/tracking/eventos`, `/api/tracking/eventos-todos` y `/api/tracking/paquetes` conservan su permiso `sqlserver.read`. El listado `/api/tracking/paquetes` puede incluir declaraciones CDS completas con `include_declaration=1`; para ello CDS debe estar habilitado y el token debe incluir también `cds.read`. La respuesta agrega `declaracion_cds` por paquete, con estado de vínculo, objetos CDS, declaraciones, campos, artículos y documentos. Los estados posibles son `declarada`, `objeto_sin_declaracion`, `sin_objeto_cds` y `consulta_incompleta`. `meta.cds_truncado` avisa si el índice de CDS alcanzó su límite; `sin_objeto_cds` no confirma por sí solo que no exista una declaración asociada.
+
+Ejemplo de consulta:
+
+~~~http
+GET /api/tracking/paquetes?page=2&per_page=100&include_declaration=1
+Authorization: Bearer <token>
+~~~
 
 Emitir un token para un administrador existente:
 
@@ -113,6 +120,12 @@ php artisan token:issue correo-del-administrador --name=otro-proyecto --ability=
 ~~~
 
 Entregar ese token al otro proyecto por su configuración de secretos. El comando muestra el token una sola vez. No se emitieron ni enviaron tokens automáticamente.
+
+Para consumir el listado técnico con declaraciones CDS, emitir un token con ambos permisos:
+
+~~~sh
+php artisan token:issue correo-del-administrador --name=consulta-tracking-cds --ability=sqlserver.read,cds.read --days=90
+~~~
 
 ### Consulta y paginación
 

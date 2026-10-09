@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\Postal\CdsRepository;
+use App\Services\Postal\ShipmentCode;
 use App\Services\SqlServerSearchService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -14,7 +16,8 @@ class SqlServerPackageListController extends Controller
 {
     public function __invoke(
         Request $request,
-        SqlServerSearchService $searchService
+        SqlServerSearchService $searchService,
+        CdsRepository $cdsRepository
     ): JsonResponse {
         if (!$request->user() || !$request->user()->hasRole('admin')) {
             return response()->json([
@@ -32,19 +35,62 @@ class SqlServerPackageListController extends Controller
             'page' => ['nullable', 'integer', 'min:1'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:200'],
             'q' => ['nullable', 'string', 'max:40'],
+            'include_declaration' => ['sometimes', 'boolean'],
         ]);
 
         $page = (int) ($validated['page'] ?? 1);
         $perPage = (int) ($validated['per_page'] ?? 50);
         $search = isset($validated['q']) ? trim((string) $validated['q']) : null;
+        $includeDeclaration = $request->boolean('include_declaration');
+
+        if ($includeDeclaration && !$request->user()->tokenCan('cds.read')) {
+            return response()->json([
+                'message' => 'El token no tiene permiso para consultar declaraciones de CDS.',
+            ], 403);
+        }
+
+        if ($includeDeclaration && !config('postal.cds_enabled')) {
+            return response()->json([
+                'message' => 'La conexión de lectura a CDS no está habilitada.',
+            ], 503);
+        }
 
         try {
             $result = $searchService->listPackages($page, $perPage, $search);
             $trackingRows = $searchService->trackingRowsForPackageRows($result['rows'] ?? []);
             $eventsByPackage = $this->transformPackageEvents($trackingRows)->groupBy('mailitm_pid');
+            $declarationsByPackage = collect();
+            $cdsIndex = null;
+
+            if ($includeDeclaration) {
+                $packageRows = collect($result['rows'] ?? []);
+                $codes = $packageRows->flatMap(fn ($row) => [
+                    $row->MAILITM_FID ?? null,
+                    $row->MAILITM_LOCAL_ID ?? null,
+                ])->map(fn ($code) => ShipmentCode::normalize((string) $code))
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->all();
+
+                $cdsIndex = $cdsRepository->declarationIndex($codes, 1000, true);
+                $declarationsByPackage = collect($cdsIndex['declarations'] ?? [])
+                    ->groupBy(fn (array $declaration) => trim((string) ($declaration['package_id'] ?? '')));
+            }
 
             $items = collect($result['rows'] ?? [])
-                ->map(fn ($row) => $this->transformRow($row, $eventsByPackage->get(trim((string) ($row->MAILITM_PID ?? '')), collect())))
+                ->map(function ($row) use ($eventsByPackage, $declarationsByPackage, $cdsIndex, $includeDeclaration) {
+                    $item = $this->transformRow(
+                        $row,
+                        $eventsByPackage->get(trim((string) ($row->MAILITM_PID ?? '')), collect())
+                    );
+
+                    if ($includeDeclaration) {
+                        $item['declaracion_cds'] = $this->transformCdsDeclarations($row, $cdsIndex, $declarationsByPackage);
+                    }
+
+                    return $item;
+                })
                 ->values();
 
             return response()->json([
@@ -56,6 +102,8 @@ class SqlServerPackageListController extends Controller
                     'per_page' => (int) ($result['per_page'] ?? $perPage),
                     'count' => $items->count(),
                     'q' => $search,
+                    'declaracion_cds_incluida' => $includeDeclaration,
+                    'cds_truncado' => $includeDeclaration && !empty($cdsIndex['truncated']),
                 ],
             ])->header('X-Tracking-Backend', 'sqlsrv');
         } catch (Throwable $e) {
@@ -183,6 +231,78 @@ class SqlServerPackageListController extends Controller
                 'nombre' => $this->cleanText($row->DEST_COUNTRY_NM ?? ''),
             ],
             'eventos' => collect($events)->values()->all(),
+        ];
+    }
+
+    private function transformCdsDeclarations(object $row, ?array $cdsIndex, $declarationsByPackage): array
+    {
+        $codes = collect([
+            $row->MAILITM_FID ?? null,
+            $row->MAILITM_LOCAL_ID ?? null,
+        ])->map(fn ($code) => ShipmentCode::normalize((string) $code))
+            ->filter()
+            ->unique()
+            ->all();
+        $packages = collect($cdsIndex['packages'] ?? []);
+        $matchedPackages = $packages->filter(function ($package) use ($codes) {
+            return collect([
+                $package->MAIL_OBJECT_ID ?? null,
+                $package->MAIL_OBJECT_LOCAL_ID ?? null,
+                $package->MAIL_OBJECT_LOCAL_ID2 ?? null,
+            ])->map(fn ($code) => ShipmentCode::normalize((string) $code))
+                ->contains(fn ($code) => $code !== '' && in_array($code, $codes, true));
+        });
+        $primaryCodes = $matchedPackages->pluck('MAIL_OBJECT_ID')
+            ->map(fn ($code) => ShipmentCode::normalize((string) $code))
+            ->filter()
+            ->unique()
+            ->all();
+        $matchedPackages = $packages->filter(function ($package) use ($matchedPackages, $primaryCodes) {
+            return $matchedPackages->contains('MAIL_OBJECT_PID', $package->MAIL_OBJECT_PID ?? null)
+                || in_array(ShipmentCode::normalize((string) ($package->MAIL_OBJECT_ID ?? '')), $primaryCodes, true);
+        })->values();
+
+        $cdsPackages = $matchedPackages->map(function ($package) use ($declarationsByPackage) {
+            $packageId = trim((string) ($package->MAIL_OBJECT_PID ?? ''));
+            $declarations = $declarationsByPackage->get($packageId, collect())
+                ->map(fn (array $declaration) => [
+                    'id' => $declaration['id'] ?? null,
+                    'numero' => $declaration['declaration_number'] ?? null,
+                    'estado' => $declaration['state'] ?? null,
+                    'etapa' => $declaration['workflow_stage'] ?? null,
+                    'estado_datos' => $declaration['data_status'] ?? null,
+                    'resumen_contenido' => $declaration['content_summary'] ?? null,
+                    'cantidad_articulos' => $declaration['piece_count'] ?? 0,
+                    'cantidad_documentos' => $declaration['document_count'] ?? 0,
+                    'campos' => $declaration['data']['fields'] ?? [],
+                    'articulos' => $declaration['data']['pieces'] ?? [],
+                    'documentos' => $declaration['data']['documents'] ?? [],
+                ])
+                ->values();
+
+            return [
+                'id_objeto_cds' => $package->MAIL_OBJECT_PID ?? null,
+                'codigo' => $this->nullableString($package->MAIL_OBJECT_ID ?? null),
+                'identificador_local' => $this->nullableString($package->MAIL_OBJECT_LOCAL_ID ?? null),
+                'identificador_local_2' => $this->nullableString($package->MAIL_OBJECT_LOCAL_ID2 ?? null),
+                'estado_objeto' => $this->nullableString($package->MAIL_STATE_NM ?? null),
+                'fecha_registro' => $this->formatDate($package->POSTING_DATE ?? null),
+                'declaraciones' => $declarations->all(),
+            ];
+        });
+        $declarationCount = $cdsPackages->sum(fn (array $package) => count($package['declaraciones']));
+        $truncated = !empty($cdsIndex['truncated']);
+        $status = match (true) {
+            $truncated && ($cdsPackages->isEmpty() || $declarationCount === 0) => 'consulta_incompleta',
+            $cdsPackages->isEmpty() => 'sin_objeto_cds',
+            $declarationCount > 0 => 'declarada',
+            default => 'objeto_sin_declaracion',
+        };
+
+        return [
+            'estado' => $status,
+            'truncado' => $truncated,
+            'objetos' => $cdsPackages->all(),
         ];
     }
 

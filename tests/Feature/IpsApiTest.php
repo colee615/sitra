@@ -6,6 +6,7 @@ use App\Exceptions\IpsOperationException;
 use App\Models\User;
 use App\Services\IpsRepository;
 use App\Services\IpsWorkflowService;
+use App\Services\Postal\CdsRepository;
 use App\Services\SqlServerSearchService;
 use App\Services\TrackingSearchCacheService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -192,6 +193,105 @@ class IpsApiTest extends TestCase
         $this->assertTrue($uris->contains('api/tracking/eventos/batch'));
         $this->assertTrue($uris->contains('api/tracking/eventos-todos'));
         $this->assertTrue($uris->contains('api/tracking/paquetes'));
+    }
+
+    public function test_tracking_package_list_can_include_cds_declarations_with_explicit_permission(): void
+    {
+        config(['postal.cds_enabled' => true]);
+        $row = (object) [
+            'MAILITM_PID' => 10,
+            'MAILITM_FID' => 'EY592031552US',
+            'MAILITM_LOCAL_ID' => 'CBBA',
+            'MAILITM_WEIGHT' => 2.5,
+            'MAILITM_VALUE' => 295,
+            'MAIL_CLASS_NM' => 'EMS',
+            'MAILITM_CONTENT_NM' => null,
+            'POSTAL_STATUS_NM' => 'En tránsito',
+            'ORIG_COUNTRY_CD' => 'US',
+            'ORIG_COUNTRY_NM' => 'Estados Unidos',
+            'DEST_COUNTRY_CD' => null,
+            'DEST_COUNTRY_NM' => null,
+        ];
+        $search = Mockery::mock(SqlServerSearchService::class);
+        $search->shouldReceive('listPackages')->once()->with(1, 50, null)->andReturn([
+            'page' => 1,
+            'per_page' => 50,
+            'rows' => collect([$row]),
+        ]);
+        $search->shouldReceive('trackingRowsForPackageRows')->once()->andReturn(collect());
+        $this->app->instance(SqlServerSearchService::class, $search);
+
+        $cds = Mockery::mock(CdsRepository::class);
+        $cds->shouldReceive('declarationIndex')
+            ->once()
+            ->with(['EY592031552US', 'CBBA'], 1000, true)
+            ->andReturn([
+                'packages' => [(object) [
+                    'MAIL_OBJECT_PID' => 501,
+                    'MAIL_OBJECT_ID' => 'EY592031552US',
+                    'MAIL_OBJECT_LOCAL_ID' => 'CBBA',
+                    'MAIL_OBJECT_LOCAL_ID2' => null,
+                    'MAIL_STATE_NM' => 'Sent to customs',
+                    'POSTING_DATE' => '2026-09-28 17:07:00',
+                ]],
+                'declarations' => [[
+                    'id' => 601,
+                    'package_id' => 501,
+                    'declaration_number' => 'CN23-1',
+                    'state' => 'Sent to customs',
+                    'workflow_stage' => 'Enviada a Aduana',
+                    'data_status' => 'ok',
+                    'content_summary' => '1 artículo(s) · 1 documento(s)',
+                    'piece_count' => 1,
+                    'document_count' => 1,
+                    'data' => [
+                        'fields' => ['SNm' => 'Remitente', 'RNm' => 'Destinatario'],
+                        'pieces' => [['Desc' => 'Libro', 'Amt' => '10']],
+                        'documents' => [['type' => 'CN23', 'fields' => ['Ref' => 'CN23-1']]],
+                    ],
+                ]],
+                'truncated' => false,
+            ]);
+        $this->app->instance(CdsRepository::class, $cds);
+
+        $response = $this->withToken($this->token(['sqlserver.read', 'cds.read']))
+            ->getJson('/api/tracking/paquetes?include_declaration=1');
+        $response->assertOk()
+            ->assertJsonPath('meta.declaracion_cds_incluida', true)
+            ->assertJsonPath('meta.cds_truncado', false)
+            ->assertJsonPath('data.0.declaracion_cds.estado', 'declarada')
+            ->assertJsonPath('data.0.declaracion_cds.objetos.0.declaraciones.0.numero', 'CN23-1')
+            ->assertJsonPath('data.0.declaracion_cds.objetos.0.declaraciones.0.articulos.0.Desc', 'Libro')
+            ->assertJsonPath('data.0.declaracion_cds.objetos.0.declaraciones.0.documentos.0.type', 'CN23');
+    }
+
+    public function test_tracking_package_declaration_requires_cds_read_ability(): void
+    {
+        $this->mock(CdsRepository::class)->shouldNotReceive('declarationIndex');
+
+        $this->withToken($this->token(['sqlserver.read']))
+            ->getJson('/api/tracking/paquetes?include_declaration=1')
+            ->assertForbidden()
+            ->assertJsonPath('message', 'El token no tiene permiso para consultar declaraciones de CDS.');
+    }
+
+    public function test_tracking_package_list_does_not_query_cds_unless_declarations_are_requested(): void
+    {
+        $search = Mockery::mock(SqlServerSearchService::class);
+        $search->shouldReceive('listPackages')->once()->with(1, 50, null)->andReturn([
+            'page' => 1,
+            'per_page' => 50,
+            'rows' => collect(),
+        ]);
+        $search->shouldReceive('trackingRowsForPackageRows')->once()->andReturn(collect());
+        $this->app->instance(SqlServerSearchService::class, $search);
+        $this->mock(CdsRepository::class)->shouldNotReceive('declarationIndex');
+
+        $this->withToken($this->token(['sqlserver.read']))
+            ->getJson('/api/tracking/paquetes')
+            ->assertOk()
+            ->assertJsonPath('meta.declaracion_cds_incluida', false)
+            ->assertJsonPath('meta.cds_truncado', false);
     }
 
     public function test_tracking_batch_endpoint_returns_grouped_events_for_requested_codes(): void

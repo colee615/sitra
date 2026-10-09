@@ -93,7 +93,7 @@ class CdsRepository
     }
 
     /** Return a lightweight, bounded index for packages in an IPS receptacle. */
-    public function declarationIndex(array $codes, int $limit = 1000): array
+    public function declarationIndex(array $codes, int $limit = 1000, bool $includeData = false): array
     {
         $db = DB::connection(config('postal.cds_connection', 'cds'));
         $limit = max(1, min($limit, 1000));
@@ -148,9 +148,9 @@ class CdsRepository
 
         return [
             'packages' => $packages->all(),
-            'declarations' => $rows->take($limit)->map(function ($row) {
+            'declarations' => $rows->take($limit)->map(function ($row) use ($includeData) {
                 $parsed = $this->xml->parse($row->payload, 'DecData');
-                return [
+                $declaration = [
                     'id' => $row->id,
                     'package_id' => $row->package_id,
                     'declaration_number' => $row->declaration_number,
@@ -161,6 +161,11 @@ class CdsRepository
                     'document_count' => count($parsed['documents']),
                     'content_summary' => $this->declarationContentSummary($parsed),
                 ];
+                if ($includeData) {
+                    $declaration['data'] = $parsed;
+                }
+
+                return $declaration;
             })->all(),
             'truncated' => $truncated,
             'packages_truncated' => $packagesTruncated,
