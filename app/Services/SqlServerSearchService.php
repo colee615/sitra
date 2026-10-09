@@ -65,6 +65,14 @@ class SqlServerSearchService
                     mi.CURRENCY_CD,
                     cur.CURRENCY_NM,
                     mi.EVT_GMT_DT,
+                    (
+                        SELECT TOP 1 event_time.EVENT_LOCAL_OFFSET
+                        FROM dbo.L_MAILITM_EVENTS event_time
+                        WHERE event_time.MAILITM_PID = mi.MAILITM_PID
+                          AND event_time.EVENT_GMT_DT = mi.EVT_GMT_DT
+                          AND event_time.EVENT_TYPE_CD = mi.EVT_TYPE_CD
+                        ORDER BY event_time.EVENT_GMT_DT DESC
+                    ) AS EVT_LOCAL_OFFSET,
                     mi.EVT_TYPE_CD,
                     COALESCE(cte.LOCAL_EVENT_TYPE_NM, ce.EVENT_TYPE_NM) AS EVT_TYPE_NM_ES,
                     mi.EVT_OFFICE_CD,
@@ -95,6 +103,7 @@ class SqlServerSearchService
                     mi.MAILITM_FID AS MAILITM_FID,
                     RTRIM(LTRIM(mi.MAILITM_LOCAL_ID)) AS MAILITM_LOCAL_ID,
                     e.EVENT_GMT_DT,
+                    e.EVENT_LOCAL_OFFSET,
                     e.EVENT_TYPE_CD,
                     COALESCE(ct.LOCAL_EVENT_TYPE_NM, c.EVENT_TYPE_NM) AS EVENT_TYPE_NM_ES,
                     e.USER_PID,
@@ -142,6 +151,8 @@ class SqlServerSearchService
                     CAST('' AS varchar(40)) AS MAILITM_FID,
                     CAST('' AS varchar(40)) AS MAILITM_LOCAL_ID,
                     COALESCE(CAST(nee.EVENT_LOCAL_DT AS datetime), nee.CAPTURE_GMT_DT) AS EVENT_GMT_DT,
+                    nee.EVENT_LOCAL_DT,
+                    nee.CAPTURE_GMT_DT,
                     nee.EVENT_TYPE_CD,
                     COALESCE(ct.LOCAL_EVENT_TYPE_NM, c.EVENT_TYPE_NM) AS EVENT_TYPE_NM_ES,
                     CAST(NULL AS int) AS USER_PID,
@@ -214,6 +225,7 @@ class SqlServerSearchService
                 SELECT
                     di.MAILITM_PID,
                     di.EVENT_GMT_DT,
+                    event_time.EVENT_LOCAL_OFFSET,
                     di.EVENT_TYPE_CD,
                     COALESCE(ct.LOCAL_EVENT_TYPE_NM, c.EVENT_TYPE_NM) AS EVENT_TYPE_NM_ES,
                     di.NON_DELIVERY_REASON_CD,
@@ -223,6 +235,14 @@ class SqlServerSearchService
                     di.DELIV_POSTCODE
                 FROM dbo.L_MAILITMS mi
                 INNER JOIN dbo.L_MAILITM_DELIV_INFOS di ON di.MAILITM_PID = mi.MAILITM_PID
+                OUTER APPLY (
+                    SELECT TOP 1 e.EVENT_LOCAL_OFFSET
+                    FROM dbo.L_MAILITM_EVENTS e
+                    WHERE e.MAILITM_PID = di.MAILITM_PID
+                      AND e.EVENT_TYPE_CD = di.EVENT_TYPE_CD
+                      AND e.EVENT_GMT_DT = di.EVENT_GMT_DT
+                    ORDER BY e.EVENT_GMT_DT DESC
+                ) event_time
                 LEFT JOIN dbo.C_EVENT_TYPES c ON c.EVENT_TYPE_CD = di.EVENT_TYPE_CD
                 LEFT JOIN dbo.CT_EVENT_TYPES ct ON ct.EVENT_TYPE_CD = di.EVENT_TYPE_CD AND ct.LANGUAGE_CD = 'ES'
                 WHERE UPPER(RTRIM(LTRIM(mi.MAILITM_FID))) = ?
@@ -419,6 +439,80 @@ class SqlServerSearchService
             ->all();
     }
 
+    /**
+     * Consulta solo los datos de destino para varios codigos, sin cargar el
+     * historial de eventos. Se usa desde reportes que necesitan enriquecer
+     * muchos paquetes internacionales de una sola vez.
+     */
+    public function searchManyDestinations(array $codigos): array
+    {
+        $codes = collect($codigos)
+            ->map(fn ($codigo) => strtoupper(trim((string) $codigo)))
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($codes->isEmpty()) {
+            return [];
+        }
+
+        $connection = $this->connectionName();
+        $placeholders = implode(',', array_fill(0, $codes->count(), '?'));
+        $bindings = array_merge($codes->all(), $codes->all());
+        $rows = collect(DB::connection($connection)->select(
+            "
+            SELECT
+                UPPER(RTRIM(LTRIM(mi.MAILITM_FID))) AS MAILITM_FID,
+                UPPER(RTRIM(LTRIM(mi.MAILITM_LOCAL_ID))) AS MAILITM_LOCAL_ID,
+                mi.DEST_COUNTRY_CD,
+                cod.COUNTRY_NM AS DEST_COUNTRY_NM,
+                recipient.CUSTOMER_CITY AS DESTINATION_CITY
+            FROM dbo.L_MAILITMS mi
+            LEFT JOIN dbo.C_COUNTRIES cod ON cod.COUNTRY_CD = mi.DEST_COUNTRY_CD
+            OUTER APPLY (
+                SELECT TOP 1 mc.CUSTOMER_CITY
+                FROM dbo.L_MAILITM_CUSTOMERS mc
+                WHERE mc.MAILITM_PID = mi.MAILITM_PID
+                  AND mc.SENDER_PAYEE_IND = 'A'
+            ) recipient
+            WHERE mi.MAILITM_FID IN ($placeholders)
+               OR mi.MAILITM_LOCAL_ID IN ($placeholders)
+            ORDER BY mi.EVT_GMT_DT DESC, mi.MAILITM_PID DESC
+            ",
+            $bindings
+        ));
+
+        $requested = array_fill_keys($codes->all(), true);
+        $destinations = [];
+
+        foreach ($codes as $code) {
+            $destinations[$code] = [
+                'codigo' => $code,
+                'ciudad' => null,
+                'pais' => null,
+                'pais_codigo' => null,
+                'destino' => null,
+            ];
+        }
+
+        foreach ($rows as $row) {
+            foreach ($this->matchingRequestedCodes($row, $requested) as $code) {
+                $destination = $destinations[$code];
+                $city = trim((string) ($row->DESTINATION_CITY ?? ''));
+                $country = trim((string) ($row->DEST_COUNTRY_NM ?? ''));
+                $countryCode = strtoupper(trim((string) ($row->DEST_COUNTRY_CD ?? '')));
+                $destination['ciudad'] = $destination['ciudad'] ?: ($city !== '' ? $city : null);
+                $destination['pais'] = $destination['pais'] ?: ($country !== '' ? $country : null);
+                $destination['pais_codigo'] = $destination['pais_codigo'] ?: ($countryCode !== '' ? $countryCode : null);
+                $label = trim(implode(' / ', array_filter([$destination['ciudad'], $destination['pais']])));
+                $destination['destino'] = $label !== '' ? $label : null;
+                $destinations[$code] = $destination;
+            }
+        }
+
+        return $destinations;
+    }
+
     public function listPackages(?int $page = 1, ?int $perPage = 50, ?string $search = null): array
     {
         $page = $page !== null ? max(1, $page) : null;
@@ -457,6 +551,7 @@ class SqlServerSearchService
                 mi.MAILITM_FID AS MAILITM_FID,
                 RTRIM(LTRIM(mi.MAILITM_LOCAL_ID)) AS MAILITM_LOCAL_ID,
                 e.EVENT_GMT_DT,
+                e.EVENT_LOCAL_OFFSET,
                 e.EVENT_TYPE_CD,
                 COALESCE(ct.LOCAL_EVENT_TYPE_NM, c.EVENT_TYPE_NM) AS EVENT_TYPE_NM_ES,
                 e.USER_PID,
@@ -497,6 +592,8 @@ class SqlServerSearchService
                 CAST('' AS varchar(40)) AS MAILITM_FID,
                 CAST('' AS varchar(40)) AS MAILITM_LOCAL_ID,
                 COALESCE(CAST(nee.EVENT_LOCAL_DT AS datetime), nee.CAPTURE_GMT_DT) AS EVENT_GMT_DT,
+                nee.EVENT_LOCAL_DT,
+                nee.CAPTURE_GMT_DT,
                 nee.EVENT_TYPE_CD,
                 COALESCE(ct.LOCAL_EVENT_TYPE_NM, c.EVENT_TYPE_NM) AS EVENT_TYPE_NM_ES,
                 CAST(NULL AS int) AS USER_PID,

@@ -6,6 +6,7 @@ use App\Services\Postal\PostalWorkspace;
 use App\Services\Postal\PostalActivityReport;
 use App\Services\Postal\CustomsRemittanceBuilder;
 use App\Services\Postal\ReceptacleSearchService;
+use App\Support\IpsEventTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -531,6 +532,92 @@ class PostalIntelligenceController extends Controller
         $data['responses'] = $data['cds']['responses'] ?? [];
         $data['deliveryRows'] = collect($data['ips']['deliveryRows'] ?? []);
         $data['ediRows'] = collect($data['ips']['ediRows'] ?? []);
+        $postalTimezone = config('postal.timezone', 'America/La_Paz');
+        $formatLocalWallTime = static function ($value) use ($postalTimezone): ?string {
+            if (empty($value)) {
+                return null;
+            }
+
+            try {
+                return CarbonImmutable::parse($value, $postalTimezone)->setTimezone($postalTimezone)->format('d/m/Y H:i:s');
+            } catch (Throwable) {
+                return null;
+            }
+        };
+        $formatUtcInPostalTimezone = static function ($value) use ($postalTimezone): ?string {
+            if (empty($value)) {
+                return null;
+            }
+
+            try {
+                return CarbonImmutable::parse($value, 'UTC')->setTimezone($postalTimezone)->format('d/m/Y H:i:s');
+            } catch (Throwable) {
+                return null;
+            }
+        };
+        $formatIpsLocalTime = static function ($value, $offset): ?string {
+            $presented = IpsEventTime::present($value, $offset);
+            if (empty($presented['event_at_local']) || ($presented['event_offset_minutes'] ?? null) === null) {
+                return null;
+            }
+
+            try {
+                return CarbonImmutable::parse($presented['event_at_local'])->format('d/m/Y H:i:s');
+            } catch (Throwable) {
+                return null;
+            }
+        };
+        $data['events'] = $data['events']->map(function ($event) use ($formatIpsLocalTime, $formatLocalWallTime, $formatUtcInPostalTimezone) {
+            if (($event->SOURCE_DB ?? '') === 'IPS5Db-EDI') {
+                $event->EVENT_LOCAL_DISPLAY = !empty($event->EVENT_LOCAL_DT)
+                    ? $formatLocalWallTime($event->EVENT_LOCAL_DT)
+                    : $formatUtcInPostalTimezone($event->CAPTURE_GMT_DT ?? null);
+                $event->EVENT_TIME_LABEL = !empty($event->EVENT_LOCAL_DT) ? 'Fecha del mensaje' : 'Fecha de captura';
+            } else {
+                $event->EVENT_LOCAL_DISPLAY = $formatIpsLocalTime($event->EVENT_GMT_DT ?? null, $event->EVENT_LOCAL_OFFSET ?? null);
+                $event->EVENT_TIME_LABEL = 'Fecha registrada';
+            }
+            $event->EVENT_LOCAL_DISPLAY = $event->EVENT_LOCAL_DISPLAY ?: 'Hora local no informada';
+
+            return $event;
+        });
+        $data['ipsPackage'] = $data['ipsPackage'] ? tap($data['ipsPackage'], function ($package) use ($formatIpsLocalTime) {
+            $package->EVT_LOCAL_DISPLAY = $formatIpsLocalTime($package->EVT_GMT_DT ?? null, $package->EVT_LOCAL_OFFSET ?? null);
+        }) : null;
+        $data['deliveryRows'] = $data['deliveryRows']->map(function ($delivery) use ($formatIpsLocalTime) {
+            $delivery->EVENT_LOCAL_DISPLAY = $formatIpsLocalTime($delivery->EVENT_GMT_DT ?? null, $delivery->EVENT_LOCAL_OFFSET ?? null)
+                ?: 'Hora local no informada';
+
+            return $delivery;
+        });
+        $data['ediRows'] = $data['ediRows']->map(function ($edi) use ($formatLocalWallTime, $formatUtcInPostalTimezone) {
+            $edi->EVENT_LOCAL_DISPLAY = !empty($edi->EVENT_LOCAL_DT)
+                ? $formatLocalWallTime($edi->EVENT_LOCAL_DT)
+                : $formatUtcInPostalTimezone($edi->CAPTURE_GMT_DT ?? null);
+            $edi->EVENT_TIME_LABEL = !empty($edi->EVENT_LOCAL_DT) ? 'Evento' : 'Captura';
+
+            return $edi;
+        });
+        $data['ips']['logisticRows'] = collect($data['ips']['logisticRows'] ?? [])->map(function ($row) use ($formatLocalWallTime) {
+            $row->DEPARTURE_LOCAL_DISPLAY = $formatLocalWallTime($row->DESPTCH_DEPARTURE_DT ?? null);
+
+            return $row;
+        });
+        $data['ips']['manifestRows'] = collect($data['ips']['manifestRows'] ?? [])->map(function ($row) use ($formatLocalWallTime) {
+            $row->CREATION_LOCAL_DISPLAY = $formatLocalWallTime($row->CREATION_LCL_DT ?? null);
+
+            return $row;
+        });
+        $data['cds']['events'] = collect($data['cds']['events'] ?? [])->map(function ($event) use ($formatUtcInPostalTimezone) {
+            $event['occurred_at_local_display'] = $formatUtcInPostalTimezone($event['occurred_at'] ?? null) ?: 'Fecha no informada';
+
+            return $event;
+        })->all();
+        $data['cdsPackageGroups'] = $data['cdsPackageGroups']->map(function ($group) use ($formatLocalWallTime) {
+            $group['package']->POSTING_DATE_LOCAL_DISPLAY = $formatLocalWallTime($group['package']->POSTING_DATE ?? null);
+
+            return $group;
+        });
         $data['customsRows'] = collect($data['ips']['customsRows'] ?? []);
         $data['contentPieceRows'] = collect($data['ips']['contentPieceRows'] ?? []);
         $data['operationsMetrics'] = [
@@ -627,15 +714,44 @@ class PostalIntelligenceController extends Controller
         $append = static function (array $record) use (&$rows): void {
             $rows[] = array_pad($record, 16, null);
         };
+        $postalTimezone = config('postal.timezone', 'America/La_Paz');
+        $formatLocalWallTime = static function ($value) use ($postalTimezone): ?string {
+            if (empty($value)) return null;
+            try {
+                return CarbonImmutable::parse($value, $postalTimezone)->setTimezone($postalTimezone)->format('d/m/Y H:i:s');
+            } catch (Throwable) {
+                return null;
+            }
+        };
+        $formatUtcInPostalTimezone = static function ($value) use ($postalTimezone): ?string {
+            if (empty($value)) return null;
+            try {
+                return CarbonImmutable::parse($value, 'UTC')->setTimezone($postalTimezone)->format('d/m/Y H:i:s');
+            } catch (Throwable) {
+                return null;
+            }
+        };
+        $formatIpsLocalTime = static function ($value, $offset): ?string {
+            $presented = IpsEventTime::present($value, $offset);
+            if (empty($presented['event_at_local']) || ($presented['event_offset_minutes'] ?? null) === null) return null;
+            try {
+                return CarbonImmutable::parse($presented['event_at_local'])->format('d/m/Y H:i:s');
+            } catch (Throwable) {
+                return null;
+            }
+        };
         $codeFound = $data['code'] ?: $code;
         foreach ($data['ips']['packageRows'] ?? [] as $package) {
-            $append(['Ficha del paquete','IPS',$package->MAILITM_FID,$package->EVT_GMT_DT,$package->POSTAL_STATUS_NM,
+            $append(['Ficha del paquete','IPS',$package->MAILITM_FID,$formatIpsLocalTime($package->EVT_GMT_DT ?? null, $package->EVT_LOCAL_OFFSET ?? null) ?: 'Hora local no informada',$package->POSTAL_STATUS_NM,
                 $package->EVT_TYPE_NM_ES,trim(($package->EVT_OFFICE_FCD ?? '').' '.($package->EVT_OFFICE_NM ?? '')),null,null,
                 $package->MAIL_CLASS_NM ?: $package->MAIL_CLASS_CD,$package->ORIG_COUNTRY_NM,$package->DEST_COUNTRY_NM,
                 $package->MAILITM_WEIGHT,$package->MAILITM_VALUE,$package->CURRENCY_NM,$package->DUTIES_AMOUNT]);
         }
         foreach ($data['ips']['trackingRows'] ?? [] as $event) {
-            $append(['Movimiento','IPS',$event->MAILITM_FID ?: $event->MAILITM_LOCAL_ID,$event->EVENT_GMT_DT,$event->EVENT_TYPE_CD,
+            $eventDate = ($event->SOURCE_DB ?? '') === 'IPS5Db-EDI'
+                ? (!empty($event->EVENT_LOCAL_DT) ? $formatLocalWallTime($event->EVENT_LOCAL_DT) : $formatUtcInPostalTimezone($event->CAPTURE_GMT_DT ?? null))
+                : $formatIpsLocalTime($event->EVENT_GMT_DT ?? null, $event->EVENT_LOCAL_OFFSET ?? null);
+            $append(['Movimiento','IPS',$event->MAILITM_FID ?: $event->MAILITM_LOCAL_ID,$eventDate ?: 'Hora local no informada',$event->EVENT_TYPE_CD,
                 $event->EVENT_TYPE_NM_ES,trim(($event->OFFICE_FCD ?? '').' '.($event->OFFICE_NM ?? '')),
                 trim(($event->NEXT_OFFICE_FCD ?? '').' '.($event->NEXT_OFFICE_NM ?? '')),$event->USER_NM ?: $event->USER_FID,
                 null,null,null,null,null,null,trim(implode(' · ',array_filter([$event->CONDITION_TXT ?? null,
@@ -643,24 +759,28 @@ class PostalIntelligenceController extends Controller
                     $event->ATTEMPTED_DELIVERY_LOCATION ?? null])))]);
         }
         foreach ($data['ips']['deliveryRows'] ?? [] as $delivery) {
-            $append(['Intento o constancia de entrega','IPS',$codeFound,$delivery->EVENT_GMT_DT,$delivery->EVENT_TYPE_CD,
+            $deliveryDate = $formatIpsLocalTime($delivery->EVENT_GMT_DT ?? null, $delivery->EVENT_LOCAL_OFFSET ?? null);
+            $append(['Intento o constancia de entrega','IPS',$codeFound,$deliveryDate ?: 'Hora local no informada',$delivery->EVENT_TYPE_CD,
                 $delivery->EVENT_TYPE_NM_ES,trim(($delivery->DELIV_LOCATION ?? '').' '.($delivery->DELIV_POSTCODE ?? '')),
                 null,$delivery->SIGNATORY_NM,null,null,null,null,null,null,
                 trim(implode(' · ',array_filter([!empty($delivery->NON_DELIVERY_REASON_CD) ? 'Motivo no entrega '.$delivery->NON_DELIVERY_REASON_CD : null,
                     !empty($delivery->NON_DELIVERY_MEASURE_CD) ? 'Acción '.$delivery->NON_DELIVERY_MEASURE_CD : null])))]);
         }
         foreach ($data['ips']['ediRows'] ?? [] as $edi) {
-            $append(['Mensaje internacional EDI','IPS',$edi->MAILITM_FID ?: $codeFound,$edi->CAPTURE_GMT_DT ?: $edi->EVENT_LOCAL_DT,
+            $ediDate = !empty($edi->EVENT_LOCAL_DT)
+                ? $formatLocalWallTime($edi->EVENT_LOCAL_DT)
+                : $formatUtcInPostalTimezone($edi->CAPTURE_GMT_DT ?? null);
+            $append(['Mensaje internacional EDI','IPS',$edi->MAILITM_FID ?: $codeFound,$ediDate ?: 'Fecha no informada',
                 $edi->EVENT_TYPE_CD,$edi->EVENT_TYPE_NM_ES,$edi->LOCATION_ID,$edi->NEXT_POINT_ID ?? null,$edi->SENDER_ID,
                 null,null,null,null,$edi->DESPATCH_NUMBER,null,null]);
         }
         foreach ($data['ips']['logisticRows'] ?? [] as $logistic) {
-            $append(['Saca y despacho','IPS',$codeFound,$logistic->DESPTCH_DEPARTURE_DT,null,'Vínculo logístico',
+            $append(['Saca y despacho','IPS',$codeFound,$formatLocalWallTime($logistic->DESPTCH_DEPARTURE_DT ?? null),null,'Vínculo logístico',
                 $logistic->ORIG_OFFICE_FCD,$logistic->DEST_OFFICE_FCD,null,null,null,null,$logistic->RECPTCL_WEIGHT,
                 $logistic->RECPTCL_FID,$logistic->DESPTCH_FID,$logistic->DESPTCH_FID]);
         }
         foreach ($data['ips']['manifestRows'] ?? [] as $manifest) {
-            $append(['Manifiesto / formulario','IPS',$codeFound,$manifest->CREATION_LCL_DT,$manifest->MANIF_TYPE_ID,
+            $append(['Manifiesto / formulario','IPS',$codeFound,$formatLocalWallTime($manifest->CREATION_LCL_DT ?? null),$manifest->MANIF_TYPE_ID,
                 $manifest->FORM_NM,$manifest->OFFICE_FCD ?: $manifest->OFFICE_NM,null,$manifest->USER_NM ?: $manifest->USER_FID,
                 null,null,null,null,$manifest->MANIFEST_LIST_ID,null,$manifest->OBSERVATION]);
         }
@@ -675,7 +795,7 @@ class PostalIntelligenceController extends Controller
                 $piece->NUMBER_OF_UNITS,$piece->DECLARED_VALUE_CURRENCY_CD,$piece->DECLARED_VALUE]);
         }
         foreach ($data['cds']['packages'] ?? [] as $package) {
-            $append(['Registro CDS','CDS',$package->MAIL_OBJECT_ID,$package->POSTING_DATE,$package->MAIL_STATE_NM,
+            $append(['Registro CDS','CDS',$package->MAIL_OBJECT_ID,$formatLocalWallTime($package->POSTING_DATE ?? null),$package->MAIL_STATE_NM,
                 $package->MAIL_OBJECT_TYPE_CD,null,null,null,null,null,null,null,$package->MAIL_OBJECT_LOCAL_ID,null,null]);
         }
         foreach ($data['cds']['declarations'] ?? [] as $declaration) {
@@ -702,7 +822,7 @@ class PostalIntelligenceController extends Controller
         return response()->streamDownload(function () use ($rows) {
             $stream = fopen('php://output', 'w');
             fwrite($stream, "\xEF\xBB\xBF");
-            fputcsv($stream, ['Tipo de registro','Fuente','Código del paquete','Fecha del registro','Estado / código','Movimiento o dato','Oficina / ubicación','Siguiente oficina','Responsable registrado','Clase postal','País de origen','País de destino','Peso','Cantidad / referencia','Moneda / número','Valor / observación']);
+            fputcsv($stream, ['Tipo de registro','Fuente','Código del paquete','Fecha del registro (hora local)','Estado / código','Movimiento o dato','Oficina / ubicación','Siguiente oficina','Responsable registrado','Clase postal','País de origen','País de destino','Peso','Cantidad / referencia','Moneda / número','Valor / observación']);
             foreach ($rows as $row) fputcsv($stream, array_map([$this, 'safeCsvCell'], $row));
             fclose($stream);
         }, "expediente-postal-{$safeCode}.csv", ['Content-Type' => 'text/csv; charset=UTF-8', 'Cache-Control' => 'private, no-store']);

@@ -48,6 +48,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/conjunto', [PostalIntelligenceController::class, 'index'])->middleware('can:postal.access')->name('postal.combined');
     Route::get('/operaciones-postales', [PostalIntelligenceController::class, 'activityReport'])->middleware('can:postal.ips')->name('postal.operations');
     Route::get('/operaciones-postales/reporte.csv', [PostalIntelligenceController::class, 'activityReportCsv'])->middleware('can:postal.ips')->name('postal.operations.csv');
+    Route::get('/reporte-entregas', [\App\Http\Controllers\PostalDeliveryPerformanceController::class, 'index'])->middleware('can:postal.ips')->name('postal.deliveries.performance');
+    Route::get('/reporte-entregas/pdf', [\App\Http\Controllers\PostalDeliveryPerformanceController::class, 'pdf'])->middleware('can:postal.ips')->name('postal.deliveries.performance.pdf');
+    Route::get('/reporte-entregas.csv', [\App\Http\Controllers\PostalDeliveryPerformanceController::class, 'csv'])->middleware('can:postal.ips')->name('postal.deliveries.performance.csv');
     Route::get('/consultas/expediente.csv', [PostalIntelligenceController::class, 'packageCsv'])->middleware('can:postal.access')->name('postal.package.csv');
     Route::get('/despachos', [PostalIntelligenceController::class, 'dispatches'])->middleware('can:postal.ips')->name('postal.dispatches');
     Route::get('/marbetes', [PostalIntelligenceController::class, 'receptacles'])->middleware('can:postal.ips')->name('postal.receptacles');

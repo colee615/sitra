@@ -21,7 +21,7 @@
             <div class="postal-remittance-meta">
                 <span><strong>Identificador local:</strong> {{ (($package->MAIL_OBJECT_LOCAL_ID ?? '') ?: ($package->MAIL_OBJECT_LOCAL_ID2 ?? '')) ?: 'No informado' }}</span>
                 <span><strong>Clase / tipo:</strong> {{ $package->MAIL_CLASS_CD ?? '—' }} / {{ $package->MAIL_OBJECT_TYPE_CD ?? '—' }}</span>
-                <span><strong>Fecha postal CDS:</strong> {{ $package->POSTING_DATE ?? 'No informada' }}</span>
+                <span><strong>Fecha postal CDS:</strong> {{ $package->POSTING_DATE_LOCAL_DISPLAY ?? 'No informada' }}</span>
             </div>
             @forelse($group['declarations'] as $declaration)
                 @include('postal.declaration', ['declaration'=>$declaration, 'cn23Code'=>$code])
@@ -45,12 +45,12 @@
     @endforelse
 
     <details id="responsibles" class="postal-subsection">
-        <summary><i class="fas fa-user-check"></i> Eventos de Aduana <small>· quién, cuándo y dónde registró cada cambio · fechas UTC</small></summary>
+        <summary><i class="fas fa-user-check"></i> Eventos de Aduana <small>· quién, cuándo y dónde registró cada cambio</small></summary>
         <div class="table-responsive"><table class="table">
-            <thead><tr><th>Fecha (UTC)</th><th>Acción registrada</th><th>Responsable</th><th>Oficina</th><th>Documento vinculado</th></tr></thead>
+            <thead><tr><th>Fecha y hora</th><th>Acción registrada</th><th>Responsable</th><th>Oficina</th><th>Documento vinculado</th></tr></thead>
             <tbody>
                 @forelse(collect($cds['events'] ?? [])->sortByDesc('occurred_at') as $event)
-                    <tr><td>{{ $event['occurred_at'] }}</td><td>{{ $event['name'] ?? $event['code'] }}</td><td>{{ $event['user_name'] ?? $event['user_code'] ?? 'No informado' }}</td><td>{{ $event['office'] ?? 'No informada' }}</td><td><small>{{ $event['kind'] === 'declarations' ? 'Declaración' : 'Respuesta' }} {{ $event['record_id'] }}</small></td></tr>
+                    <tr><td>{{ $event['occurred_at_local_display'] ?? 'Fecha no informada' }}</td><td>{{ $event['name'] ?? $event['code'] }}</td><td>{{ $event['user_name'] ?? $event['user_code'] ?? 'No informado' }}</td><td>{{ $event['office'] ?? 'No informada' }}</td><td><small>{{ $event['kind'] === 'declarations' ? 'Declaración' : 'Respuesta' }} {{ $event['record_id'] }}</small></td></tr>
                 @empty
                     <tr><td colspan="5">Sin eventos CDS disponibles.</td></tr>
                 @endforelse

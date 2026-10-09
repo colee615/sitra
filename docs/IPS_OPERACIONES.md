@@ -39,6 +39,8 @@ Política local de pendientes:
 
 Es una selección conservadora. No basta que un paquete haya tenido EMG alguna vez. Paquetes en aduana, traslado o con estado terminal no deben entregarse automáticamente. Eventos técnicos posteriores pueden sacar un paquete de la lista conservadora: revisar el historial y registrar el movimiento real correspondiente; no inventar una llegada o una entrega para hacerlo aparecer. No existe una secuencia previa única obligatoria para todas las operaciones postales.
 
+Excepción operativa para Almacén internacional: cuando el último evento operativo es 31 o 34, el estado interno es 1 y el paquete está en la oficina asignada, la pantalla ofrece EMI con una confirmación expresa de devolución física desde Aduana. SITRA registra primero el evento 38 (`Return item from customs`) y luego el evento 37 (`Deliver item`) dentro de una sola transacción. El catálogo de la instalación debe permitir estado 1→38 y estado resultante de 38→37; si esa compatibilidad no está presente, la operación se rechaza sin cambios. El evento 38 por sí solo sigue el flujo normal de recepción EMG.
+
 ## Bases de datos y configuración
 
 `DB_*` configura PostgreSQL. `SQLSRV_*` configura únicamente IPS5Db. Elimine configuraciones antiguas cacheadas después de actualizar:

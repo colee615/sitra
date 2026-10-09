@@ -11,6 +11,7 @@ return [
     'user_pid' => env('IPS_USER_PID'),
     'workstation_pid' => env('IPS_WORKSTATION_PID'),
     'destination_country' => 'BO',
+    'operation_timezone' => env('IPS_OPERATION_TIMEZONE', 'America/La_Paz'),
     // IDs verified in this installation's C_EVENT_TYPES on 2026-09-10.
     'events' => [
         'EMA' => ['id' => 1, 'name' => 'Admisión del envío', 'create' => true, 'direction' => 'O'],
@@ -23,6 +24,8 @@ return [
     ],
     // Local operational policy, not a universal UPU transition requirement.
     'delivery_candidate_events' => [32, 39, 74, 75, 36],
+    // Confirmación compuesta desde Almacén: devolución física de Aduana seguida de entrega.
+    'customs_return_event' => ['id' => 38, 'direction' => 'I', 'result_state' => 0],
     // Receipt requires physical confirmation and office routing; 35 is not mandatory.
     'reception_candidate_events' => [30, 33, 35, 38, 42, 43, 44, 71, 72],
 ];

@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Support\UtcTimestamp;
 use App\Services\TrackingEventRuleService;
+use App\Services\IpsOperationService;
 use App\Services\TrackingSearchCacheService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,7 +18,8 @@ class SqlServerExternalSearchSafeController extends Controller
     public function __invoke(
         Request $request,
         TrackingSearchCacheService $searchService,
-        TrackingEventRuleService $eventRuleService
+        TrackingEventRuleService $eventRuleService,
+        IpsOperationService $operations
     ): JsonResponse {
         if (!$request->user() || !$request->user()->hasRole('admin')) {
             return response()->json([
@@ -44,6 +47,7 @@ class SqlServerExternalSearchSafeController extends Controller
                 $result['packageRows'] ?? [],
                 $result['trackingRows'] ?? []
             );
+            $deliveryModes = $operations->deliveryModesForCodes([strtoupper(trim($codigo))]);
 
             return response()->json([
                 'codigo' => $result['codigo'] ?? strtoupper(trim($codigo)),
@@ -69,7 +73,8 @@ class SqlServerExternalSearchSafeController extends Controller
                 'eventos_externos' => $this->transformExternalEvents(
                     $result['trackingRows'] ?? [],
                     $originCountry,
-                    $eventRuleService
+                    $eventRuleService,
+                    $deliveryModes[strtoupper(trim($codigo))] ?? null
                 ),
             ])
                 ->header('X-Tracking-Cache', (string) ($lookup['cache_status'] ?? 'unknown'))
@@ -92,10 +97,11 @@ class SqlServerExternalSearchSafeController extends Controller
     private function transformExternalEvents(
         iterable $trackingRows,
         string $originCountry,
-        TrackingEventRuleService $eventRuleService
+        TrackingEventRuleService $eventRuleService,
+        ?string $deliveryMode = null
     ) {
         return collect($trackingRows)
-            ->map(function ($row) use ($originCountry, $eventRuleService) {
+            ->map(function ($row) use ($originCountry, $eventRuleService, $deliveryMode) {
                 $eventType = $eventRuleService->present(
                     isset($row->EVENT_TYPE_NM_ES) ? (string) $row->EVENT_TYPE_NM_ES : '',
                     isset($row->SOURCE_DB) ? (string) $row->SOURCE_DB : '',
@@ -125,14 +131,31 @@ class SqlServerExternalSearchSafeController extends Controller
                     $eventType = 'Registro postal en tránsito internacional';
                 }
 
+                $sourceDb = strtoupper(trim((string) ($row->SOURCE_DB ?? '')));
+                $isEdi = $sourceDb === 'IPS5DB-EDI';
+
                 return [
                     'mailitM_PID' => isset($row->MAILITM_PID) ? strtolower(trim((string) $row->MAILITM_PID)) : '',
                     'mailitM_FID' => $this->resolveMailItemFid($row),
                     // Preserve the UPU code even when the visible event name is customized.
                     'codigo_evento' => $eventCode,
+                    'delivery_mode' => $eventCode === 37 ? $deliveryMode : null,
                     'origen_evento' => trim((string) ($row->SOURCE_DB ?? 'IPS5Db')),
                     'eventType' => $eventType,
                     'eventDate' => $this->formatEventDate($row->EVENT_GMT_DT ?? null),
+                    'eventDateUtc' => $sourceDb === 'IPS5DB'
+                        ? UtcTimestamp::iso8601($row->EVENT_GMT_DT ?? null)
+                        : null,
+                    'eventLocalOffset' => $sourceDb === 'IPS5DB'
+                        && is_numeric($row->EVENT_LOCAL_OFFSET ?? null)
+                        ? (float) $row->EVENT_LOCAL_OFFSET
+                        : null,
+                    'eventDateLocal' => $isEdi && !empty($row->EVENT_LOCAL_DT)
+                        ? $this->formatEventDate($row->EVENT_LOCAL_DT)
+                        : null,
+                    'captureDateUtc' => $isEdi
+                        ? UtcTimestamp::iso8601($row->CAPTURE_GMT_DT ?? null)
+                        : null,
                     'office' => $office,
                     'scanned' => $this->cleanLabel(isset($row->SCANNED_TXT) ? (string) $row->SCANNED_TXT : ''),
                     'workstation' => $this->cleanLabel(isset($row->WORKSTATION_TXT) ? (string) $row->WORKSTATION_TXT : ''),
@@ -156,7 +179,7 @@ class SqlServerExternalSearchSafeController extends Controller
                 $evento['eventDate'],
                 $evento['office'],
             ]))
-            ->sortByDesc(fn (array $evento) => strtotime($evento['eventDate'] ?: '1970-01-01') ?: 0)
+            ->sortByDesc(fn (array $evento) => strtotime((string) ($evento['eventDateUtc'] ?? $evento['captureDateUtc'] ?? $evento['eventDateLocal'] ?? $evento['eventDate'] ?? '1970-01-01')) ?: 0)
             ->values();
     }
 

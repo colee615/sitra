@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
 
 class IpsWriteRequest extends FormRequest
@@ -21,10 +22,22 @@ class IpsWriteRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $occurredAt = $this->input('occurred_at');
+        if (is_string($occurredAt) && preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/', $occurredAt) === 1) {
+            $format = strlen($occurredAt) === 16 ? 'Y-m-d\\TH:i' : 'Y-m-d\\TH:i:s';
+            try {
+                $occurredAt = Carbon::createFromFormat($format, $occurredAt, config('ips.operation_timezone', 'America/La_Paz'))
+                    ->format('Y-m-d\\TH:i:sP');
+            } catch (\Throwable) {
+                // Let validation report malformed local timestamps.
+            }
+        }
+
         $this->merge([
             'codigo' => strtoupper(trim((string) ($this->route('codigo') ?? $this->input('codigo')))),
             'event' => $this->route()->defaults['ips_event'] ?? strtoupper(trim((string) $this->input('event'))),
             'idempotency_key' => $this->header('Idempotency-Key') ?? $this->input('idempotency_key'),
+            'occurred_at' => $occurredAt,
         ]);
     }
 
@@ -42,9 +55,12 @@ class IpsWriteRequest extends FormRequest
             'expected_event_cd' => [$creating ? 'prohibited' : ($delivery ? 'sometimes' : 'required'), 'integer'],
             'expected_event_at' => [$creating ? 'prohibited' : ($delivery ? 'sometimes' : 'required'), 'date_format:Y-m-d\TH:i:sP,Y-m-d\TH:i:s.vP'],
             'signatory' => ['nullable', 'string', 'max:64'],
+            'delivery_mode' => [Rule::requiredIf($this->input('event') === 'EMI'), 'nullable', Rule::in(['DOMICILIARIA', 'NO_DOMICILIARIA'])],
+            'time_reason' => ['nullable', 'string', 'max:255'],
             'actor_user_pid' => ['sometimes', 'integer', 'min:1', 'max:32767'],
             'external_actor_id' => ['sometimes', 'string', 'max:80'],
             'physical_receipt_confirmed' => ['exclude_unless:event,EMG', 'required', 'boolean', 'accepted'],
+            'customs_return_confirmed' => ['exclude_unless:event,EMI', 'sometimes', 'boolean', 'accepted'],
             'delivery_location' => ['nullable', 'string', 'max:25'],
             'non_delivery_reason' => [Rule::requiredIf($this->input('event') === 'EMH'), 'nullable', 'integer', 'min:1'],
             'non_delivery_measure' => [Rule::requiredIf($this->input('event') === 'EMH'), 'nullable', 'string', 'size:1'],

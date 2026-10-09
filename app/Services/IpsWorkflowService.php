@@ -26,8 +26,41 @@ class IpsWorkflowService
             if (! $event || trim($event->INB_OTB_IND) !== $definition['direction']) {
                 throw new IpsOperationException('El catálogo IPS no coincide con la configuración.', 503);
             }
+            if ($action !== 'create' && $item && in_array($input['event'], ['EMG', 'EDH', 'EDG', 'EMI'], true)) {
+                $this->ips->enrich(collect([$item]));
+            }
             $this->validateTransition($action, $input, $item, $event, $definition);
             $date = Carbon::parse($input['occurred_at']);
+            $customsReturn = null;
+            if ($this->isCustomsReturnDelivery($input, $item)) {
+                $returnDefinition = config('ips.customs_return_event');
+                $returnEvent = $this->ips->event((int) $returnDefinition['id']);
+                if (! $returnEvent
+                    || trim($returnEvent->INB_OTB_IND) !== $returnDefinition['direction']
+                    || (int) $returnEvent->RESULT_STATE_IND_CD !== (int) $returnDefinition['result_state']) {
+                    throw new IpsOperationException('El catÃ¡logo IPS no coincide con el evento de devoluciÃ³n de Aduana.', 503);
+                }
+                $returnDate = $date->copy()->subSecond();
+                if ($returnDate->lessThanOrEqualTo(Carbon::parse($item->EVT_GMT_DT, 'UTC'))) {
+                    throw new IpsOperationException('El evento de entrega debe dejar un segundo disponible para registrar antes la devoluciÃ³n de Aduana.', 422);
+                }
+                $returnInput = array_replace($input, ['event' => 'CUSTOMS_RETURN', 'signatory' => null]);
+                $returnParameters = $this->mailParameters($item, $returnInput, $returnEvent, $returnDate);
+                $this->ips->callProcedure('SP_SET_MAILITM', $returnParameters);
+                $this->ips->verifyWrite($returnParameters['PId'], (int) $returnEvent->EVENT_TYPE_CD, $returnDate->copy()->utc()->toDateTimeString(), null);
+
+                $item = $this->ips->find($input['codigo'], true);
+                if (! $item || (int) $item->EVT_TYPE_CD !== (int) $returnEvent->EVENT_TYPE_CD
+                    || (int) $item->STATE_IND_CD !== (int) $returnEvent->RESULT_STATE_IND_CD) {
+                    throw new IpsOperationException('IPS no confirmÃ³ el retorno de Aduana. OperaciÃ³n revertida.', 502);
+                }
+                $customsReturn = [
+                    'event' => 'CUSTOMS_RETURN',
+                    'event_cd' => (int) $returnEvent->EVENT_TYPE_CD,
+                    'event_at' => $returnDate->copy()->utc()->format('Y-m-d\TH:i:sP'),
+                    'office_cd' => (int) $input['office_cd'],
+                ];
+            }
             $parameters = $this->mailParameters($item, $input, $event, $date);
             $this->ips->callProcedure('SP_SET_MAILITM', $parameters);
             if ($action === 'create') {
@@ -37,7 +70,7 @@ class IpsWorkflowService
             }
             $this->ips->verifyWrite($parameters['PId'], (int) $event->EVENT_TYPE_CD, $date->copy()->utc()->toDateTimeString(), $input['signatory'] ?? null);
 
-            return [
+            $result = [
                 'codigo' => trim($parameters['FId']),
                 'local_id' => trim($parameters['LocalId'] ?? ''),
                 'mailitm_pid' => $parameters['PId'],
@@ -49,6 +82,11 @@ class IpsWorkflowService
                 'workstation_pid' => (int) $parameters['Workstation'],
                 'external_actor_id' => $input['external_actor_id'] ?? null,
             ];
+            if ($customsReturn !== null) {
+                $result['customs_return'] = $customsReturn;
+            }
+
+            return $result;
         }, 1); // No automatic transaction retry across IPS procedures.
     }
 
@@ -59,13 +97,15 @@ class IpsWorkflowService
         }
 
         $office = isset($item->EVT_OFFICE_CD) ? $this->ips->ownOffice((int) $item->EVT_OFFICE_CD) : null;
+        $deliveryMode = app(IpsStagePolicy::class)->inferDeliveryMode($this->ips->present($item));
 
         return array_replace([
-            'occurred_at' => Carbon::now(config('app.timezone'))->format('Y-m-d\TH:i:sP'),
+            'occurred_at' => Carbon::now(config('ips.operation_timezone', 'America/La_Paz'))->format('Y-m-d\TH:i:sP'),
             'office_cd' => isset($item->EVT_OFFICE_CD) ? (int) $item->EVT_OFFICE_CD : null,
             'expected_event_cd' => isset($item->EVT_TYPE_CD) ? (int) $item->EVT_TYPE_CD : null,
             'expected_event_at' => isset($item->EVT_GMT_DT) ? Carbon::parse($item->EVT_GMT_DT, 'UTC')->format('Y-m-d\TH:i:s.vP') : null,
             'delivery_location' => $office ? Str::limit(trim($office->OFFICE_NM), 25, '') : null,
+            'delivery_mode' => $deliveryMode,
         ], array_filter($input, fn ($value) => $value !== null && $value !== ''));
     }
 
@@ -117,7 +157,21 @@ class IpsWorkflowService
         if (Carbon::parse($input['occurred_at'])->lessThanOrEqualTo(Carbon::parse($item->EVT_GMT_DT, 'UTC'))) {
             throw new IpsOperationException('El evento debe ser posterior al último movimiento.', 422);
         }
-        if (! $this->ips->compatible((int) $item->STATE_IND_CD, (int) $event->EVENT_TYPE_CD)) {
+        $customsReturnDelivery = $this->isCustomsReturnDelivery($input, $item);
+        if ($customsReturnDelivery) {
+            if (empty($input['customs_return_confirmed'])) {
+                throw new IpsOperationException('Confirme físicamente la devolución de Aduana y la entrega al destinatario.', 422);
+            }
+            $returnDefinition = config('ips.customs_return_event');
+            $returnEvent = $this->ips->event((int) $returnDefinition['id']);
+            if (! $returnEvent || trim($returnEvent->INB_OTB_IND) !== $returnDefinition['direction']
+                || (int) $returnEvent->RESULT_STATE_IND_CD !== (int) $returnDefinition['result_state']
+                || ! $this->ips->compatible((int) $item->STATE_IND_CD, (int) $returnEvent->EVENT_TYPE_CD)
+                || ! $this->ips->compatible((int) $returnEvent->RESULT_STATE_IND_CD, (int) $event->EVENT_TYPE_CD)) {
+                throw new IpsOperationException('La transición compuesta no está permitida por el catálogo de estados IPS.');
+            }
+        }
+        if (! $customsReturnDelivery && ! $this->ips->compatible((int) $item->STATE_IND_CD, (int) $event->EVENT_TYPE_CD)) {
             throw new IpsOperationException('La transición no está permitida por el catálogo de estados IPS.');
         }
         if ($definition['direction'] === 'I' && trim($item->DEST_COUNTRY_CD ?? '') !== config('ips.destination_country')) {
@@ -129,8 +183,7 @@ class IpsWorkflowService
                 throw new IpsOperationException('La oficina no corresponde al usuario IPS vinculado.', 403);
             }
         }
-        if (in_array($input['event'], ['EMG', 'EDH', 'EDG', 'EMI'], true)) {
-            $this->ips->enrich(collect([$item]));
+        if (in_array($input['event'], ['EMG', 'EDH', 'EDG', 'EMH', 'EMI'], true)) {
             $package = $this->ips->present($item);
             if (!in_array($input['event'], app(IpsStagePolicy::class)->actions($package, (int) $input['office_cd']), true)) {
                 throw new IpsOperationException('La etapa u oficina actual no está habilitada para esta operación.');
@@ -140,11 +193,27 @@ class IpsWorkflowService
             }
         }
         if ($input['event'] === 'EMH') {
+            $package = $this->ips->present($item);
+            if (!in_array('EMH', app(IpsStagePolicy::class)->actions($package, (int) $input['office_cd']), true)) {
+                throw new IpsOperationException('El paquete no está en reparto o la oficina no puede registrar este intento fallido.');
+            }
             if (! $this->ips->reference('C_NON_DELIVERY_REASONS', 'NON_DELIVERY_REASON_CD', $input['non_delivery_reason']) ||
                 ! $this->ips->reference('C_NON_DELIVERY_MEASURES', 'NON_DELIVERY_MEASURE_CD', $input['non_delivery_measure'])) {
                 throw new IpsOperationException('Motivo o medida de entrega fallida inválidos.', 422);
             }
         }
+        if ($input['event'] === 'EMI' && empty($input['delivery_mode'])) {
+            throw new IpsOperationException('Seleccione si la entrega fue por ventanilla o por cartero.', 422);
+        }
+    }
+
+    private function isCustomsReturnDelivery(array $input, ?object $item): bool
+    {
+        if (($input['event'] ?? null) !== 'EMI' || ! $item || (int) $item->STATE_IND_CD !== 1) {
+            return false;
+        }
+
+        return in_array((int) ($item->OP_EVENT_CD ?? $item->EVT_TYPE_CD), [31, 34], true);
     }
 
     private function mailParameters(?object $item, array $input, object $event, Carbon $date): array

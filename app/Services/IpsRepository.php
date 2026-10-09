@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Exceptions\IpsOperationException;
+use App\Support\IpsEventTime;
 use Illuminate\Database\Connection;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -30,6 +31,20 @@ class IpsRepository
             'non_delivery_reasons' => $db->table('dbo.C_NON_DELIVERY_REASONS')->whereIn('VALID_IND', ['1', '3'])->get(['NON_DELIVERY_REASON_CD', 'NON_DELIVERY_REASON_NM']),
             'non_delivery_measures' => $db->table('dbo.C_NON_DELIVERY_MEASURES')->whereIn('VALID_IND', ['1', '3'])->get(['NON_DELIVERY_MEASURE_CD', 'NON_DELIVERY_MEASURE_NM']),
             'writes_enabled' => config('ips.writes_enabled'),
+        ];
+    }
+
+    public function deliveryCatalog(): array
+    {
+        $db = $this->connection();
+
+        return [
+            'non_delivery_reasons' => $db->table('dbo.C_NON_DELIVERY_REASONS')
+                ->whereIn('VALID_IND', ['1', '3'])->orderBy('NON_DELIVERY_REASON_CD')
+                ->get(['NON_DELIVERY_REASON_CD', 'NON_DELIVERY_REASON_NM']),
+            'non_delivery_measures' => $db->table('dbo.C_NON_DELIVERY_MEASURES')
+                ->whereIn('VALID_IND', ['1', '3'])->orderBy('NON_DELIVERY_MEASURE_CD')
+                ->get(['NON_DELIVERY_MEASURE_CD', 'NON_DELIVERY_MEASURE_NM']),
         ];
     }
 
@@ -90,6 +105,19 @@ class IpsRepository
                     $q->selectRaw('1')->from('dbo.L_MAILITM_EVENTS as terminal')
                         ->whereColumn('terminal.MAILITM_PID', 'm.MAILITM_PID')->whereIn('terminal.EVENT_TYPE_CD', [37, 76]);
                 });
+        } elseif ($status === 'warehouse') {
+            $eventColumn = DB::raw('COALESCE(op.EVENT_TYPE_CD, m.EVT_TYPE_CD)');
+            $warehouseEvents = config('ips.delivery_candidate_events');
+            $query->where(function ($q) use ($eventColumn, $warehouseEvents) {
+                $q->where(function ($customs) use ($eventColumn) {
+                    $customs->whereIn($eventColumn, [31, 34])->where('m.STATE_IND_CD', 1);
+                })->orWhere(function ($available) use ($eventColumn, $warehouseEvents) {
+                    $available->whereIn($eventColumn, $warehouseEvents)->whereIn('m.STATE_IND_CD', [0, 8]);
+                });
+            })->whereNotExists(function ($q) {
+                $q->selectRaw('1')->from('dbo.L_MAILITM_EVENTS as terminal')
+                    ->whereColumn('terminal.MAILITM_PID', 'm.MAILITM_PID')->whereIn('terminal.EVENT_TYPE_CD', [37, 76]);
+            });
         } elseif ($status === 'returns') {
             $query->whereIn('m.POSTAL_STATUS_CD', [6, 7, 22, 23]);
         } elseif ($status === 'delivered') {
@@ -99,7 +127,7 @@ class IpsRepository
             $office = (int) $filters['office_cd'];
             $query->where(function ($q) use ($office, $status) {
                 $q->whereRaw('COALESCE(op.EVENT_OFFICE_CD, m.EVT_OFFICE_CD) = ?', [$office]);
-                if ($status !== 'pending') {
+                if (! in_array($status, ['pending', 'warehouse'], true)) {
                     $q->orWhere('op.NEXT_OFFICE_CD', $office);
                 }
             });
@@ -282,7 +310,13 @@ class IpsRepository
             'events' => $this->connection()->table('dbo.L_MAILITM_EVENTS as e')
                 ->leftJoin('dbo.C_EVENT_TYPES as t', 't.EVENT_TYPE_CD', '=', 'e.EVENT_TYPE_CD')
                 ->where('e.MAILITM_PID', $item->MAILITM_PID)->orderByDesc('e.EVENT_GMT_DT')
-                ->get(['e.EVENT_TYPE_CD', 'e.EVENT_GMT_DT', 'e.EVENT_LOCAL_OFFSET', 'e.EVENT_OFFICE_CD', 't.EVENT_TYPE_NM']),
+                ->get(['e.EVENT_TYPE_CD', 'e.EVENT_GMT_DT', 'e.EVENT_LOCAL_OFFSET', 'e.EVENT_OFFICE_CD', 't.EVENT_TYPE_NM'])
+                ->map(function ($event) {
+                    return (object) array_merge(
+                        (array) $event,
+                        IpsEventTime::present($event->EVENT_GMT_DT, $event->EVENT_LOCAL_OFFSET)
+                    );
+                }),
         ];
     }
 
@@ -305,8 +339,11 @@ class IpsRepository
             $row->RECIPIENT_ADDRESS = $customer?->CUSTOMER_ADDRESS;
             $history = $events->get($row->MAILITM_PID, collect());
             $op = $history->first(fn ($e) => ! in_array((int) $e->EVENT_TYPE_CD, IpsStagePolicy::TECHNICAL_EVENTS, true));
+            $currentEvent = $history->first(fn ($e) => (int) $e->EVENT_TYPE_CD === (int) $row->EVT_TYPE_CD
+                && Carbon::parse($e->EVENT_GMT_DT, 'UTC')->equalTo(Carbon::parse($row->EVT_GMT_DT, 'UTC')));
             $row->OP_EVENT_CD = $op?->EVENT_TYPE_CD ?? $row->EVT_TYPE_CD;
             $row->OP_OFFICE_CD = $op?->EVENT_OFFICE_CD ?? $row->EVT_OFFICE_CD;
+            $row->EVT_LOCAL_OFFSET = $currentEvent?->EVENT_LOCAL_OFFSET;
             $row->NEXT_OFFICE_CD = $op?->NEXT_OFFICE_CD;
             $row->OFFICE_NM = $offices->get($row->OP_OFFICE_CD)?->OFFICE_NM;
             $row->NEXT_OFFICE_NM = $offices->get($row->NEXT_OFFICE_CD)?->OFFICE_NM;
@@ -352,6 +389,7 @@ class IpsRepository
             'state_cd' => isset($item->STATE_IND_CD) ? (int) $item->STATE_IND_CD : null,
             'event_cd' => isset($item->EVT_TYPE_CD) ? (int) $item->EVT_TYPE_CD : null,
             'event_at' => Carbon::parse($item->EVT_GMT_DT, 'UTC')->format('Y-m-d\TH:i:s.vP'),
+            ...IpsEventTime::present($item->EVT_GMT_DT, $item->EVT_LOCAL_OFFSET ?? null),
             'office_cd' => isset($item->EVT_OFFICE_CD) ? (int) $item->EVT_OFFICE_CD : null,
             'office_name' => trim($item->OFFICE_NM ?? ''),
             'recipient' => trim((string) ($item->RECIPIENT_NAME ?? '')),
