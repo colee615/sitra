@@ -147,6 +147,17 @@ class IpsRepository
                 $query->where($column, $filters[$filter]);
             }
         }
+        if (isset($filters['actor_user_pid'])) {
+            $query->whereExists(function ($events) use ($filters) {
+                $events->selectRaw('1')->from('dbo.L_MAILITM_EVENTS as actor_event')
+                    ->whereColumn('actor_event.MAILITM_PID', 'm.MAILITM_PID')
+                    ->where('actor_event.EVENT_TYPE_CD', 37)
+                    ->where('actor_event.USER_PID', (int) $filters['actor_user_pid']);
+                if (isset($filters['office_cd'])) {
+                    $events->where('actor_event.EVENT_OFFICE_CD', (int) $filters['office_cd']);
+                }
+            });
+        }
         if (! empty($filters['from'])) {
             $query->where('m.EVT_GMT_DT', '>=', Carbon::parse($filters['from'])->utc()->toDateTimeString());
         }

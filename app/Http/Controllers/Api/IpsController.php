@@ -30,6 +30,7 @@ class IpsController extends Controller
             'q' => ['nullable', 'string', 'max:35'],
             'office_cd' => ['nullable', 'integer', 'min:1', 'max:32767'],
             'event_cd' => ['nullable', 'integer', 'min:1', 'max:32767'],
+            'actor_user_pid' => ['nullable', 'integer', 'min:1', 'max:32767'],
             'page' => ['nullable', 'integer', 'min:1', 'max:100000'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
             'from' => ['nullable', 'date_format:Y-m-d\TH:i:sP'],
