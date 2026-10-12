@@ -359,6 +359,7 @@ return [
             'can' => 'admin-only',
             'submenu' => [
                 ['text'=>'Reglas de eventos','url'=>'/tracking-event-rules','icon'=>'fas fa-stream'],
+                ['text'=>'Credenciales API','url'=>'/api-credentials','icon'=>'fas fa-plug'],
                 ['text'=>'Personal AGBC','url'=>'/users','icon'=>'fas fa-user'],
                 ['text'=>'Roles','url'=>'/roles','icon'=>'fas fa-users-cog'],
                 ['text'=>'Permisos','url'=>'/permissions','icon'=>'fas fa-key'],
@@ -556,4 +557,3 @@ return [
 
     'livewire' => false,
 ];
-

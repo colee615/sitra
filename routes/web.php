@@ -68,6 +68,11 @@ Route::middleware('auth')->group(function () {
     Route::delete('/tracking-event-rules/{trackingEventRule}', [TrackingEventRuleController::class, 'destroy'])->name('tracking-event-rules.destroy');
 
     Route::middleware('can:admin-only')->group(function () {
+    Route::get('/api-credentials', [\App\Http\Controllers\ApiCredentialController::class, 'index'])->name('api-credentials.index');
+    Route::post('/api-credentials', [\App\Http\Controllers\ApiCredentialController::class, 'store'])->name('api-credentials.store');
+    Route::get('/api-credentials/manual', [\App\Http\Controllers\ApiCredentialController::class, 'manual'])->name('api-credentials.manual');
+    Route::post('/api-credentials/{token}/rotate', [\App\Http\Controllers\ApiCredentialController::class, 'rotate'])->whereNumber('token')->name('api-credentials.rotate');
+    Route::delete('/api-credentials/{token}', [\App\Http\Controllers\ApiCredentialController::class, 'revoke'])->whereNumber('token')->name('api-credentials.revoke');
     Route::get('/accesos', [\App\Http\Controllers\PostalAccessController::class, 'index'])->name('postal.access.index');
     Route::put('/accesos/{role}', [\App\Http\Controllers\PostalAccessController::class, 'update'])->name('postal.access.update');
     Route::get('/users', [UserController::class, 'index'])->name('users.index');

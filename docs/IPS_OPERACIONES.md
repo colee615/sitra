@@ -110,6 +110,8 @@ Las rutas antiguas `/api/tracking/eventos`, `/api/tracking/eventos-todos` y `/ap
 
 Para integraciones con permisos separados está disponible `POST /api/tracking/cds/declaraciones`, protegido con usuario administrador y el permiso de token `cds.read` (no requiere `sqlserver.read`). Acepta `{"codes":["LP666718164MY"]}` —hasta 100 identificadores— y devuelve por cada código el estado CDS, los objetos vinculados, declaraciones completas, artículos, documentos y `destino_declarado` con departamento/ciudad. Requiere que CDS esté habilitado. La ruta aplica un límite de 30 consultas por minuto.
 
+Los administradores también pueden gestionar desde la pantalla web **Configuración y accesos → Credenciales API** los tokens propios, consultar el catálogo de rutas, emitir credenciales con un permiso seleccionado, rotarlas o revocarlas. Las rutas que comparten un permiso (por ejemplo, las de consulta IPS con `ips.read`) pueden usar la misma credencial. Los tokens creados desde esa pantalla se guardan cifrados con `APP_KEY` para permitir que administradores de esa cuenta los copien nuevamente; los tokens existentes sin secreto cifrado se mantienen intactos y no se pueden recuperar. La pantalla solo lista tokens de la cuenta administradora que inició sesión.
+
 Emitir un token CDS independiente para la integración:
 
 ~~~sh
