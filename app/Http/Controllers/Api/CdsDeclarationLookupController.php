@@ -147,11 +147,18 @@ class CdsDeclarationLookupController extends Controller
     private function transformDeclaration(array $declaration): array
     {
         $fields = $declaration['data']['fields'] ?? [];
+        $city = $this->nullableString($fields['RCty'] ?? null);
+        $countryCode = $this->nullableString($fields['RCtr'] ?? null);
+        $department = $this->nullableString($fields['RSta'] ?? null);
+        if ($department === null) {
+            $department = $this->inferDepartmentFromCity($city, $countryCode);
+        }
+
         $destination = [
-            'ciudad' => $this->nullableString($fields['RCty'] ?? null),
-            'departamento' => $this->nullableString($fields['RSta'] ?? null),
+            'ciudad' => $city,
+            'departamento' => $department,
             'codigo_postal' => $this->nullableString($fields['RZip'] ?? null),
-            'pais_codigo' => $this->nullableString($fields['RCtr'] ?? null),
+            'pais_codigo' => $countryCode,
         ];
 
         return [
@@ -168,6 +175,29 @@ class CdsDeclarationLookupController extends Controller
             'articulos' => $declaration['data']['pieces'] ?? [],
             'documentos' => $declaration['data']['documents'] ?? [],
         ];
+    }
+
+    private function inferDepartmentFromCity(?string $city, ?string $countryCode): ?string
+    {
+        if (mb_strtoupper(trim((string) $countryCode), 'UTF-8') !== 'BO') {
+            return null;
+        }
+
+        $normalizedCity = mb_strtoupper(trim((string) $city), 'UTF-8');
+        $normalizedCity = preg_replace('/[\s,]+(?:BOLIVIA|BO)$/u', '', $normalizedCity) ?? $normalizedCity;
+
+        return match ($normalizedCity) {
+            'LA PAZ' => 'La Paz',
+            'COCHABAMBA' => 'Cochabamba',
+            'SANTA CRUZ' => 'Santa Cruz',
+            'ORURO' => 'Oruro',
+            'POTOSÍ', 'POTOSI' => 'Potosí',
+            'TARIJA' => 'Tarija',
+            'CHUQUISACA' => 'Chuquisaca',
+            'BENI' => 'Beni',
+            'PANDO' => 'Pando',
+            default => null,
+        };
     }
 
     private function nullableString(mixed $value): ?string

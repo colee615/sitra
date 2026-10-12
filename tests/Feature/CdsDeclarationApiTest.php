@@ -173,6 +173,95 @@ class CdsDeclarationApiTest extends TestCase
             ->assertJsonPath('message', 'El token no tiene permiso para consultar declaraciones de CDS.');
     }
 
+    public function test_cds_declaration_lookup_infers_department_from_exact_bolivian_city_value(): void
+    {
+        config(['postal.cds_enabled' => true]);
+        $cds = Mockery::mock(CdsRepository::class);
+        $cds->shouldReceive('declarationIndex')
+            ->once()
+            ->andReturn([
+                'packages' => [(object) [
+                    'MAIL_OBJECT_PID' => 9001,
+                    'MAIL_OBJECT_ID' => 'EY467201535US',
+                    'MAIL_OBJECT_LOCAL_ID' => null,
+                    'MAIL_OBJECT_LOCAL_ID2' => null,
+                    'MAIL_STATE_NM' => 'Sent to customs',
+                    'POSTING_DATE' => null,
+                ]],
+                'declarations' => [[
+                    'id' => 9002,
+                    'package_id' => 9001,
+                    'declaration_number' => 'CN23-2',
+                    'state' => 'Sent to customs',
+                    'workflow_stage' => 'Enviada a Aduana',
+                    'data_status' => 'ok',
+                    'content_summary' => null,
+                    'piece_count' => 0,
+                    'document_count' => 0,
+                    'data' => [
+                        'fields' => [
+                            'RCty' => 'LA PAZ BOLIVIA',
+                            'RCtr' => 'BO',
+                        ],
+                        'pieces' => [],
+                        'documents' => [],
+                    ],
+                ]],
+                'truncated' => false,
+            ]);
+        $this->app->instance(CdsRepository::class, $cds);
+
+        $this->withToken($this->token(['cds.read']))
+            ->postJson('/api/tracking/cds/declaraciones', ['codes' => ['EY467201535US']])
+            ->assertOk()
+            ->assertJsonPath('data.0.declaracion_cds.objetos.0.declaraciones.0.destino_declarado.departamento', 'La Paz')
+            ->assertJsonPath('data.0.destinos_declarados.0.departamento', 'La Paz');
+    }
+
+    public function test_cds_declaration_lookup_does_not_infer_department_outside_bolivia(): void
+    {
+        config(['postal.cds_enabled' => true]);
+        $cds = Mockery::mock(CdsRepository::class);
+        $cds->shouldReceive('declarationIndex')
+            ->once()
+            ->andReturn([
+                'packages' => [(object) [
+                    'MAIL_OBJECT_PID' => 9011,
+                    'MAIL_OBJECT_ID' => 'EY467201535US',
+                    'MAIL_OBJECT_LOCAL_ID' => null,
+                    'MAIL_OBJECT_LOCAL_ID2' => null,
+                    'MAIL_STATE_NM' => 'Sent to customs',
+                    'POSTING_DATE' => null,
+                ]],
+                'declarations' => [[
+                    'id' => 9012,
+                    'package_id' => 9011,
+                    'declaration_number' => 'CN23-3',
+                    'state' => 'Sent to customs',
+                    'workflow_stage' => 'Enviada a Aduana',
+                    'data_status' => 'ok',
+                    'content_summary' => null,
+                    'piece_count' => 0,
+                    'document_count' => 0,
+                    'data' => [
+                        'fields' => [
+                            'RCty' => 'LA PAZ BOLIVIA',
+                            'RCtr' => 'US',
+                        ],
+                        'pieces' => [],
+                        'documents' => [],
+                    ],
+                ]],
+                'truncated' => false,
+            ]);
+        $this->app->instance(CdsRepository::class, $cds);
+
+        $this->withToken($this->token(['cds.read']))
+            ->postJson('/api/tracking/cds/declaraciones', ['codes' => ['EY467201535US']])
+            ->assertOk()
+            ->assertJsonPath('data.0.declaracion_cds.objetos.0.declaraciones.0.destino_declarado.departamento', null);
+    }
+
     public function test_cds_declaration_lookup_rejects_non_admin_tokens(): void
     {
         $this->mock(CdsRepository::class)->shouldNotReceive('declarationIndex');

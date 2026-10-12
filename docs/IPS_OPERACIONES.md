@@ -112,6 +112,8 @@ Para integraciones con permisos separados está disponible `GET /api/tracking/cd
 
 Los administradores también pueden gestionar desde la pantalla web **Configuración y accesos → Credenciales API** los tokens propios, consultar el catálogo de rutas, emitir credenciales con un permiso seleccionado, agregar `cds.read` a un token existente, rotarlas o revocarlas. Agregar CDS conserva los permisos actuales del token. Las rutas que comparten un permiso (por ejemplo, las de consulta IPS con `ips.read`) pueden usar la misma credencial. Los tokens creados desde esa pantalla se guardan cifrados con `APP_KEY` para permitir que administradores de esa cuenta los copien nuevamente; los tokens existentes sin secreto cifrado se mantienen intactos y no se pueden recuperar. La pantalla solo lista tokens de la cuenta administradora que inició sesión. Las rutas API sin token responden `401` en JSON y no redirigen a la pantalla de login.
 
+Cuando el campo CDS `RSta` (departamento) está vacío, el API solo lo completa si `RCtr` es `BO` y `RCty` coincide exactamente con uno de los nombres de departamento bolivianos, con “Bolivia” o “BO” opcional al final. No infiere un departamento a partir de otras ciudades ni para destinos de otros países.
+
 Emitir un token CDS independiente para la integración:
 
 ~~~sh
