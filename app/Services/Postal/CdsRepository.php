@@ -173,6 +173,30 @@ class CdsRepository
         ];
     }
 
+    public function declarationPackageCodes(int $page, int $perPage): array
+    {
+        $db = DB::connection(config('postal.cds_connection', 'cds'));
+        $query = $db->table('dbo.O_MAIL_OBJECTS')
+            ->whereNotNull('MAIL_OBJECT_ID')
+            ->where('MAIL_OBJECT_ID', '<>', '');
+        $total = (clone $query)->count();
+        $packages = $query
+            ->orderBy('MAIL_OBJECT_PID')
+            ->offset(($page - 1) * $perPage)
+            ->limit($perPage)
+            ->get(['MAIL_OBJECT_ID']);
+
+        return [
+            'codes' => $packages->pluck('MAIL_OBJECT_ID')
+                ->map(static fn ($code): string => ShipmentCode::normalize((string) $code))
+                ->filter()
+                ->unique()
+                ->values()
+                ->all(),
+            'total' => $total,
+        ];
+    }
+
     private function declarationStage(?string $state): string
     {
         $value = mb_strtolower(trim((string) $state), 'UTF-8');

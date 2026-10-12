@@ -198,6 +198,14 @@
                                         </td>
                                         <td>
                                             <div class="d-flex flex-column">
+                                                @unless (in_array('cds.read', $token->abilities ?? [], true))
+                                                    <form method="post" action="{{ route('api-credentials.grant-cds-read', $token->id) }}" onsubmit="return confirm('Se agregará cds.read y se conservarán los permisos actuales. ¿Continuar?')">
+                                                        @csrf
+                                                        <button class="btn btn-sm btn-outline-primary mb-1" type="submit">
+                                                            <i class="fas fa-unlock-alt mr-1"></i> Autorizar CDS
+                                                        </button>
+                                                    </form>
+                                                @endunless
                                                 <form method="post" action="{{ route('api-credentials.rotate', $token->id) }}" onsubmit="return confirm('Al rotar se revocará el token anterior. ¿Continuar?')">
                                                     @csrf
                                                     <button class="btn btn-sm btn-outline-warning mb-1" type="submit">

@@ -1,11 +1,11 @@
 <?php
 
-use App\Http\Controllers\Api\IpsController;
 use App\Http\Controllers\Api\CdsDeclarationLookupController;
+use App\Http\Controllers\Api\IpsController;
+use App\Http\Controllers\Api\SqlServerExternalDestinationsBatchController;
 use App\Http\Controllers\Api\SqlServerExternalSearchAllController;
 use App\Http\Controllers\Api\SqlServerExternalSearchBatchController;
 use App\Http\Controllers\Api\SqlServerExternalSearchSafeController;
-use App\Http\Controllers\Api\SqlServerExternalDestinationsBatchController;
 use App\Http\Controllers\Api\SqlServerPackageListController;
 use App\Http\Middleware\AuthorizeIps;
 use Illuminate\Support\Facades\Route;
@@ -34,6 +34,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/tracking/destinos/batch', SqlServerExternalDestinationsBatchController::class);
     Route::get('/tracking/eventos-todos', SqlServerExternalSearchAllController::class);
     Route::get('/tracking/paquetes', SqlServerPackageListController::class);
+    Route::get('/tracking/cds/declaraciones', CdsDeclarationLookupController::class)
+        ->middleware('throttle:30,1');
     Route::post('/tracking/cds/declaraciones', CdsDeclarationLookupController::class)
         ->middleware('throttle:30,1');
 });

@@ -76,6 +76,20 @@ class ApiCredentialController extends Controller
             ->with('success', 'La credencial fue revocada.');
     }
 
+    public function grantCdsRead(Request $request, int $token): RedirectResponse
+    {
+        $credential = $request->user()->tokens()->whereKey($token)->firstOrFail();
+        $abilities = $credential->abilities ?? [];
+
+        if (! in_array('cds.read', $abilities, true)) {
+            $abilities[] = 'cds.read';
+            $credential->forceFill(['abilities' => array_values(array_unique($abilities))])->save();
+        }
+
+        return redirect()->route('api-credentials.index')
+            ->with('success', 'Se autorizó esta credencial para consultar declaraciones CDS.');
+    }
+
     public function rotate(Request $request, int $token): RedirectResponse
     {
         $oldToken = $request->user()->tokens()->whereKey($token)->firstOrFail();
@@ -153,9 +167,9 @@ class ApiCredentialController extends Controller
             ],
             [
                 'group' => 'Tracking y CDS',
-                'method' => 'POST',
+                'method' => 'GET',
                 'path' => '/api/tracking/cds/declaraciones',
-                'description' => 'Consulta declaraciones CDS por lista de códigos.',
+                'description' => 'Lista todos los paquetes CDS (50 por página; max 100); codes[]=CODIGO filtra. También acepta POST para lotes.',
                 'ability' => 'cds.read',
             ],
             [

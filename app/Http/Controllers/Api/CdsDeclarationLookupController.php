@@ -13,32 +13,52 @@ class CdsDeclarationLookupController extends Controller
 {
     public function __invoke(Request $request, CdsRepository $cds): JsonResponse
     {
-        if (!$request->user() || !$request->user()->hasRole('admin')) {
+        if (! $request->user() || ! $request->user()->hasRole('admin')) {
             return response()->json([
                 'message' => 'No autorizado para consultar declaraciones CDS.',
             ], 403);
         }
 
-        if (!$request->user()->tokenCan('cds.read')) {
+        if (! $request->user()->tokenCan('cds.read')) {
             return response()->json([
                 'message' => 'El token no tiene permiso para consultar declaraciones de CDS.',
             ], 403);
         }
 
-        if (!config('postal.cds_enabled')) {
+        if (! config('postal.cds_enabled')) {
             return response()->json([
                 'message' => 'La conexión de lectura a CDS no está habilitada.',
             ], 503);
         }
 
+        $isGet = $request->isMethod('GET');
         $validated = $request->validate([
-            'codes' => ['required', 'array', 'min:1', 'max:100'],
+            'codes' => [$isGet ? 'sometimes' : 'required', 'array', 'min:1', 'max:100'],
             'codes.*' => ['required', 'string', 'max:35', 'regex:/^[A-Za-z0-9][A-Za-z0-9._\/-]*$/D'],
+            'page' => ['sometimes', 'integer', 'min:1'],
+            'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
         ]);
-        $codes = array_values(array_unique(array_map(
-            static fn (string $code): string => ShipmentCode::normalize($code),
-            $validated['codes'],
-        )));
+        $pagination = null;
+
+        if (isset($validated['codes'])) {
+            $codes = array_values(array_unique(array_map(
+                static fn (string $code): string => ShipmentCode::normalize($code),
+                $validated['codes'],
+            )));
+        } elseif ($isGet) {
+            $page = (int) ($validated['page'] ?? 1);
+            $perPage = (int) ($validated['per_page'] ?? 50);
+            $packagePage = $cds->declarationPackageCodes($page, $perPage);
+            $codes = $packagePage['codes'];
+            $pagination = [
+                'current_page' => $page,
+                'per_page' => $perPage,
+                'total' => $packagePage['total'],
+                'last_page' => max(1, (int) ceil($packagePage['total'] / $perPage)),
+            ];
+        } else {
+            $codes = [];
+        }
 
         $index = $cds->declarationIndex($codes, 1000, true);
         $packages = collect($index['packages'] ?? []);
@@ -109,6 +129,7 @@ class CdsDeclarationLookupController extends Controller
             'meta' => [
                 'count' => $data->count(),
                 'cds_truncado' => (bool) ($index['truncated'] ?? false),
+                ...($pagination ?? []),
             ],
         ]);
     }

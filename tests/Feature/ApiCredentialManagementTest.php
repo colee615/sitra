@@ -93,6 +93,42 @@ class ApiCredentialManagementTest extends TestCase
         $this->assertDatabaseMissing('personal_access_tokens', ['id' => $newToken->id]);
     }
 
+    public function test_admin_can_grant_cds_to_existing_token_without_removing_its_current_abilities(): void
+    {
+        $user = $this->admin();
+        $token = $user->createToken('Existing tracking', ['sqlserver.read'])->accessToken;
+
+        $this->actingAs($user)
+            ->post(route('api-credentials.grant-cds-read', $token->id))
+            ->assertRedirect(route('api-credentials.index'));
+
+        $token->refresh();
+        $this->assertSame(['sqlserver.read', 'cds.read'], $token->abilities);
+        $this->assertDatabaseHas('personal_access_tokens', [
+            'id' => $token->id,
+            'name' => 'Existing tracking',
+        ]);
+    }
+
+    public function test_admin_cannot_grant_cds_to_another_users_token(): void
+    {
+        $admin = $this->admin();
+        $otherAdmin = $this->admin();
+        $otherToken = $otherAdmin->createToken('Other token', ['sqlserver.read'])->accessToken;
+
+        $this->actingAs($admin)
+            ->post(route('api-credentials.grant-cds-read', $otherToken->id))
+            ->assertNotFound();
+        $this->assertSame(['sqlserver.read'], $otherToken->fresh()->abilities);
+    }
+
+    public function test_unauthenticated_api_requests_receive_json_instead_of_login_redirect(): void
+    {
+        $this->get('/api/tracking/cds/declaraciones?codes%5B%5D=LP666718164MY')
+            ->assertUnauthorized()
+            ->assertJsonPath('message', 'No autenticado. Envía un token Bearer válido.');
+    }
+
     public function test_non_admin_cannot_manage_api_credentials(): void
     {
         $this->actingAs(User::factory()->create())
