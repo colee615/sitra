@@ -89,7 +89,9 @@ class SqlServerPackageListController extends Controller
                     );
 
                     if ($includeDeclaration) {
-                        $item['declaracion_cds'] = $this->transformCdsDeclarations($row, $cdsIndex, $declarationsByPackage);
+                        $declarationData = $this->transformCdsDeclarations($row, $cdsIndex, $declarationsByPackage);
+                        $item['declaracion_cds'] = $declarationData;
+                        $item['destinos_declarados'] = $declarationData['destinos_declarados'];
                     }
 
                     return $item;
@@ -274,6 +276,7 @@ class SqlServerPackageListController extends Controller
                     'estado' => $declaration['state'] ?? null,
                     'etapa' => $declaration['workflow_stage'] ?? null,
                     'estado_datos' => $declaration['data_status'] ?? null,
+                    'destino_declarado' => $this->transformDeclaredDestination($declaration['data']['fields'] ?? []),
                     'resumen_contenido' => $declaration['content_summary'] ?? null,
                     'cantidad_articulos' => $declaration['piece_count'] ?? 0,
                     'cantidad_documentos' => $declaration['document_count'] ?? 0,
@@ -294,6 +297,13 @@ class SqlServerPackageListController extends Controller
             ];
         });
         $declarationCount = $cdsPackages->sum(fn (array $package) => count($package['declaraciones']));
+        $declaredDestinations = $cdsPackages->flatMap(fn (array $package) => collect($package['declaraciones'])
+            ->filter(fn (array $declaration) => $declaration['destino_declarado'] !== null)
+            ->map(fn (array $declaration) => [
+                'codigo_objeto' => $package['codigo'],
+                'numero_declaracion' => $declaration['numero'],
+                ...$declaration['destino_declarado'],
+            ]))->values()->all();
         $truncated = !empty($cdsIndex['truncated']);
         $status = match (true) {
             $truncated && ($cdsPackages->isEmpty() || $declarationCount === 0) => 'consulta_incompleta',
@@ -306,7 +316,22 @@ class SqlServerPackageListController extends Controller
             'estado' => $status,
             'truncado' => $truncated,
             'objetos' => $cdsPackages->all(),
+            'destinos_declarados' => $declaredDestinations,
         ];
+    }
+
+    private function transformDeclaredDestination(array $fields): ?array
+    {
+        $destination = [
+            'ciudad' => $this->cleanText($fields['RCty'] ?? ''),
+            'departamento' => $this->cleanText($fields['RSta'] ?? ''),
+            'codigo_postal' => $this->cleanText($fields['RZip'] ?? ''),
+            'pais_codigo' => $this->cleanText($fields['RCtr'] ?? ''),
+        ];
+
+        return collect($destination)->contains(fn ($value) => $value !== null)
+            ? $destination
+            : null;
     }
 
     private function transformPackageEvents(iterable $trackingRows)

@@ -245,7 +245,14 @@ class IpsApiTest extends TestCase
                     'piece_count' => 1,
                     'document_count' => 1,
                     'data' => [
-                        'fields' => ['SNm' => 'Remitente', 'RNm' => 'Destinatario'],
+                        'fields' => [
+                            'SNm' => 'Remitente',
+                            'RNm' => 'Destinatario',
+                            'RCty' => 'Cercado',
+                            'RSta' => 'Cochabamba',
+                            'RZip' => '0000',
+                            'RCtr' => 'BO',
+                        ],
                         'pieces' => [['Desc' => 'Libro', 'Amt' => '10']],
                         'documents' => [['type' => 'CN23', 'fields' => ['Ref' => 'CN23-1']]],
                     ],
@@ -261,6 +268,11 @@ class IpsApiTest extends TestCase
             ->assertJsonPath('meta.cds_truncado', false)
             ->assertJsonPath('data.0.declaracion_cds.estado', 'declarada')
             ->assertJsonPath('data.0.declaracion_cds.objetos.0.declaraciones.0.numero', 'CN23-1')
+            ->assertJsonPath('data.0.declaracion_cds.objetos.0.declaraciones.0.destino_declarado.departamento', 'Cochabamba')
+            ->assertJsonPath('data.0.declaracion_cds.objetos.0.declaraciones.0.destino_declarado.ciudad', 'Cercado')
+            ->assertJsonPath('data.0.destinos_declarados.0.codigo_objeto', 'EY592031552US')
+            ->assertJsonPath('data.0.destinos_declarados.0.departamento', 'Cochabamba')
+            ->assertJsonPath('data.0.destinos_declarados.0.ciudad', 'Cercado')
             ->assertJsonPath('data.0.declaracion_cds.objetos.0.declaraciones.0.articulos.0.Desc', 'Libro')
             ->assertJsonPath('data.0.declaracion_cds.objetos.0.declaraciones.0.documentos.0.type', 'CN23');
     }
