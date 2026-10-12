@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\IpsController;
+use App\Http\Controllers\Api\CdsDeclarationLookupController;
 use App\Http\Controllers\Api\SqlServerExternalSearchAllController;
 use App\Http\Controllers\Api\SqlServerExternalSearchBatchController;
 use App\Http\Controllers\Api\SqlServerExternalSearchSafeController;
@@ -33,4 +34,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/tracking/destinos/batch', SqlServerExternalDestinationsBatchController::class);
     Route::get('/tracking/eventos-todos', SqlServerExternalSearchAllController::class);
     Route::get('/tracking/paquetes', SqlServerPackageListController::class);
+    Route::post('/tracking/cds/declaraciones', CdsDeclarationLookupController::class)
+        ->middleware('throttle:30,1');
 });

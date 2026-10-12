@@ -108,6 +108,14 @@ Se exige usuario administrador y token personal de Sanctum. Una sesión web no s
 
 Las rutas antiguas `/api/tracking/eventos`, `/api/tracking/eventos-todos` y `/api/tracking/paquetes` conservan su permiso `sqlserver.read`. El listado `/api/tracking/paquetes` incluye automáticamente declaraciones CDS completas cuando CDS está habilitado y el token tiene también `cds.read`; `include_declaration=1` permite solicitarlas explícitamente y `include_declaration=0` desactivarlas. La respuesta agrega `declaracion_cds` por paquete, con estado de vínculo, objetos CDS, declaraciones, campos, artículos y documentos. Cada declaración contiene `destino_declarado` (`ciudad`, `departamento`, `codigo_postal` y `pais_codigo`); el paquete expone también `destinos_declarados`, una lista con el código de envío y número de declaración para facilitar su consumo. Los estados posibles son `declarada`, `objeto_sin_declaracion`, `sin_objeto_cds` y `consulta_incompleta`. `meta.declaracion_cds_incluida` confirma si esta respuesta contiene el campo y `meta.cds_truncado` avisa si el índice de CDS alcanzó su límite; `sin_objeto_cds` no confirma por sí solo que no exista una declaración asociada.
 
+Para integraciones con permisos separados está disponible `POST /api/tracking/cds/declaraciones`, protegido con usuario administrador y el permiso de token `cds.read` (no requiere `sqlserver.read`). Acepta `{"codes":["LP666718164MY"]}` —hasta 100 identificadores— y devuelve por cada código el estado CDS, los objetos vinculados, declaraciones completas, artículos, documentos y `destino_declarado` con departamento/ciudad. Requiere que CDS esté habilitado. La ruta aplica un límite de 30 consultas por minuto.
+
+Emitir un token CDS independiente para la integración:
+
+~~~sh
+php artisan token:issue correo-del-administrador --name=consulta-cds-crm --ability=cds.read --days=90
+~~~
+
 Ejemplo de consulta:
 
 ~~~http
