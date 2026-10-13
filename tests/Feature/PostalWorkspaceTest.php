@@ -29,16 +29,12 @@ class PostalWorkspaceTest extends TestCase
     {
         $this->actingAs($this->operator());
         $this->get('/consultas')->assertForbidden();
-        $this->get('/aduana')->assertForbidden();
-        $this->get('/aduana/remision')->assertForbidden();
-        $this->get('/aduana/remision/imprimir?codigos=TEST')->assertForbidden();
-        $this->get('/aduana/remision.csv?codigos=TEST')->assertForbidden();
         $this->get('/consultas/documentos/marbete?codigo=TEST')->assertForbidden();
-        $this->get('/cds/declaracion/imprimir?codigo=TEST&declaracion=TEST-ID')->assertForbidden();
+        $this->get('/consultas/declaracion/imprimir?codigo=TEST&declaracion=TEST-ID')->assertForbidden();
         $this->get('/operaciones-postales')->assertForbidden();
         $this->get('/operaciones-postales/reporte.csv')->assertForbidden();
         $this->get('/despachos')->assertForbidden();
-        $this->get('/dashboard')->assertOk()->assertDontSee('href="'.route('postal.customs').'"', false);
+        $this->get('/dashboard')->assertOk()->assertDontSee('Declaraciones CDS');
     }
 
     public function test_admin_can_open_workspace_without_database_queries(): void
@@ -150,95 +146,6 @@ class PostalWorkspaceTest extends TestCase
         $this->get('/consultas/documentos/marbete?codigo=EC253990191BE')->assertOk()->assertSee('MARBETE INTERNO');
     }
 
-    public function test_cds_operator_can_prepare_a_multi_package_customs_remittance(): void
-    {
-        config(['postal.cds_enabled'=>true]);
-        $user = $this->operator();
-        $user->givePermissionTo(Permission::findOrCreate('cds.read', 'web'));
-        $result = [
-            'packages' => [
-                (object)['MAIL_OBJECT_PID'=>101,'MAIL_OBJECT_ID'=>'EC253990191BE','MAIL_OBJECT_LOCAL_ID'=>null,'MAIL_OBJECT_LOCAL_ID2'=>null,'MAIL_STATE_NM'=>'Registrado','POSTING_DATE'=>'2026-09-24','MAIL_OBJECT_TYPE_CD'=>'P'],
-                (object)['MAIL_OBJECT_PID'=>102,'MAIL_OBJECT_ID'=>null,'MAIL_OBJECT_LOCAL_ID'=>null,'MAIL_OBJECT_LOCAL_ID2'=>'LOCAL-PACKAGE-2','MAIL_STATE_NM'=>'En trámite','POSTING_DATE'=>'2026-09-23','MAIL_OBJECT_TYPE_CD'=>'P'],
-            ],
-            'declarations' => [[
-                'id'=>'declaration-1','package_id'=>101,'state'=>'Registrada','nature'=>'Regalo',
-                'countries'=>['US'=>'Estados Unidos','BO'=>'Bolivia'],
-                'data'=>['status'=>'ok','fields'=>['SNm'=>'Remitente','RNm'=>'Destinatario','SCtr'=>'US','RCtr'=>'BO','GWgt'=>'0.5'],
-                    'pieces'=>[['Desc'=>'=Libro','No'=>'2','Amt'=>'10','Cur'=>'USD','NWgt'=>'0.4','OCtr'=>'US']], 'documents'=>[]],
-            ]],
-            'responses' => [['id'=>'response-1','package_id'=>101,'state'=>'Procesada','decision'=>'Revisión documental']],
-            'events' => [], 'truncated'=>false,
-        ];
-        $this->mock(CdsRepository::class)->shouldReceive('search')->times(3)->with(['EC253990191BE','LOCAL-PACKAGE-2','MISSING-1'])->andReturn($result);
-
-        $this->actingAs($user)->get('/aduana/remision?codigos='.urlencode("ec253990191be\nLOCAL-PACKAGE-2\nMISSING-1\nEC253990191BE"))
-            ->assertOk()->assertSee('Preparar remisión a Aduana')->assertSee('declaraciones CDS')
-            ->assertSee('LOCAL-PACKAGE-2')->assertSee('sin declaraci')->assertSee('No encontrado en CDS')
-            ->assertSee('Remitente')->assertSee('Revisión documental')->assertSee('Descargar CSV');
-
-        $this->get('/aduana/remision/imprimir?codigos='.urlencode('EC253990191BE LOCAL-PACKAGE-2 MISSING-1'))
-            ->assertOk()->assertSee('Relación de paquetes y declaraciones CDS')->assertSee('No se encontró una declaración CDS vinculada');
-
-        $csvResponse = $this->get('/aduana/remision.csv?codigos='.urlencode('EC253990191BE LOCAL-PACKAGE-2 MISSING-1'))->assertOk();
-        $csv = $csvResponse->streamedContent();
-        $this->assertStringContainsString('Identificador local', $csv);
-        $this->assertStringContainsString("'=Libro", $csv);
-        $this->assertStringContainsString('MISSING-1', $csv);
-    }
-
-    public function test_remittance_uses_declarations_from_any_duplicate_cds_object_for_the_same_s10(): void
-    {
-        config(['postal.cds_enabled'=>true]);
-        $user = $this->operator();
-        $user->givePermissionTo(Permission::findOrCreate('cds.read', 'web'));
-        $code = 'EC257727105BE';
-        $result = [
-            'packages' => [
-                (object)['MAIL_OBJECT_PID'=>501,'MAIL_OBJECT_ID'=>$code,'MAIL_OBJECT_LOCAL_ID'=>null,'MAIL_OBJECT_LOCAL_ID2'=>null,'MAIL_STATE_NM'=>'Departed OOE','POSTING_DATE'=>'2025-07-15','MAIL_OBJECT_TYPE_CD'=>'P','MAIL_FLOW_CD'=>'O'],
-                (object)['MAIL_OBJECT_PID'=>402,'MAIL_OBJECT_ID'=>$code,'MAIL_OBJECT_LOCAL_ID'=>null,'MAIL_OBJECT_LOCAL_ID2'=>null,'MAIL_STATE_NM'=>'Registered','POSTING_DATE'=>'2025-04-20','MAIL_OBJECT_TYPE_CD'=>'P','MAIL_FLOW_CD'=>'I'],
-            ],
-            'declarations' => [[
-                'id'=>'declaration-inbound','package_id'=>402,'state'=>'Draft','workflow_stage'=>'Borrador · no enviado a Aduana','nature'=>'Regalo',
-                'countries'=>[],'data'=>['status'=>'ok','fields'=>['SNm'=>'Remitente histórico','RNm'=>'Destinatario'],'pieces'=>[['Desc'=>'Documento']], 'documents'=>[]],
-            ]],
-            'responses'=>[], 'events'=>[], 'truncated'=>false,
-        ];
-        $this->mock(CdsRepository::class)->shouldReceive('search')->times(3)->with([$code])->andReturn($result);
-
-        $this->actingAs($user)->get('/aduana/remision?codigos='.$code)->assertOk()
-            ->assertSee('Con declaración CDS')->assertSee('2 registro(s) CDS')
-            ->assertSee('ID objeto CDS:</strong> 501', false)->assertSee('ID objeto CDS:</strong> 402', false)
-            ->assertSee('Remitente histórico')->assertSee('Borrador · no enviado a Aduana')
-            ->assertDontSee('No se encontró una declaración CDS vinculada a este registro');
-
-        $print = $this->get('/aduana/remision/imprimir?codigos='.$code)->assertOk();
-        $print->assertSee('ID de objeto CDS:</strong> 501', false)->assertSee('ID de objeto CDS:</strong> 402', false)
-            ->assertSee('declaration-inbound');
-
-        $csv = $this->get('/aduana/remision.csv?codigos='.$code)->assertOk()->streamedContent();
-        $this->assertStringContainsString('declaration-inbound', $csv);
-        $this->assertStringContainsString('402,declaration-inbound', $csv);
-    }
-
-    public function test_remittance_does_not_call_unreturned_codes_missing_when_cds_results_are_truncated(): void
-    {
-        config(['postal.cds_enabled'=>true]);
-        $user = $this->operator();
-        $user->givePermissionTo(Permission::findOrCreate('cds.read', 'web'));
-        $this->mock(CdsRepository::class)->shouldReceive('search')->once()
-            ->with(['EC257727105BE','LX097070395FR'])->andReturn([
-                'packages'=>[(object)['MAIL_OBJECT_PID'=>501,'MAIL_OBJECT_ID'=>'EC257727105BE','MAIL_STATE_NM'=>'Registered']],
-                'declarations'=>[], 'responses'=>[], 'events'=>[], 'truncated'=>true,
-                'packages_truncated'=>true, 'declarations_truncated'=>true,
-            ]);
-
-        $this->actingAs($user)->get('/aduana/remision?codigos='.urlencode('EC257727105BE LX097070395FR'))->assertOk()
-            ->assertSee('No confirmado: límite de CDS')
-            ->assertSee('Códigos no confirmados')
-            ->assertSee('EC257727105BE')->assertSee('LX097070395FR')
-            ->assertDontSee('No encontrado en CDS');
-    }
-
     public function test_deleted_cds_declarations_are_not_counted_as_active(): void
     {
         $code = 'EC257727105BE';
@@ -253,73 +160,6 @@ class PostalWorkspaceTest extends TestCase
         $this->assertFalse($result['packages'][0]['has_active_declaration']);
         $this->assertSame(0, $result['declaration_count']);
         $this->assertSame([$code], $result['deleted_declaration_codes']);
-    }
-
-    public function test_customs_remittance_rejects_more_than_fifty_package_codes(): void
-    {
-        $user = $this->operator();
-        $user->givePermissionTo(Permission::findOrCreate('cds.read', 'web'));
-        config(['postal.cds_enabled'=>true]);
-        $this->mock(CdsRepository::class)->shouldNotReceive('search');
-        $codes = implode(' ', array_map(fn ($number) => 'LOCAL-'.$number, range(1, 51)));
-
-        $this->actingAs($user)->get('/aduana/remision?codigos='.urlencode($codes))->assertSessionHasErrors('codigos');
-    }
-
-    public function test_remittance_can_load_a_sack_and_select_only_packages_with_a_cds_declaration(): void
-    {
-        config(['postal.cds_enabled'=>true]);
-        $user = $this->operator();
-        $user->givePermissionTo([
-            Permission::findOrCreate('cds.read', 'web'),
-            Permission::findOrCreate('ips.read', 'web'),
-        ]);
-        $bag = [
-            'identifier'=>'BAG-001',
-            'receptacles'=>[(object)['RECPTCL_PID'=>501,'RECPTCL_FID'=>'BAG-001','RECPTCL_WEIGHT'=>1.2,'RECPTCL_MAILITMS_NO'=>2]],
-            'items'=>[
-                (object)['MAILITM_FID'=>'EC253990191BE','MAILITM_LOCAL_ID'=>'LOCAL-1','ORIGIN_COUNTRY'=>'Belgium','DEST_COUNTRY'=>'Bolivia','EVENT_NAME_ES'=>'Recibido en oficina','EVENT_NAME'=>null,'EVT_GMT_DT'=>'2026-09-24 10:00:00','POSTAL_STATUS_NAME'=>'En oficina'],
-                (object)['MAILITM_FID'=>'LX097070395FR','MAILITM_LOCAL_ID'=>'LOCAL-2','ORIGIN_COUNTRY'=>'France','DEST_COUNTRY'=>'Bolivia','EVENT_NAME_ES'=>'En tránsito','EVENT_NAME'=>null,'EVT_GMT_DT'=>'2026-09-23 10:00:00','POSTAL_STATUS_NAME'=>'En tránsito'],
-            ],
-            'events'=>[], 'manifests'=>[], 'truncated'=>false,
-        ];
-        $this->mock(ReceptacleSearchService::class)->shouldReceive('search')->twice()->with('BAG-001')->andReturn($bag);
-        $cds = $this->mock(CdsRepository::class);
-        $cds->shouldReceive('declarationIndex')->twice()->with(['EC253990191BE','LOCAL-1','LX097070395FR','LOCAL-2'], 1000)->andReturn([
-            'packages'=>[
-                (object)['MAIL_OBJECT_PID'=>101,'MAIL_OBJECT_ID'=>'EC253990191BE','MAIL_OBJECT_LOCAL_ID'=>'LOCAL-1','MAIL_OBJECT_LOCAL_ID2'=>null,'MAIL_STATE_NM'=>'Registrado','POSTING_DATE'=>'2026-09-24','MAIL_OBJECT_TYPE_CD'=>'P'],
-                (object)['MAIL_OBJECT_PID'=>102,'MAIL_OBJECT_ID'=>'LX097070395FR','MAIL_OBJECT_LOCAL_ID'=>'LOCAL-2','MAIL_OBJECT_LOCAL_ID2'=>null,'MAIL_STATE_NM'=>'Registrado','POSTING_DATE'=>'2026-09-23','MAIL_OBJECT_TYPE_CD'=>'P'],
-            ],
-            'declarations'=>[['id'=>'declaration-1','package_id'=>101,'state'=>'Registrada']],
-            'truncated'=>false,
-        ]);
-        $cds->shouldReceive('search')->once()->with(['EC253990191BE'])->andReturn([
-            'packages'=>[(object)['MAIL_OBJECT_PID'=>101,'MAIL_OBJECT_ID'=>'EC253990191BE','MAIL_OBJECT_LOCAL_ID'=>'LOCAL-1','MAIL_OBJECT_LOCAL_ID2'=>null,'MAIL_STATE_NM'=>'Registrado','POSTING_DATE'=>'2026-09-24','MAIL_OBJECT_TYPE_CD'=>'P']],
-            'declarations'=>[['id'=>'declaration-1','package_id'=>101,'state'=>'Registrada','nature'=>'Regalo','countries'=>[],
-                'data'=>['status'=>'ok','fields'=>['SNm'=>'Remitente','RNm'=>'Destinatario'],'pieces'=>[['Desc'=>'Libros','No'=>'1','Amt'=>'10','Cur'=>'USD']],'documents'=>[]]]],
-            'responses'=>[], 'events'=>[], 'truncated'=>false,
-        ]);
-
-        $this->actingAs($user)->get('/aduana/remision?marbete=BAG-001')->assertOk()
-            ->assertSee('Paquetes de la saca BAG-001')->assertSee('2 paquetes relacionados')
-            ->assertSee('Con declaración CDS')->assertSee('Registro CDS sin declaración')->assertSee('Ver declaraciones')
-            ->assertSee('Preparar remisión seleccionada');
-
-        $this->get('/aduana/remision?marbete=BAG-001&seleccionados%5B0%5D=EC253990191BE')->assertOk()
-            ->assertSee('Resultado de la consulta')->assertSee('Libros')->assertSee('BAG-001')
-            ->assertSee('declaraciones CDS');
-    }
-
-    public function test_cds_only_user_gets_a_clear_message_when_opening_the_sack_lookup(): void
-    {
-        config(['postal.cds_enabled'=>true]);
-        $user = $this->operator();
-        $user->givePermissionTo(Permission::findOrCreate('cds.read', 'web'));
-        $this->mock(ReceptacleSearchService::class)->shouldNotReceive('search');
-        $this->mock(CdsRepository::class)->shouldNotReceive('declarationIndex');
-
-        $this->actingAs($user)->get('/aduana/remision?marbete=BAG-001')->assertOk()
-            ->assertSee('necesitas permiso de lectura IPS')->assertSee('Ya tengo los códigos de los paquetes');
     }
 
     public function test_ips_failure_does_not_hide_cds(): void
@@ -434,8 +274,7 @@ class PostalWorkspaceTest extends TestCase
             ->assertSee('Receptor de prueba')->assertSee('Aviso internacional')->assertSee('Contenido IPS de prueba')
             ->assertSee('CN31')->assertSee('Operador de formulario')->assertSee('Operador CDS')
             ->assertSee('href="'.route('postal.receptacles', ['marbete'=>$bag]).'"', false)
-            ->assertSee('href="'.route('postal.receptacles', ['marbete'=>$dispatch]).'"', false)
-            ->assertSee('href="'.route('postal.customs.remittance', ['codigos'=>$code]).'"', false);
+            ->assertSee('href="'.route('postal.receptacles', ['marbete'=>$dispatch]).'"', false);
         $document = new \DOMDocument();
         $document->loadHTML('<?xml encoding="UTF-8">'.$result->getContent(), LIBXML_NOERROR | LIBXML_NOWARNING);
         $xpath = new \DOMXPath($document);
@@ -523,7 +362,7 @@ class PostalWorkspaceTest extends TestCase
         $this->mock(PostalWorkspace::class)->shouldReceive('search')->once()
             ->with('EE000722051BO', false, true)->andReturn($workspaceData);
 
-        $response = $this->actingAs($user)->get('/cds/declaracion/imprimir?codigo=EE000722051BO&declaracion=declaration-test');
+        $response = $this->actingAs($user)->get('/consultas/declaracion/imprimir?codigo=EE000722051BO&declaracion=declaration-test');
         $response->assertOk()->assertSee('CN 23')->assertSee('EMS')->assertSee('Customs declaration')
             ->assertSee('Detailed description of contents')->assertSee('reference (if any)')
             ->assertSee('Remitente de prueba')->assertSee('Calle de origen Zona central')->assertSee('AGBC')

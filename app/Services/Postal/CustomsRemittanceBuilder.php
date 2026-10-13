@@ -83,9 +83,9 @@ final class CustomsRemittanceBuilder
             $codes,
             $result['packages'] ?? [],
             $result['declarations'] ?? [],
-            [],
+            $result['responses'] ?? [],
             (bool) ($result['packages_truncated'] ?? false),
-            (bool) ($result['declarations_truncated'] ?? false),
+            (bool) ($result['declarations_truncated'] ?? false) || (bool) ($result['responses_truncated'] ?? false),
         );
 
         return [
@@ -96,7 +96,8 @@ final class CustomsRemittanceBuilder
             'unconfirmed_codes' => $groups['unconfirmed_codes'],
             'declaration_count' => $groups['declaration_count'],
             'truncated' => (bool) ($result['truncated'] ?? false),
-            'declarations_truncated' => (bool) ($result['declarations_truncated'] ?? false),
+            'declarations_truncated' => (bool) ($result['declarations_truncated'] ?? false)
+                || (bool) ($result['responses_truncated'] ?? false),
         ];
     }
 

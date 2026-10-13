@@ -21,28 +21,6 @@
 
 @section('css')
     <style>
-        .api-credentials-hero {
-            align-items: center;
-            background: linear-gradient(110deg, #173e6b, #285da0);
-            border-radius: 14px;
-            box-shadow: 0 10px 24px rgba(23, 62, 107, .18);
-            color: #fff;
-            display: flex;
-            gap: 18px;
-            margin-bottom: 22px;
-            padding: 24px;
-        }
-        .api-credentials-hero .hero-icon {
-            align-items: center;
-            background: rgba(255, 255, 255, .16);
-            border-radius: 12px;
-            display: flex;
-            flex: 0 0 52px;
-            height: 52px;
-            justify-content: center;
-        }
-        .api-credentials-hero h2 { font-size: 22px; font-weight: 700; margin: 0 0 4px; }
-        .api-credentials-hero p { color: rgba(255, 255, 255, .78); margin: 0; }
         .api-credentials-card { border: 0; border-radius: 12px; box-shadow: 0 3px 14px rgba(25, 45, 70, .07); margin-bottom: 22px; }
         .api-credentials-card .card-title { color: #18334e; font-weight: 700; }
         .api-credentials-table td, .api-credentials-table th { vertical-align: middle; }
@@ -55,8 +33,6 @@
         .api-endpoint-method { display: inline-block; font-size: 11px; font-weight: 700; min-width: 54px; text-align: center; }
         .api-group-heading { background: #f4f7fa; color: #18334e; font-weight: 700; }
         @media (max-width: 767px) {
-            .api-credentials-hero { align-items: flex-start; padding: 18px; }
-            .api-credentials-hero h2 { font-size: 18px; }
             .api-credentials-table { min-width: 760px; }
         }
     </style>
@@ -70,14 +46,6 @@
         @if ($errors->any())
             <div class="alert alert-danger" role="alert">{{ $errors->first() }}</div>
         @endif
-
-        <section class="api-credentials-hero">
-            <span class="hero-icon"><i class="fas fa-plug fa-lg" aria-hidden="true"></i></span>
-            <div>
-                <h2>Integraciones seguras y fáciles de entender</h2>
-                <p>Genera un token independiente para un permiso API y úsalo como Bearer en Postman u otro sistema.</p>
-            </div>
-        </section>
 
         <div class="row">
             <div class="col-12">

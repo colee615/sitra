@@ -29,7 +29,9 @@ class IpsController extends Controller
             'status' => ['nullable', 'in:all,pending,reception,returns,delivered,warehouse'],
             'q' => ['nullable', 'string', 'max:35'],
             'office_cd' => ['nullable', 'integer', 'min:1', 'max:32767'],
-            'event_cd' => ['nullable', 'integer', 'min:1', 'max:32767'],
+            'event_cd' => ['nullable'],
+            'event_cd.*' => ['integer', 'min:1', 'max:32767'],
+            'action_cd' => ['nullable', 'in:EDH,HANDOVER_AGENT,EDG,EMH,EMI'],
             'actor_user_pid' => ['nullable', 'integer', 'min:1', 'max:32767'],
             'page' => ['nullable', 'integer', 'min:1', 'max:100000'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
@@ -45,13 +47,25 @@ class IpsController extends Controller
             $detail = $ips->detail(strtoupper($codigo));
             $detail['package']['allowed_actions'] = isset($filters['office_cd'])
                 ? app(\App\Services\IpsStagePolicy::class)->actions($detail['package'], (int) $filters['office_cd']) : [];
+            if (in_array('EMR', $detail['package']['allowed_actions'], true) && isset($filters['office_cd'])) {
+                $detail['package']['exchange_receptacles'] = $ips->openInboundReceptacles((int) $filters['office_cd']);
+            }
             return ['data' => $detail];
         });
     }
 
-    public function catalog(IpsRepository $ips)
+    public function showReceptacle(Request $request, string $codigo, IpsRepository $ips)
     {
-        return $this->respond(fn () => ['data' => $ips->catalog()]);
+        $filters = $request->validate(['office_cd' => ['required', 'integer', 'min:1', 'max:32767']]);
+
+        return $this->respond(fn () => ['data' => $ips->receptacleDetail(strtoupper($codigo), (int) $filters['office_cd'])]);
+    }
+
+    public function catalog(Request $request, IpsRepository $ips)
+    {
+        $filters = $request->validate(['office_cd' => ['nullable', 'integer', 'min:1', 'max:32767']]);
+
+        return $this->respond(fn () => ['data' => $ips->catalog(isset($filters['office_cd']) ? (int) $filters['office_cd'] : null)]);
     }
 
     public function deliveryCatalog(IpsRepository $ips)

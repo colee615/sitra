@@ -15,9 +15,11 @@ class IpsRepository
         return DB::connection(config('ips.connection'));
     }
 
-    public function catalog(): array
+    public function catalog(?int $office = null): array
     {
         $db = $this->connection();
+        $exchangeOffices = $this->exchangeOfficeCds();
+        $receptacleOffice = $office ?? ($exchangeOffices[0] ?? null);
 
         return [
             'events' => $db->table('dbo.C_EVENT_TYPES as e')
@@ -28,8 +30,26 @@ class IpsRepository
             'offices' => $db->table('dbo.N_OWN_OFFICES')->whereIn('VALID_IND', ['1', '3'])->orderBy('OFFICE_NM')->get(['OWN_OFFICE_CD', 'OFFICE_FCD', 'OFFICE_NM']),
             'mail_classes' => $db->table('dbo.C_MAIL_CLASSES')->orderBy('MAIL_CLASS_CD')->get(['MAIL_CLASS_CD', 'MAIL_CLASS_NM']),
             'countries' => $db->table('dbo.C_COUNTRIES')->orderBy('COUNTRY_CD')->get(['COUNTRY_CD', 'COUNTRY_NM']),
+            'item_conditions' => $db->table('dbo.C_ITEM_CONDITIONS')->orderBy('ITEM_CONDITION_CD')
+                ->get(['ITEM_CONDITION_CD', 'ITEM_CONDITION_NM'])
+                ->map(function ($condition) {
+                    $condition->ITEM_CONDITION_NM = match ((string) $condition->ITEM_CONDITION_CD) {
+                        '30' => 'Envío recibido en buen estado',
+                        '31' => 'Envío dañado o rasgado',
+                        '32' => 'Envío manipulado o violado',
+                        default => $condition->ITEM_CONDITION_NM,
+                    };
+
+                    return $condition;
+                }),
             'non_delivery_reasons' => $db->table('dbo.C_NON_DELIVERY_REASONS')->whereIn('VALID_IND', ['1', '3'])->get(['NON_DELIVERY_REASON_CD', 'NON_DELIVERY_REASON_NM']),
             'non_delivery_measures' => $db->table('dbo.C_NON_DELIVERY_MEASURES')->whereIn('VALID_IND', ['1', '3'])->get(['NON_DELIVERY_MEASURE_CD', 'NON_DELIVERY_MEASURE_NM']),
+            'delivery_agents' => $db->table('dbo.N_DELIVERY_AGENTS')->whereIn('VALID_IND', ['1', '3'])->orderBy('DELIVERY_AGENT_NM')->get(['DELIVERY_AGENT_CD', 'DELIVERY_AGENT_NM', 'DELIVERY_AGENT_FULL_CD']),
+            'customs_office_types' => $db->table('dbo.C_CUSTOMS_OFFICE_TYPES')->orderBy('CUSTOMS_OFFICE_TYPE_CD')->get(['CUSTOMS_OFFICE_TYPE_CD', 'CUSTOMS_OFFICE_TYPE_NM']),
+            'customs_release_statuses' => $db->table('dbo.C_CUSTOMS_RELEASE_STATUSES')->orderBy('CUSTOMS_RELEASE_STATUS_CD')->get(['CUSTOMS_RELEASE_STATUS_CD', 'CUSTOMS_RELEASE_STATUS_NM']),
+            'open_inbound_receptacles' => $receptacleOffice !== null
+                ? $this->openInboundReceptacles((int) $receptacleOffice)
+                : collect(),
             'writes_enabled' => config('ips.writes_enabled'),
         ];
     }
@@ -45,6 +65,15 @@ class IpsRepository
             'non_delivery_measures' => $db->table('dbo.C_NON_DELIVERY_MEASURES')
                 ->whereIn('VALID_IND', ['1', '3'])->orderBy('NON_DELIVERY_MEASURE_CD')
                 ->get(['NON_DELIVERY_MEASURE_CD', 'NON_DELIVERY_MEASURE_NM']),
+            'delivery_agents' => $db->table('dbo.N_DELIVERY_AGENTS')
+                ->whereIn('VALID_IND', ['1', '3'])->orderBy('DELIVERY_AGENT_NM')
+                ->get(['DELIVERY_AGENT_CD', 'DELIVERY_AGENT_NM', 'DELIVERY_AGENT_FULL_CD']),
+            'customs_office_types' => $db->table('dbo.C_CUSTOMS_OFFICE_TYPES')
+                ->orderBy('CUSTOMS_OFFICE_TYPE_CD')->get(['CUSTOMS_OFFICE_TYPE_CD', 'CUSTOMS_OFFICE_TYPE_NM']),
+            'customs_release_statuses' => $db->table('dbo.C_CUSTOMS_RELEASE_STATUSES')
+                ->orderBy('CUSTOMS_RELEASE_STATUS_CD')->get(['CUSTOMS_RELEASE_STATUS_CD', 'CUSTOMS_RELEASE_STATUS_NM']),
+            'offices' => $db->table('dbo.N_OWN_OFFICES')->whereIn('VALID_IND', ['1', '3'])
+                ->orderBy('OFFICE_NM')->get(['OWN_OFFICE_CD', 'OFFICE_FCD', 'OFFICE_NM']),
         ];
     }
 
@@ -98,23 +127,36 @@ class IpsRepository
             $query->where('m.DEST_COUNTRY_CD', config('ips.destination_country'));
         }
         if (in_array($status, ['pending', 'reception'], true)) {
-            $query->whereIn(DB::raw('COALESCE(op.EVENT_TYPE_CD, m.EVT_TYPE_CD)'), $status === 'pending'
-                    ? config('ips.delivery_candidate_events') : config('ips.reception_candidate_events'))
-                ->whereIn('m.STATE_IND_CD', $status === 'pending' ? [0, 8] : [0, 2, 3, 6])
+            $eventColumn = DB::raw('COALESCE(op.EVENT_TYPE_CD, m.EVT_TYPE_CD)');
+            $events = $status === 'pending' ? config('ips.delivery_candidate_events') : config('ips.reception_candidate_events');
+            $query->whereIn($eventColumn, $events)
+                ->where(function ($states) use ($status, $eventColumn) {
+                    $states->whereIn('m.STATE_IND_CD', $status === 'pending' ? [0, 8] : [0, 2, 3, 6]);
+                    if ($status === 'pending') {
+                        $states->orWhere(function ($inTransit) use ($eventColumn) {
+                            $inTransit->where($eventColumn, 13)->where('m.STATE_IND_CD', 6);
+                        });
+                    }
+                })
                 ->whereNotExists(function ($q) {
                     $q->selectRaw('1')->from('dbo.L_MAILITM_EVENTS as terminal')
                         ->whereColumn('terminal.MAILITM_PID', 'm.MAILITM_PID')->whereIn('terminal.EVENT_TYPE_CD', [37, 76]);
                 });
         } elseif ($status === 'warehouse') {
             $eventColumn = DB::raw('COALESCE(op.EVENT_TYPE_CD, m.EVT_TYPE_CD)');
-            $warehouseEvents = config('ips.delivery_candidate_events');
-            $query->where(function ($q) use ($eventColumn, $warehouseEvents) {
-                $q->where(function ($customs) use ($eventColumn) {
-                    $customs->whereIn($eventColumn, [31, 34])->where('m.STATE_IND_CD', 1);
-                })->orWhere(function ($available) use ($eventColumn, $warehouseEvents) {
-                    $available->whereIn($eventColumn, $warehouseEvents)->whereIn('m.STATE_IND_CD', [0, 8]);
-                });
-            })->whereNotExists(function ($q) {
+            $candidateMap = config('ips.delivery_action_candidates', []);
+            $action = $filters['action_cd'] ?? null;
+            if ($action !== null) {
+                $candidates = $candidateMap[$action] ?? ['events' => [], 'states' => []];
+            } else {
+                $candidates = [
+                    'events' => array_values(array_unique(array_merge(...array_column($candidateMap, 'events')))),
+                    'states' => array_values(array_unique(array_merge(...array_column($candidateMap, 'states')))),
+                ];
+            }
+            $query->whereIn($eventColumn, $candidates['events'])
+                ->whereIn('m.STATE_IND_CD', $candidates['states'])
+                ->whereNotExists(function ($q) {
                 $q->selectRaw('1')->from('dbo.L_MAILITM_EVENTS as terminal')
                     ->whereColumn('terminal.MAILITM_PID', 'm.MAILITM_PID')->whereIn('terminal.EVENT_TYPE_CD', [37, 76]);
             });
@@ -130,10 +172,20 @@ class IpsRepository
                 if (! in_array($status, ['pending', 'warehouse'], true)) {
                     $q->orWhere('op.NEXT_OFFICE_CD', $office);
                 }
+                if ($status === 'pending') {
+                    $q->orWhere('op.NEXT_OFFICE_CD', $office);
+                }
             });
+            if ($status === 'pending') {
+                // A sack arrival is receivable only at its declared dispatch destination.
+                $query->where(function ($q) use ($office) {
+                    $q->whereRaw('COALESCE(op.EVENT_TYPE_CD, m.EVT_TYPE_CD) <> ?', [13])
+                        ->orWhere('op.NEXT_OFFICE_CD', $office);
+                });
+            }
             if ($status === 'reception') {
                 $query->where(function ($q) use ($office) {
-                    $q->whereNotIn(DB::raw('COALESCE(op.EVENT_TYPE_CD, m.EVT_TYPE_CD)'), [35, 72])
+                    $q->whereNotIn(DB::raw('COALESCE(op.EVENT_TYPE_CD, m.EVT_TYPE_CD)'), [13, 35, 72])
                         ->orWhere('op.NEXT_OFFICE_CD', $office);
                 });
             }
@@ -142,9 +194,14 @@ class IpsRepository
             $code = strtoupper(trim($filters['q']));
             $query->where(fn ($q) => $q->where('m.MAILITM_FID', $code)->orWhere('m.MAILITM_LOCAL_ID', $code));
         }
-        foreach (['event_cd' => 'm.EVT_TYPE_CD'] as $filter => $column) {
-            if (isset($filters[$filter])) {
-                $query->where($column, $filters[$filter]);
+        if (isset($filters['event_cd'])) {
+            // Workflow pages filter by the last operational milestone even
+            // when a later technical event is the physical latest record.
+            $eventCodes = array_values(array_map('intval', (array) $filters['event_cd']));
+            if (count($eventCodes) === 1) {
+                $query->whereRaw('COALESCE(op.EVENT_TYPE_CD, m.EVT_TYPE_CD) = ?', [$eventCodes[0]]);
+            } elseif ($eventCodes !== []) {
+                $query->whereIn(DB::raw('COALESCE(op.EVENT_TYPE_CD, m.EVT_TYPE_CD)'), $eventCodes);
             }
         }
         if (isset($filters['actor_user_pid'])) {
@@ -307,6 +364,148 @@ class IpsRepository
         return $rows->first();
     }
 
+    public function findReceptacle(string $code, bool $lock = false): ?object
+    {
+        $query = $this->connection()->table('dbo.L_RECPTCLS')
+            ->whereRaw('UPPER(RTRIM(LTRIM(RECPTCL_FID))) = ?', [strtoupper(trim($code))]);
+        if ($lock) {
+            $query->lockForUpdate();
+        }
+        $rows = $query->limit(2)->get();
+        if ($rows->count() > 1) {
+            throw new IpsOperationException('Identificador de envase ambiguo en IPS; requiere revisión del operador.');
+        }
+
+        return $rows->first();
+    }
+
+    public function receptacleDetail(string $code, ?int $office = null): array
+    {
+        $receptacle = $this->findReceptacle($code);
+        if (! $receptacle) {
+            throw new IpsOperationException('Envase no encontrado en IPS.', 404);
+        }
+        $db = $this->connection();
+        $latest = $db->table('dbo.L_RECPTCL_EVENTS as e')
+            ->where('e.RECPTCL_PID', $receptacle->RECPTCL_PID)
+            ->orderByDesc('e.EVENT_GMT_DT')->orderByDesc('e.EVENT_TYPE_CD')->first();
+        $officeRow = $latest ? $this->ownOffice((int) $latest->EVENT_OFFICE_CD) : null;
+        $allowed = [];
+        $exchangeOffice = $office !== null
+            && in_array((int) $office, $this->exchangeOfficeCds(), true);
+        if ($office !== null && $exchangeOffice) {
+            if ((int) $receptacle->EVT_TYPE_CD !== 130
+                && in_array((int) $receptacle->STATE_IND_CD, [21, 23, 27], true)
+                && $this->compatible((int) $receptacle->STATE_IND_CD, 130)) {
+                $allowed[] = 'RECEPTACLE_RECEIVE';
+            }
+            if ((int) $receptacle->EVT_TYPE_CD === 130
+                && (int) $receptacle->STATE_IND_CD === 22
+                && $latest && (int) $latest->EVENT_OFFICE_CD === $office
+                && $this->compatible(22, 131)) {
+                $allowed[] = 'RECEPTACLE_OPEN';
+            }
+        }
+        $events = $db->table('dbo.L_RECPTCL_EVENTS as e')
+            ->leftJoin('dbo.C_EVENT_TYPES as t', 't.EVENT_TYPE_CD', '=', 'e.EVENT_TYPE_CD')
+            ->leftJoin('dbo.N_OWN_OFFICES as o', 'o.OWN_OFFICE_CD', '=', 'e.EVENT_OFFICE_CD')
+            ->where('e.RECPTCL_PID', $receptacle->RECPTCL_PID)
+            ->orderByDesc('e.EVENT_GMT_DT')->orderByDesc('e.EVENT_TYPE_CD')
+            ->get(['e.EVENT_TYPE_CD', 'e.EVENT_GMT_DT', 'e.EVENT_LOCAL_OFFSET', 'e.EVENT_OFFICE_CD', 'e.USER_PID', 't.EVENT_TYPE_NM', 'o.OFFICE_FCD', 'o.OFFICE_NM'])
+            ->map(fn ($event) => array_merge((array) $event, IpsEventTime::present($event->EVENT_GMT_DT, $event->EVENT_LOCAL_OFFSET)));
+
+        return [
+            'receptacle' => [
+                'id' => (string) $receptacle->RECPTCL_PID,
+                'codigo' => trim((string) $receptacle->RECPTCL_FID),
+                'state_cd' => (int) $receptacle->STATE_IND_CD,
+                'event_cd' => (int) $receptacle->EVT_TYPE_CD,
+                'event_at' => Carbon::parse($receptacle->EVT_GMT_DT, 'UTC')->format('Y-m-d\\TH:i:s.vP'),
+                'event_local_offset' => $latest?->EVENT_LOCAL_OFFSET,
+                'office_cd' => $latest ? (int) $latest->EVENT_OFFICE_CD : null,
+                'office_name' => trim((string) ($officeRow->OFFICE_NM ?? '')),
+                'weight_kg' => isset($receptacle->RECPTCL_WEIGHT) ? (float) $receptacle->RECPTCL_WEIGHT : null,
+                'items_count' => isset($receptacle->RECPTCL_MAILITMS_NO) ? (int) $receptacle->RECPTCL_MAILITMS_NO : null,
+                'allowed_actions' => $allowed,
+            ],
+            'events' => $events,
+        ];
+    }
+
+    public function openInboundReceptacles(int $office): \Illuminate\Support\Collection
+    {
+        if (! in_array($office, $this->exchangeOfficeCds(), true)) {
+            return collect();
+        }
+
+        return $this->connection()->table('dbo.L_RECPTCLS as r')
+            ->join('dbo.L_RECPTCL_EVENTS as e', function ($join) use ($office) {
+                $join->on('e.RECPTCL_PID', '=', 'r.RECPTCL_PID')
+                    ->on('e.EVENT_TYPE_CD', '=', 'r.EVT_TYPE_CD')
+                    ->on('e.EVENT_GMT_DT', '=', 'r.EVT_GMT_DT')
+                    ->where('e.EVENT_OFFICE_CD', '=', $office);
+            })
+            ->where('r.STATE_IND_CD', 20)->where('r.EVT_TYPE_CD', 131)
+            ->orderBy('r.RECPTCL_FID')
+            ->get(['r.RECPTCL_PID', 'r.RECPTCL_FID', 'r.RECPTCL_WEIGHT', 'r.RECPTCL_MAILITMS_NO']);
+    }
+
+    public function assertOpenInboundReceptacle(string $pid, int $office): object
+    {
+        if (! in_array($office, $this->exchangeOfficeCds(), true)) {
+            throw new IpsOperationException('La oficina no es una oficina de cambio habilitada para recibir este envase.', 422);
+        }
+        $row = $this->connection()->table('dbo.L_RECPTCLS')->where('RECPTCL_PID', $pid)->lockForUpdate()->first();
+        if (! $row || (int) $row->STATE_IND_CD !== 20 || (int) $row->EVT_TYPE_CD !== 131) {
+            throw new IpsOperationException('El envase debe estar abierto en IPS antes de clasificar sus paquetes.', 409);
+        }
+        $latest = $this->connection()->table('dbo.L_RECPTCL_EVENTS')->where('RECPTCL_PID', $pid)
+            ->orderByDesc('EVENT_GMT_DT')->orderByDesc('EVENT_TYPE_CD')->first();
+        if (! $latest || (int) $latest->EVENT_TYPE_CD !== 131 || (int) $latest->EVENT_OFFICE_CD !== $office) {
+            throw new IpsOperationException('El envase no fue abierto en esta oficina de cambio.', 409);
+        }
+
+        return $row;
+    }
+
+    public function exchangeOfficeCds(): array
+    {
+        return $this->connection()->table('dbo.N_OWN_OFFICES')
+            ->whereIn('VALID_IND', ['1', '3'])->whereIn('OFFICE_FCD', config('ips.exchange_office_fcds', []))
+            ->pluck('OWN_OFFICE_CD')->map(fn ($id) => (int) $id)->all();
+    }
+
+    public function receptacleEvent(int $id): ?object
+    {
+        return $this->connection()->table('dbo.C_EVENT_TYPES')
+            ->where('EVENT_TYPE_CD', $id)->where('MAILUNIT_TYPE_CD', 'RC')
+            ->whereIn('VALID_IND', ['1', '3'])->first();
+    }
+
+    public function lockReceptacleCode(string $code): void
+    {
+        $row = $this->connection()->selectOne(
+            "DECLARE @result int; EXEC @result = sys.sp_getapplock @Resource = ?, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 10000; SELECT @result AS result;",
+            ['sitra:receptacle:'.hash('sha256', strtoupper(trim($code)))]
+        );
+        if ((int) $row->result < 0) {
+            throw new IpsOperationException('Otro proceso está operando este envase. Reintente consultando su estado.');
+        }
+    }
+
+    public function verifyReceptacleWrite(string $pid, int $event, string $date, int $state, int $office): void
+    {
+        $row = $this->connection()->table('dbo.L_RECPTCLS')->where('RECPTCL_PID', $pid)->first();
+        $eventRow = $this->connection()->table('dbo.L_RECPTCL_EVENTS')->where('RECPTCL_PID', $pid)
+            ->where('EVENT_TYPE_CD', $event)->where('EVENT_GMT_DT', $date)->first();
+        if (! $row || ! $eventRow || (int) $row->EVT_TYPE_CD !== $event
+            || (int) $row->STATE_IND_CD !== $state
+            || Carbon::parse($row->EVT_GMT_DT, 'UTC')->toDateTimeString() !== $date
+            || (int) $eventRow->EVENT_OFFICE_CD !== $office) {
+            throw new IpsOperationException('IPS no confirmó el evento del envase y su estado. Operación revertida.', 502);
+        }
+    }
+
     public function detail(string $code): array
     {
         $item = $this->find($code);
@@ -316,8 +515,25 @@ class IpsRepository
 
         $this->enrich(collect([$item]));
 
+        $package = $this->present($item);
+        $package['operation_office_cds'] = match ($package['operational_event_cd']) {
+            30, 35 => [$package['operational_office_cd']],
+            13 => $package['next_office_cd'] ? [(int) $package['next_office_cd']] : [],
+            default => $package['origin_country'] !== 'BO'
+                && in_array($package['operational_event_cd'], config('ips.exchange_receipt_candidate_events', []), true)
+                && in_array($package['state_cd'], [0, 2, 3], true)
+                    ? $package['exchange_office_cds']
+                    : [$package['operational_office_cd']],
+        };
+        $package['next_offices'] = $package['operational_event_cd'] === 30
+            ? $this->nextOffices((int) $package['operational_office_cd'])
+            : collect();
+        $package['domestic_receptacles'] = $package['operational_event_cd'] === 35
+            ? $this->openDomesticReceptacles($item)
+            : collect();
+
         return [
-            'package' => $this->present($item),
+            'package' => $package,
             'events' => $this->connection()->table('dbo.L_MAILITM_EVENTS as e')
                 ->leftJoin('dbo.C_EVENT_TYPES as t', 't.EVENT_TYPE_CD', '=', 'e.EVENT_TYPE_CD')
                 ->where('e.MAILITM_PID', $item->MAILITM_PID)->orderByDesc('e.EVENT_GMT_DT')
@@ -331,6 +547,103 @@ class IpsRepository
         ];
     }
 
+    public function nextOffices(int $originOffice): \Illuminate\Support\Collection
+    {
+        return $this->connection()->table('dbo.N_NEXT_OFFICES as route')
+            ->join('dbo.N_OWN_OFFICES as office', 'office.OWN_OFFICE_CD', '=', 'route.DEST_OFFICE_CD')
+            ->where('route.ORIG_OFFICE_CD', $originOffice)
+            ->whereIn('office.VALID_IND', ['1', '3'])
+            ->orderBy('office.OFFICE_NM')
+            ->get(['office.OWN_OFFICE_CD', 'office.OFFICE_FCD', 'office.OFFICE_NM']);
+    }
+
+    public function isNextOffice(int $originOffice, int $nextOffice): bool
+    {
+        return $this->connection()->table('dbo.N_NEXT_OFFICES as route')
+            ->join('dbo.N_OWN_OFFICES as office', 'office.OWN_OFFICE_CD', '=', 'route.DEST_OFFICE_CD')
+            ->where('route.ORIG_OFFICE_CD', $originOffice)
+            ->where('route.DEST_OFFICE_CD', $nextOffice)
+            ->whereIn('office.VALID_IND', ['1', '3'])
+            ->exists();
+    }
+
+    public function openDomesticReceptaclesFor(object $item): \Illuminate\Support\Collection
+    {
+        if (! isset($item->OP_OFFICE_CD) && ! isset($item->EVT_OFFICE_CD)) {
+            return collect();
+        }
+        if (! isset($item->NEXT_OFFICE_CD)) {
+            return collect();
+        }
+        $originOffice = (int) ($item->OP_OFFICE_CD ?? $item->EVT_OFFICE_CD ?? 0);
+        $destinationOffice = (int) $item->NEXT_OFFICE_CD;
+        $mailClass = trim((string) ($item->MAIL_CLASS_CD ?? ''));
+        if ($originOffice < 0 || $destinationOffice < 0 || $mailClass === '') {
+            return collect();
+        }
+
+        return $this->openDomesticReceptaclesQuery()
+            ->where('r.ORIG_OWN_OFFICE_CD', $originOffice)
+            ->where('r.DEST_OWN_OFFICE_CD', $destinationOffice)
+            ->where('r.MAIL_CLASS_CD', $mailClass)
+            ->orderByDesc('r.YEAR')->orderByDesc('r.SERIALNO')
+            ->get([
+                'r.DOM_REC_PID', 'r.DOM_REC_FID', 'r.ORIG_OWN_OFFICE_CD', 'r.DEST_OWN_OFFICE_CD',
+                'r.MAIL_CLASS_CD', 'r.MAILITEMCNT', 'r.WEIGHT',
+            ]);
+    }
+
+    public function lockOpenDomesticReceptacle(string $pid, int $originOffice, int $destinationOffice, string $mailClass): ?object
+    {
+        return $this->openDomesticReceptaclesQuery()
+            ->where('r.DOM_REC_PID', $pid)
+            ->where('r.ORIG_OWN_OFFICE_CD', $originOffice)
+            ->where('r.DEST_OWN_OFFICE_CD', $destinationOffice)
+            ->where('r.MAIL_CLASS_CD', $mailClass)
+            ->lockForUpdate()
+            ->first(['r.DOM_REC_PID', 'r.DOM_REC_FID']);
+    }
+
+    public function hasActiveDomesticReceptacleLink(string $mailItemPid): bool
+    {
+        return $this->connection()->table('dbo.L_DOMESTIC_RECPTCLS_MAILITMS')
+            ->where('MAILITM_PID', $mailItemPid)->whereRaw("ISNULL(DEL_IND, '0') = '0'")->exists();
+    }
+
+    public function linkDomesticReceptacle(string $receptaclePid, string $mailItemPid): void
+    {
+        $this->callProcedure('SP_SET_DOMRECPTLSMAILITEMS', [
+            'DOM_REC_PID' => $receptaclePid,
+            'MAILITM_PID' => $mailItemPid,
+        ]);
+    }
+
+    public function domesticReceptacleLinkExists(string $receptaclePid, string $mailItemPid): bool
+    {
+        return $this->connection()->table('dbo.L_DOMESTIC_RECPTCLS_MAILITMS')
+            ->where('DOM_REC_PID', $receptaclePid)->where('MAILITM_PID', $mailItemPid)
+            ->whereRaw("ISNULL(DEL_IND, '0') = '0'")->exists();
+    }
+
+    private function openDomesticReceptaclesQuery(): \Illuminate\Database\Query\Builder
+    {
+        return $this->connection()->table('dbo.L_DOMESTIC_RECPTCLS as r')
+            ->where('r.STATE_IND_CD', 121)
+            ->whereRaw("ISNULL(r.DEL_IND, '0') = '0'")
+            ->whereExists(function ($open) {
+                $open->selectRaw('1')->from('dbo.L_DOMESTIC_RECPTCL_EVENTS as event')
+                    ->whereColumn('event.DOM_REC_PID', 'r.DOM_REC_PID')
+                    ->whereIn('event.EVENT_TYPE_CD', [600, 602])
+                    ->whereRaw("ISNULL(event.DEL_IND, '0') = '0'")
+                    ->whereNotExists(function ($later) {
+                        $later->selectRaw('1')->from('dbo.L_DOMESTIC_RECPTCL_EVENTS as later_event')
+                            ->whereColumn('later_event.DOM_REC_PID', 'event.DOM_REC_PID')
+                            ->whereRaw("ISNULL(later_event.DEL_IND, '0') = '0'")
+                            ->whereRaw('(later_event.EVENT_GMT_DT > event.EVENT_GMT_DT OR (later_event.EVENT_GMT_DT = event.EVENT_GMT_DT AND later_event.EVENT_TYPE_CD > event.EVENT_TYPE_CD))');
+                    });
+            });
+    }
+
     public function enrich($rows): void
     {
         if ($rows->isEmpty()) {
@@ -341,7 +654,9 @@ class IpsRepository
             ->whereIn('MAILITM_PID', $ids)->where('SENDER_PAYEE_IND', 'A')->get()->keyBy('MAILITM_PID');
         $events = $this->connection()->table('dbo.L_MAILITM_EVENTS')
             ->whereIn('MAILITM_PID', $ids)->orderByDesc('EVENT_GMT_DT')->orderByDesc('EVENT_TYPE_CD')->get()->groupBy('MAILITM_PID');
-        $offices = $this->connection()->table('dbo.N_OWN_OFFICES')->get()->keyBy('OWN_OFFICE_CD');
+        $offices = $this->connection()->table('dbo.N_OWN_OFFICES')->whereIn('VALID_IND', ['1', '3'])->get()->keyBy('OWN_OFFICE_CD');
+        $exchangeOfficeCds = $offices->filter(fn ($office) => in_array(trim((string) $office->OFFICE_FCD), config('ips.exchange_office_fcds', []), true))
+            ->pluck('OWN_OFFICE_CD')->map(fn ($id) => (int) $id)->values()->all();
         foreach ($rows as $row) {
             $customer = $customers->get($row->MAILITM_PID);
             $row->RECIPIENT_NAME = $customer ? trim(($customer->CUSTOMER_FORENAME ?? '').' '.($customer->CUSTOMER_NAME ?? '')) : null;
@@ -358,7 +673,14 @@ class IpsRepository
             $row->NEXT_OFFICE_CD = $op?->NEXT_OFFICE_CD;
             $row->OFFICE_NM = $offices->get($row->OP_OFFICE_CD)?->OFFICE_NM;
             $row->NEXT_OFFICE_NM = $offices->get($row->NEXT_OFFICE_CD)?->OFFICE_NM;
+            $row->EXCHANGE_OFFICE_CDS = $exchangeOfficeCds;
             $row->TERMINAL = $history->contains(fn ($e) => in_array((int) $e->EVENT_TYPE_CD, [37, 76], true));
+        }
+
+        foreach ($rows as $row) {
+            $row->RECEIPT_OFFICE_CDS = (int) $row->OP_EVENT_CD === 13 && $row->NEXT_OFFICE_CD !== null
+                ? [(int) $row->NEXT_OFFICE_CD]
+                : [];
         }
     }
 
@@ -385,6 +707,8 @@ class IpsRepository
             'operational_office_cd' => (int) ($item->OP_OFFICE_CD ?? $item->EVT_OFFICE_CD),
             'next_office_cd' => isset($item->NEXT_OFFICE_CD) ? (int) $item->NEXT_OFFICE_CD : null,
             'next_office_name' => trim($item->NEXT_OFFICE_NM ?? ''),
+            'receipt_office_cds' => array_values(array_map('intval', $item->RECEIPT_OFFICE_CDS ?? [])),
+            'exchange_office_cds' => array_values(array_map('intval', $item->EXCHANGE_OFFICE_CDS ?? [])),
             'terminal' => (bool) ($item->TERMINAL ?? false),
             'address' => trim($item->RECIPIENT_ADDRESS ?? ''),
             'mail_class' => trim($item->MAIL_CLASS_CD ?? ''),
@@ -472,6 +796,13 @@ class IpsRepository
             ->where('OWN_OFFICE_CD', $id)->whereIn('VALID_IND', ['1', '3'])->first();
     }
 
+    public function workstation(int $id): ?object
+    {
+        return $this->connection()->table('dbo.L_WORKSTATIONS')
+            ->where('WORKSTATION_PID', $id)->whereIn('VALID_IND', ['1', '3'])
+            ->first(['WORKSTATION_PID', 'WORKSTATION_FID']);
+    }
+
     public function callProcedure(string $procedure, array $parameters): void
     {
         $expected = config('ips-procedures.'.$procedure);
@@ -497,7 +828,15 @@ class IpsRepository
         $statement->closeCursor();
     }
 
-    public function verifyWrite(string $pid, int $event, string $date, ?string $signatory): void
+    public function verifyWrite(
+        string $pid,
+        int $event,
+        string $date,
+        ?string $signatory,
+        ?int $expectedNextOffice = null,
+        ?string $expectedReceptaclePid = null,
+        ?int $expectedConditionCd = null
+    ): void
     {
         $db = $this->connection();
         $row = $db->table('dbo.L_MAILITMS')->where('MAILITM_PID', $pid)->first();
@@ -505,6 +844,27 @@ class IpsRepository
             ->where('EVENT_TYPE_CD', $event)->where('EVENT_GMT_DT', $date)->exists();
         if (! $exists || ! $row || (int) $row->EVT_TYPE_CD !== $event || Carbon::parse($row->EVT_GMT_DT, 'UTC')->toDateTimeString() !== $date) {
             throw new IpsOperationException('IPS no confirmó el evento y su estado actual. Operación revertida.', 502);
+        }
+        $expectedState = $db->table('dbo.C_EVENT_TYPES')->where('EVENT_TYPE_CD', $event)->value('RESULT_STATE_IND_CD');
+        if ($expectedState !== null && (int) $row->STATE_IND_CD !== (int) $expectedState) {
+            throw new IpsOperationException('IPS no confirmó el estado resultante del evento. Operación revertida.', 502);
+        }
+        if ($expectedNextOffice !== null) {
+            $eventRow = $db->table('dbo.L_MAILITM_EVENTS')->where('MAILITM_PID', $pid)
+                ->where('EVENT_TYPE_CD', $event)->where('EVENT_GMT_DT', $date)->first();
+            if (! $eventRow || (int) $eventRow->NEXT_OFFICE_CD !== $expectedNextOffice) {
+                throw new IpsOperationException('IPS no confirmó la oficina de ruta del evento. Operación revertida.', 502);
+            }
+        }
+        if ($expectedReceptaclePid !== null && (string) ($row->EVT_RECPTCL_PID ?? '') !== $expectedReceptaclePid) {
+            throw new IpsOperationException('IPS no confirmó que el paquete quedó asociado al envase recibido.', 502);
+        }
+        if ($expectedConditionCd !== null) {
+            $eventRow = $db->table('dbo.L_MAILITM_EVENTS')->where('MAILITM_PID', $pid)
+                ->where('EVENT_TYPE_CD', $event)->where('EVENT_GMT_DT', $date)->first();
+            if (! $eventRow || (int) ($eventRow->CONDITION_CD ?? 0) !== $expectedConditionCd) {
+                throw new IpsOperationException('IPS no confirmó la condición registrada para el paquete.', 502);
+            }
         }
         if ($event === 37 && (int) $row->STATE_IND_CD !== 5) {
             throw new IpsOperationException('IPS no confirmó la entrega y el receptor. Operación revertida.', 502);

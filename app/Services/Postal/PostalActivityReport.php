@@ -80,7 +80,7 @@ class PostalActivityReport
                 'mi.MAILITM_PID', 'mi.MAILITM_FID', 'mi.MAILITM_LOCAL_ID', 'mi.MAILITM_WEIGHT',
                 'mi.POSTAL_STATUS_CD', 'postal_status.POSTAL_STATUS_NM', 'mi.MAIL_CLASS_CD', 'mail_class.MAIL_CLASS_NM',
                 'origin.COUNTRY_NM as ORIGIN_COUNTRY', 'destination.COUNTRY_NM as DESTINATION_COUNTRY',
-                'e.EVENT_GMT_DT', 'e.EVENT_TYPE_CD', 'e.EVENT_OFFICE_CD', 'e.NEXT_OFFICE_CD',
+                'e.EVENT_GMT_DT', 'e.EVENT_LOCAL_OFFSET', 'e.EVENT_TYPE_CD', 'e.EVENT_OFFICE_CD', 'e.NEXT_OFFICE_CD',
                 'e.RETENTION_REASON_CD', 'e.ATTEMPTED_DELIVERY_LOCATION', 'e.CONDITION_CD',
                 'e.RECPTCL_PID', 'office.OFFICE_FCD', 'office.OFFICE_NM',
                 'next_office.OFFICE_FCD as NEXT_OFFICE_FCD', 'next_office.OFFICE_NM as NEXT_OFFICE_NM',

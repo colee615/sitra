@@ -5,7 +5,7 @@
     <link rel="stylesheet" href="{{ asset('css/volume-dashboard.css') }}?v=10">
 @stop
 @section('content')
-<main class="volume-dashboard {{ $scope }}-volume-dashboard" id="volume-dashboard" data-scope="{{ $scope }}" data-url="{{ route('dashboard.data') }}" data-today="{{ now('America/La_Paz')->toDateString() }}" data-detail-url="{{ $scope === 'ips' ? route('postal.operations') : ($scope === 'cds' ? route('postal.cds') : route('postal.combined')) }}">
+<main class="volume-dashboard {{ $scope }}-volume-dashboard" id="volume-dashboard" data-scope="{{ $scope }}" data-url="{{ route('dashboard.data') }}" data-today="{{ now('America/La_Paz')->toDateString() }}" data-detail-url="{{ $scope === 'ips' ? route('postal.operations') : route('postal.combined') }}">
     <form id="volume-filters">
         <header class="volume-report-header">
             <div class="volume-brand">
@@ -39,7 +39,7 @@
                     <label>Clase / servicio<select name="service" data-catalog="services"><option value="">Todos los servicios</option></select></label>
                     <button class="btn btn-primary" type="submit"><i class="fas fa-filter mr-1"></i> Aplicar</button>
                 </div></details>
-                <a href="{{ $scope === 'ips' ? route('postal.operations') : ($scope === 'cds' ? route('postal.cds') : route('postal.combined')) }}" class="volume-detail-link"><i class="fas fa-list-alt"></i> {{ $scope === 'all' ? 'Ver detalle' : 'Reporte detallado' }}</a>
+                <a href="{{ $scope === 'ips' ? route('postal.operations') : route('postal.combined') }}" class="volume-detail-link"><i class="fas fa-list-alt"></i> {{ $scope === 'all' ? 'Ver detalle' : 'Reporte detallado' }}</a>
                 <button class="btn btn-outline-secondary btn-sm" id="volume-export" type="button" disabled><i class="fas fa-download mr-1"></i> Exportar</button>
             </div>
         </div>
@@ -205,7 +205,7 @@
         <section id="cds-volume-analytics" class="volume-analysis-source volume-cds-analysis" aria-labelledby="cds-analysis-heading">
             <header class="volume-section-heading">
                 <div><span class="volume-section-eyebrow">ANÁLISIS · GESTIÓN ADUANERA</span><h2 id="cds-analysis-heading">Declaraciones y respuestas CDS</h2><p>Estados y operadores relacionados con los objetos postales del periodo.</p></div>
-                <a href="{{ route('postal.cds') }}" class="volume-section-link">Abrir expediente <i class="fas fa-arrow-right"></i></a>
+                <a href="{{ route('postal.combined') }}" class="volume-section-link">Abrir expediente <i class="fas fa-arrow-right"></i></a>
             </header>
             <div class="volume-cds-chart-row">
                 <article class="volume-panel"><header><div><h2>Evolución CDS</h2><p>Objetos, declaraciones y respuestas por fecha postal</p></div></header><div id="cds-volume-trend" class="volume-chart"></div><div id="cds-volume-trend-legend" class="volume-legend"></div></article>

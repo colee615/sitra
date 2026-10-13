@@ -2,17 +2,6 @@
 
 @section('title', 'Actividad postal | SITRA')
 
-@section('content_header')
-    <div class="postal-heading">
-        <div>
-            <span class="postal-eyebrow">SITRA · OPERACIONES</span>
-            <h1>Actividad postal por oficina</h1>
-            <p>Consulta los últimos movimientos IPS de los paquetes dentro del periodo elegido.</p>
-        </div>
-        <span class="postal-source"><i class="fas fa-database" aria-hidden="true"></i> Fuente: IPS</span>
-    </div>
-@stop
-
 @section('content')
 <div class="postal-workspace postal-activity-report">
     <form class="postal-search postal-report-filters" action="{{ route('postal.operations') }}" method="get">
@@ -41,15 +30,16 @@
         @endif
         <section class="postal-panel">
             <div class="postal-section-heading"><h2><i class="fas fa-list-alt"></i> Movimientos encontrados</h2><span>Una fila por paquete · último movimiento dentro del rango</span></div>
-            <p class="postal-note">La fecha del evento se guarda en GMT/UTC; el resumen del periodo usa el horario de Bolivia. Este reporte refleja lo registrado en IPS, no confirma por sí solo la ubicación física actual ni un plazo oficial de entrega.</p>
+            <p class="postal-note">Las fechas del filtro usan la hora de Bolivia; cada movimiento se muestra con la hora local informada por IPS. Este reporte refleja lo registrado, no confirma por sí solo la ubicación física actual ni un plazo oficial de entrega.</p>
             <div class="table-responsive">
                 <table class="table table-hover postal-activity-table">
-                    <thead><tr><th>Fecha (GMT)</th><th>Paquete</th><th>Movimiento IPS</th><th>Estado actual</th><th>Oficina → siguiente</th><th>Saca</th><th>Registró</th></tr></thead>
+                    <thead><tr><th>Fecha y hora local</th><th>Paquete</th><th>Movimiento IPS</th><th>Estado actual</th><th>Oficina → siguiente</th><th>Saca</th><th>Registró</th></tr></thead>
                     <tbody>
                     @forelse($result['rows'] as $row)
                         <tr>
-                            <td><time datetime="{{ $row->EVENT_GMT_DT }}">{{ $row->EVENT_GMT_DT }}<small class="d-block text-muted">Evento registrado en IPS</small></time></td>
-                            <td><a class="postal-report-code" href="{{ route('postal.ips', ['codigo'=>$row->MAILITM_FID ?: $row->MAILITM_LOCAL_ID]) }}">{{ $row->MAILITM_FID ?: 'Sin código S10' }}</a>@if($row->MAILITM_LOCAL_ID)<small class="d-block text-muted">ID local: {{ $row->MAILITM_LOCAL_ID }}</small>@endif</td>
+                            @php($eventTime = \App\Support\IpsEventTime::present($row->EVENT_GMT_DT, $row->EVENT_LOCAL_OFFSET ?? null))
+                            <td>{{ !empty($eventTime['event_at_local']) && isset($eventTime['event_offset_minutes']) ? \Carbon\Carbon::parse($eventTime['event_at_local'])->format('d/m/Y H:i:s') : 'Hora local no informada' }}</td>
+                            <td><a class="postal-report-code" href="{{ route('postal.combined', ['codigo'=>$row->MAILITM_FID ?: $row->MAILITM_LOCAL_ID]) }}">{{ $row->MAILITM_FID ?: 'Sin código S10' }}</a>@if($row->MAILITM_LOCAL_ID)<small class="d-block text-muted">ID local: {{ $row->MAILITM_LOCAL_ID }}</small>@endif</td>
                             <td><strong>{{ $row->EVENT_NAME ?: 'Movimiento sin descripción en catálogo' }}</strong><small class="d-block text-muted">Código IPS: {{ $row->EVENT_TYPE_CD }}</small></td>
                             <td>{{ $row->POSTAL_STATUS_NM ?: 'Estado no descrito por IPS' }}<small class="d-block text-muted">{{ $row->MAIL_CLASS_NM ?: $row->MAIL_CLASS_CD ?: 'Clase no informada' }}</small></td>
                             <td>{{ trim(($row->OFFICE_FCD ?? '').' '.($row->OFFICE_NM ?? '')) ?: 'Oficina no informada' }}<small class="d-block text-muted">Siguiente: {{ trim(($row->NEXT_OFFICE_FCD ?? '').' '.($row->NEXT_OFFICE_NM ?? '')) ?: 'IPS no informó siguiente oficina' }}</small></td>

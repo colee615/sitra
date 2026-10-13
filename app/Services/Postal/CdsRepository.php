@@ -98,8 +98,8 @@ class CdsRepository
         $db = DB::connection(config('postal.cds_connection', 'cds'));
         $limit = max(1, min($limit, 1000));
         $codes = array_values(array_unique(array_filter(array_map([ShipmentCode::class, 'normalize'], $codes))));
-        if (!$codes) return ['packages' => [], 'declarations' => [], 'truncated' => false,
-            'packages_truncated' => false, 'declarations_truncated' => false];
+        if (!$codes) return ['packages' => [], 'declarations' => [], 'responses'=>[], 'truncated' => false,
+            'packages_truncated' => false, 'declarations_truncated' => false, 'responses_truncated'=>false];
 
         // Three IN clauses are used to match the CDS primary and local IDs. Keep
         // each chunk below SQL Server's parameter limit (600 × 3 bindings).
@@ -135,8 +135,8 @@ class CdsRepository
         $packagesTruncated = $packagesTruncated || $siblingsTruncated;
         $truncated = $truncated || $siblingsTruncated;
         $ids = $packages->pluck('MAIL_OBJECT_PID')->all();
-        if (!$ids) return ['packages' => [], 'declarations' => [], 'truncated' => $truncated,
-            'packages_truncated' => $packagesTruncated, 'declarations_truncated' => false];
+        if (!$ids) return ['packages' => [], 'declarations' => [], 'responses'=>[], 'truncated' => $truncated,
+            'packages_truncated' => $packagesTruncated, 'declarations_truncated' => false, 'responses_truncated'=>false];
 
         $rows = $db->table('dbo.O_DECLARATIONS as d')
             ->leftJoin('dbo.M_CDS_STATES as state', 'state.CDS_STATE_CD', '=', 'd.CDS_STATE_CD')
@@ -146,9 +146,34 @@ class CdsRepository
         $declarationsTruncated = $rows->count() > $limit;
         if ($declarationsTruncated) $truncated = true;
 
+        $responseRows = $db->table('dbo.O_RESPONSES as response')
+            ->leftJoin('dbo.M_CDS_STATES as state', 'state.CDS_STATE_CD', '=', 'response.CDS_STATE_CD')
+            ->whereIn('response.MAIL_OBJECT_PID', $ids)->orderBy('response.RESPONSE_PID')->limit($limit + 1)
+            ->get(['response.RESPONSE_PID as id', 'response.MAIL_OBJECT_PID as package_id',
+                'state.CDS_STATE_NM as state', DB::raw('CONVERT(nvarchar(max), response.DATA) as payload')]);
+        $responsesTruncated = $responseRows->count() > $limit;
+        if ($responsesTruncated) $truncated = true;
+        $responseData = $responseRows->take($limit)->map(function ($row) {
+            $parsed = $this->xml->parse($row->payload, 'ResData');
+            $decision = $parsed['fields']['Decis'] ?? null;
+            return [
+                'id'=>$row->id, 'package_id'=>$row->package_id, 'state'=>$row->state,
+                'decision_code'=>$decision, 'data_status'=>$parsed['status'],
+                'data'=>$parsed,
+            ];
+        })->values();
+        $decisionCodes = $responseData->pluck('decision_code')->filter()->unique()->values()->all();
+        $decisions = $decisionCodes ? $db->table('dbo.M_CUSTOMS_DECISIONS')
+            ->whereIn('CUSTOMS_DECISION_CD', $decisionCodes)->pluck('CUSTOMS_DECISION_NM', 'CUSTOMS_DECISION_CD')->all() : [];
+        $responses = $responseData->map(function (array $response) use ($decisions, $includeData) {
+            $response['decision'] = $decisions[$response['decision_code'] ?? ''] ?? null;
+            if (!$includeData) unset($response['data']);
+            return $response;
+        })->all();
+
         return [
             'packages' => $packages->all(),
-            'declarations' => $rows->take($limit)->map(function ($row) use ($includeData) {
+              'declarations' => $rows->take($limit)->map(function ($row) use ($includeData) {
                 $parsed = $this->xml->parse($row->payload, 'DecData');
                 $declaration = [
                     'id' => $row->id,
@@ -166,10 +191,12 @@ class CdsRepository
                 }
 
                 return $declaration;
-            })->all(),
-            'truncated' => $truncated,
-            'packages_truncated' => $packagesTruncated,
-            'declarations_truncated' => $declarationsTruncated,
+              })->all(),
+              'responses'=>$responses,
+              'truncated' => $truncated,
+              'packages_truncated' => $packagesTruncated,
+              'declarations_truncated' => $declarationsTruncated,
+              'responses_truncated'=>$responsesTruncated,
         ];
     }
 

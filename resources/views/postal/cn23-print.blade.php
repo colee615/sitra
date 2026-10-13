@@ -8,7 +8,7 @@
 </head>
 <body>
 <nav class="print-toolbar" aria-label="Print controls">
-    <a href="{{ route('postal.cds', ['codigo' => $code]) }}">Back to shipment</a>
+    <a href="{{ route('postal.combined', ['codigo' => $code]) }}">Back to shipment</a>
     <span>Reconstructed preview from CDS / IPS records; not the original official PDF.</span>
     <button type="button" onclick="window.print()">Print / Save as PDF</button>
 </nav>

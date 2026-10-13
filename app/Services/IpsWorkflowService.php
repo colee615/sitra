@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Exceptions\IpsOperationException;
+use App\Services\Postal\CustomsDestinationResolver;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
@@ -26,49 +27,48 @@ class IpsWorkflowService
             if (! $event || trim($event->INB_OTB_IND) !== $definition['direction']) {
                 throw new IpsOperationException('El catálogo IPS no coincide con la configuración.', 503);
             }
-            if ($action !== 'create' && $item && in_array($input['event'], ['EMG', 'EDH', 'EDG', 'EMI'], true)) {
+            if ($action !== 'create' && $item && in_array($input['event'], ['EMR', 'CUSTOMS_PRESENT', 'CUSTOMS_INFO', 'EDN', 'EIB', 'EMG', 'CUSTOMS_RETURN', 'HANDOVER_AGENT', 'EDH', 'EDG', 'EMH', 'EMI'], true)) {
                 $this->ips->enrich(collect([$item]));
             }
             $this->validateTransition($action, $input, $item, $event, $definition);
-            $date = Carbon::parse($input['occurred_at']);
-            $customsReturn = null;
-            if ($this->isCustomsReturnDelivery($input, $item)) {
-                $returnDefinition = config('ips.customs_return_event');
-                $returnEvent = $this->ips->event((int) $returnDefinition['id']);
-                if (! $returnEvent
-                    || trim($returnEvent->INB_OTB_IND) !== $returnDefinition['direction']
-                    || (int) $returnEvent->RESULT_STATE_IND_CD !== (int) $returnDefinition['result_state']) {
-                    throw new IpsOperationException('El catÃ¡logo IPS no coincide con el evento de devoluciÃ³n de Aduana.', 503);
+            $domesticReceptacle = null;
+            if ($input['event'] === 'EIB') {
+                $domesticReceptacle = $this->ips->lockOpenDomesticReceptacle(
+                    $input['domestic_receptacle_pid'],
+                    (int) $input['office_cd'],
+                    (int) $item->NEXT_OFFICE_CD,
+                    trim((string) $item->MAIL_CLASS_CD)
+                );
+                if (! $domesticReceptacle || $this->ips->hasActiveDomesticReceptacleLink((string) $item->MAILITM_PID)) {
+                    throw new IpsOperationException('La saca ya no estÃ¡ abierta, no coincide con la ruta o el envÃ­o ya pertenece a otra saca.', 409);
                 }
-                $returnDate = $date->copy()->subSecond();
-                if ($returnDate->lessThanOrEqualTo(Carbon::parse($item->EVT_GMT_DT, 'UTC'))) {
-                    throw new IpsOperationException('El evento de entrega debe dejar un segundo disponible para registrar antes la devoluciÃ³n de Aduana.', 422);
-                }
-                $returnInput = array_replace($input, ['event' => 'CUSTOMS_RETURN', 'signatory' => null]);
-                $returnParameters = $this->mailParameters($item, $returnInput, $returnEvent, $returnDate);
-                $this->ips->callProcedure('SP_SET_MAILITM', $returnParameters);
-                $this->ips->verifyWrite($returnParameters['PId'], (int) $returnEvent->EVENT_TYPE_CD, $returnDate->copy()->utc()->toDateTimeString(), null);
-
-                $item = $this->ips->find($input['codigo'], true);
-                if (! $item || (int) $item->EVT_TYPE_CD !== (int) $returnEvent->EVENT_TYPE_CD
-                    || (int) $item->STATE_IND_CD !== (int) $returnEvent->RESULT_STATE_IND_CD) {
-                    throw new IpsOperationException('IPS no confirmÃ³ el retorno de Aduana. OperaciÃ³n revertida.', 502);
-                }
-                $customsReturn = [
-                    'event' => 'CUSTOMS_RETURN',
-                    'event_cd' => (int) $returnEvent->EVENT_TYPE_CD,
-                    'event_at' => $returnDate->copy()->utc()->format('Y-m-d\TH:i:sP'),
-                    'office_cd' => (int) $input['office_cd'],
-                ];
             }
+            $date = Carbon::parse($input['occurred_at']);
             $parameters = $this->mailParameters($item, $input, $event, $date);
+            if ($domesticReceptacle) {
+                $this->ips->linkDomesticReceptacle((string) $domesticReceptacle->DOM_REC_PID, (string) $item->MAILITM_PID);
+            }
             $this->ips->callProcedure('SP_SET_MAILITM', $parameters);
             if ($action === 'create') {
                 foreach (['sender' => 'S', 'recipient' => 'A'] as $field => $indicator) {
                     $this->ips->callProcedure('SP_SET_MAILITM_CUSTOMERS', $this->customerParameters($parameters['PId'], $indicator, $input[$field]));
                 }
             }
-            $this->ips->verifyWrite($parameters['PId'], (int) $event->EVENT_TYPE_CD, $date->copy()->utc()->toDateTimeString(), $input['signatory'] ?? null);
+            $expectedNextOffice = in_array($input['event'], ['EDN', 'EIB'], true)
+                ? (int) ($input['next_office_cd'] ?? $item?->NEXT_OFFICE_CD)
+                : null;
+            $this->ips->verifyWrite(
+                $parameters['PId'],
+                (int) $event->EVENT_TYPE_CD,
+                $date->copy()->utc()->toDateTimeString(),
+                $input['signatory'] ?? null,
+                $expectedNextOffice,
+                in_array($input['event'], ['EMR', 'EMD'], true) ? (string) $input['receptacle_pid'] : null,
+                in_array($input['event'], ['EMR', 'EMD'], true) ? (int) $input['condition_cd'] : null
+            );
+            if ($domesticReceptacle && ! $this->ips->domesticReceptacleLinkExists((string) $domesticReceptacle->DOM_REC_PID, (string) $item->MAILITM_PID)) {
+                throw new IpsOperationException('IPS no confirmÃ³ que el envÃ­o quedÃ³ en la saca nacional. OperaciÃ³n revertida.', 502);
+            }
 
             $result = [
                 'codigo' => trim($parameters['FId']),
@@ -82,10 +82,15 @@ class IpsWorkflowService
                 'workstation_pid' => (int) $parameters['Workstation'],
                 'external_actor_id' => $input['external_actor_id'] ?? null,
             ];
-            if ($customsReturn !== null) {
-                $result['customs_return'] = $customsReturn;
+            if (in_array($input['event'], ['EDN', 'EIB'], true)) {
+                $result['next_office_cd'] = $expectedNextOffice;
             }
-
+            if ($domesticReceptacle) {
+                $result['domestic_receptacle'] = [
+                    'pid' => (string) $domesticReceptacle->DOM_REC_PID,
+                    'fid' => trim((string) $domesticReceptacle->DOM_REC_FID),
+                ];
+            }
             return $result;
         }, 1); // No automatic transaction retry across IPS procedures.
     }
@@ -111,7 +116,11 @@ class IpsWorkflowService
 
     private function validateTransition(string $action, array $input, ?object $item, object $event, array $definition): void
     {
+        $this->validatePostalExtras($input);
         if ($action === 'create') {
+            if ($input['event'] === 'EMD' && empty($input['physical_receipt_confirmed'])) {
+                throw new IpsOperationException('Confirme que el paquete llegó físicamente dentro de la saca recibida.', 422);
+            }
             if (! $this->ips->reference('N_OWN_OFFICES', 'OWN_OFFICE_CD', $input['office_cd'])) {
                 throw new IpsOperationException('La oficina no está activa en IPS.', 422);
             }
@@ -157,24 +166,15 @@ class IpsWorkflowService
         if (Carbon::parse($input['occurred_at'])->lessThanOrEqualTo(Carbon::parse($item->EVT_GMT_DT, 'UTC'))) {
             throw new IpsOperationException('El evento debe ser posterior al último movimiento.', 422);
         }
-        $customsReturnDelivery = $this->isCustomsReturnDelivery($input, $item);
-        if ($customsReturnDelivery) {
-            if (empty($input['customs_return_confirmed'])) {
-                throw new IpsOperationException('Confirme físicamente la devolución de Aduana y la entrega al destinatario.', 422);
-            }
-            $returnDefinition = config('ips.customs_return_event');
-            $returnEvent = $this->ips->event((int) $returnDefinition['id']);
-            if (! $returnEvent || trim($returnEvent->INB_OTB_IND) !== $returnDefinition['direction']
-                || (int) $returnEvent->RESULT_STATE_IND_CD !== (int) $returnDefinition['result_state']
-                || ! $this->ips->compatible((int) $item->STATE_IND_CD, (int) $returnEvent->EVENT_TYPE_CD)
-                || ! $this->ips->compatible((int) $returnEvent->RESULT_STATE_IND_CD, (int) $event->EVENT_TYPE_CD)) {
-                throw new IpsOperationException('La transición compuesta no está permitida por el catálogo de estados IPS.');
-            }
-        }
-        if (! $customsReturnDelivery && ! $this->ips->compatible((int) $item->STATE_IND_CD, (int) $event->EVENT_TYPE_CD)) {
+        if (! $this->ips->compatible((int) $item->STATE_IND_CD, (int) $event->EVENT_TYPE_CD)) {
             throw new IpsOperationException('La transición no está permitida por el catálogo de estados IPS.');
         }
-        if ($definition['direction'] === 'I' && trim($item->DEST_COUNTRY_CD ?? '') !== config('ips.destination_country')) {
+        $customsEvents = ['CUSTOMS_PRESENT', 'CUSTOMS_INFO', 'CUSTOMS_RETURN'];
+        $destinationCountry = trim((string) ($item->DEST_COUNTRY_CD ?? ''));
+        if (in_array($input['event'], $customsEvents, true) && $destinationCountry === '') {
+            $destinationCountry = app(CustomsDestinationResolver::class)->forIpsItem($item);
+        }
+        if ($definition['direction'] === 'I' && $destinationCountry !== config('ips.destination_country')) {
             throw new IpsOperationException('Este flujo de entrega solo opera envíos con destino Bolivia.');
         }
         if (isset($input['actor_user_pid'])) {
@@ -183,14 +183,40 @@ class IpsWorkflowService
                 throw new IpsOperationException('La oficina no corresponde al usuario IPS vinculado.', 403);
             }
         }
-        if (in_array($input['event'], ['EMG', 'EDH', 'EDG', 'EMH', 'EMI'], true)) {
+        if (in_array($input['event'], ['EMR', 'CUSTOMS_PRESENT', 'CUSTOMS_INFO', 'EDN', 'EIB', 'EMG', 'CUSTOMS_RETURN', 'HANDOVER_AGENT', 'EDH', 'EDG', 'EMH', 'EMI'], true)) {
             $package = $this->ips->present($item);
+            if (in_array($input['event'], $customsEvents, true) && trim((string) ($package['destination_country'] ?? '')) === '') {
+                $package['destination_country'] = $destinationCountry;
+            }
             if (!in_array($input['event'], app(IpsStagePolicy::class)->actions($package, (int) $input['office_cd']), true)) {
                 throw new IpsOperationException('La etapa u oficina actual no está habilitada para esta operación.');
             }
             if ($input['event'] === 'EMG' && empty($input['physical_receipt_confirmed'])) {
                 throw new IpsOperationException('Confirme que recibió físicamente el paquete.', 422);
             }
+            if ($input['event'] === 'EMR' && empty($input['physical_receipt_confirmed'])) {
+                throw new IpsOperationException('Confirme que recibió físicamente el paquete en la oficina de intercambio.', 422);
+            }
+            if ($input['event'] === 'CUSTOMS_RETURN' && empty($input['physical_receipt_confirmed'])) {
+                throw new IpsOperationException('Confirme que el paquete retornó físicamente desde Aduana.', 422);
+            }
+        }
+        if (in_array($input['event'], ['EDN', 'EIB'], true)) {
+            $package = $this->ips->present($item);
+            if (! in_array($input['event'], app(IpsStagePolicy::class)->actions($package, (int) $input['office_cd']), true)) {
+                throw new IpsOperationException('El paquete no está en la etapa u oficina requerida para este movimiento.');
+            }
+        }
+        if ($input['event'] === 'EDN'
+            && ! $this->ips->isNextOffice((int) $input['office_cd'], (int) $input['next_office_cd'])) {
+            throw new IpsOperationException('La oficina de ruta no está habilitada en IPS para este origen.', 422);
+        }
+        if ($input['event'] === 'EIB'
+            && (! isset($item->NEXT_OFFICE_CD) || ! $this->ips->isNextOffice((int) $input['office_cd'], (int) $item->NEXT_OFFICE_CD))) {
+            throw new IpsOperationException('El evento 35 no dejó una oficina de ruta válida en IPS.', 422);
+        }
+        if ($input['event'] === 'EIB' && $this->ips->hasActiveDomesticReceptacleLink((string) $item->MAILITM_PID)) {
+            throw new IpsOperationException('El envío ya figura asociado a una saca nacional.', 409);
         }
         if ($input['event'] === 'EMH') {
             $package = $this->ips->present($item);
@@ -207,13 +233,32 @@ class IpsWorkflowService
         }
     }
 
-    private function isCustomsReturnDelivery(array $input, ?object $item): bool
+    private function validatePostalExtras(array $input): void
     {
-        if (($input['event'] ?? null) !== 'EMI' || ! $item || (int) $item->STATE_IND_CD !== 1) {
-            return false;
+        if (in_array($input['event'], ['EMR', 'EMD'], true)) {
+            if (! $this->ips->reference('C_ITEM_CONDITIONS', 'ITEM_CONDITION_CD', (int) $input['condition_cd'], false)) {
+                throw new IpsOperationException('Seleccione una condición válida del paquete según la revisión física.', 422);
+            }
+            if (empty($input['receptacle_pid'])) {
+                throw new IpsOperationException('Seleccione el envase recibido y abierto que contiene este paquete.', 422);
+            }
         }
-
-        return in_array((int) ($item->OP_EVENT_CD ?? $item->EVT_TYPE_CD), [31, 34], true);
+        if ($input['event'] === 'CUSTOMS_PRESENT'
+            && (! $this->ips->reference('N_OWN_OFFICES', 'OWN_OFFICE_CD', $input['customs_office_cd'])
+                || ! $this->ips->reference('C_CUSTOMS_OFFICE_TYPES', 'CUSTOMS_OFFICE_TYPE_CD', $input['customs_office_type_cd'], false))) {
+            throw new IpsOperationException('La oficina o el tipo de Aduana no existe en el catalogo IPS.', 422);
+        }
+        if ($input['event'] === 'CUSTOMS_INFO'
+            && ! $this->ips->reference('C_CUSTOMS_RELEASE_STATUSES', 'CUSTOMS_RELEASE_STATUS_CD', $input['customs_release_status_cd'], false)) {
+            throw new IpsOperationException('El estado de Aduana no existe en el catalogo IPS.', 422);
+        }
+        if ($input['event'] === 'HANDOVER_AGENT'
+            && ! $this->ips->reference('N_DELIVERY_AGENTS', 'DELIVERY_AGENT_CD', strtoupper($input['delivery_agent_cd']))) {
+            throw new IpsOperationException('El cartero no existe o esta inactivo en IPS.', 422);
+        }
+        if (in_array($input['event'], ['EMR', 'EMD'], true) && ! empty($input['receptacle_pid'])) {
+            $this->ips->assertOpenInboundReceptacle((string) $input['receptacle_pid'], (int) $input['office_cd']);
+        }
     }
 
     private function mailParameters(?object $item, array $input, object $event, Carbon $date): array
@@ -251,8 +296,18 @@ class IpsWorkflowService
             'Office' => (int) $input['office_cd'],
             'User' => (int) ($input['actor_user_pid'] ?? config('ips.user_pid')),
             'Workstation' => (int) config('ips.workstation_pid'),
+            'NextOffice' => match ($input['event']) {
+                'EDN' => (int) $input['next_office_cd'],
+                'EIB' => isset($item->NEXT_OFFICE_CD) ? (int) $item->NEXT_OFFICE_CD : null,
+                default => null,
+            },
             'InnerBagPId' => $item?->EVT_INNRBAG_PID,
-            'ReceptaclePId' => $item?->EVT_RECPTCL_PID,
+            'ReceptaclePId' => $input['receptacle_pid'] ?? $item?->EVT_RECPTCL_PID,
+            'Condition' => isset($input['condition_cd']) ? (int) $input['condition_cd'] : null,
+            'CustomsOffice' => $input['customs_office_cd'] ?? null,
+            'CustomsOfficeType' => $input['customs_office_type_cd'] ?? null,
+            'CustomsReleaseStatus' => $input['customs_release_status_cd'] ?? null,
+            'DeliveryAgent' => isset($input['delivery_agent_cd']) ? strtoupper($input['delivery_agent_cd']) : null,
             'DelivInfoValid' => in_array($input['event'], ['EMI', 'EMH'], true) ? '1' : '0',
             'Signatory' => $input['event'] === 'EMI' ? ($input['signatory'] ?? null) : null,
             'DelivLocation' => $input['delivery_location'] ?? null,

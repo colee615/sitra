@@ -10,7 +10,7 @@ final class IpsEventTime
     public static function present(mixed $utcValue, mixed $offsetHours = null): array
     {
         if (empty($utcValue)) {
-            return ['event_at_utc' => null, 'event_at_local' => null, 'event_timezone_label' => 'Zona horaria no informada'];
+            return ['event_at_utc' => null, 'event_at_local' => null, 'event_timezone_label' => 'Hora local no informada'];
         }
 
         try {
@@ -23,8 +23,8 @@ final class IpsEventTime
                 'event_at_local' => $utc->copy()->setTimezone($timezone)->format('Y-m-d\TH:i:sP'),
                 'event_offset_minutes' => $offsetMinutes,
                 'event_timezone_label' => $offsetMinutes === null
-                    ? 'UTC · zona local no informada'
-                    : 'Hora local · UTC'.self::offsetLabel($offsetMinutes),
+                    ? 'Hora local no informada'
+                    : 'Hora local',
             ];
         } catch (Throwable) {
             return ['event_at_utc' => (string) $utcValue, 'event_at_local' => null, 'event_timezone_label' => 'Hora de origen no disponible'];

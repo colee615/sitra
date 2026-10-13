@@ -16,7 +16,7 @@ class IpsPackageTotalsCache
         if ($ttl === 0 || ! empty($filters['q'])) {
             return (int) $count();
         }
-        $scope = array_intersect_key($filters, array_flip(['status', 'office_cd', 'event_cd', 'actor_user_pid', 'from', 'to']));
+        $scope = array_intersect_key($filters, array_flip(['status', 'office_cd', 'event_cd', 'action_cd', 'actor_user_pid', 'from', 'to']));
         $scope = array_filter($scope, fn ($value) => $value !== null && $value !== '');
         $scope['status'] = $scope['status'] ?? 'all';
         foreach (['office_cd', 'event_cd', 'actor_user_pid'] as $name) {
@@ -62,7 +62,7 @@ class IpsPackageTotalsCache
 
         return 'ips:package-totals:v1:'.hash('sha256', json_encode([
             $source, config('ips.destination_country'), config('ips.delivery_candidate_events'),
-            config('ips.reception_candidate_events'), IpsStagePolicy::TECHNICAL_EVENTS,
+            config('ips.delivery_action_candidates'), config('ips.reception_candidate_events'), IpsStagePolicy::TECHNICAL_EVENTS,
         ], JSON_THROW_ON_ERROR));
     }
 }

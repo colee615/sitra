@@ -37,4 +37,41 @@ class IpsStagePolicyTest extends TestCase
         $this->assertSame([], $p->actions($item + ['terminal'=>true],1));
         $this->assertSame([], $p->actions(array_replace($item,['destination_country'=>'US']),1));
     }
+
+    public function test_international_route_and_last_mile_actions_follow_the_current_stage(): void
+    {
+        $policy = new IpsStagePolicy;
+        $package = [
+            'event_cd' => 1, 'operational_event_cd' => 1, 'state_cd' => 0,
+            'office_cd' => 10, 'operational_office_cd' => 10,
+            'origin_country' => 'MY', 'destination_country' => 'BO',
+            'exchange_office_cds' => [10], 'terminal' => false,
+        ];
+        $this->assertSame(['EMR'], $policy->actions($package, 10));
+        $this->assertSame([], $policy->actions($package, 20));
+
+        $package = array_replace($package, ['event_cd' => 30, 'operational_event_cd' => 30]);
+        $this->assertSame(['EDN', 'CUSTOMS_PRESENT'], $policy->actions($package, 10));
+        $package = array_replace($package, [
+            'event_cd' => 35, 'operational_event_cd' => 35, 'next_office_cd' => 20,
+        ]);
+        $this->assertSame(['EIB'], $policy->actions($package, 10));
+
+        $package = array_replace($package, [
+            'event_cd' => 13, 'operational_event_cd' => 13, 'state_cd' => 6,
+            'receipt_office_cds' => [20],
+        ]);
+        $this->assertSame(['EMG'], $policy->actions($package, 20));
+        $this->assertSame([], $policy->actions($package, 30));
+
+        $package = array_replace($package, [
+            'event_cd' => 32, 'operational_event_cd' => 32, 'state_cd' => 0,
+            'office_cd' => 20, 'operational_office_cd' => 20,
+        ]);
+        $this->assertSame(['EDH', 'HANDOVER_AGENT', 'EMI'], $policy->actions($package, 20));
+        $package = array_replace($package, ['event_cd' => 74, 'operational_event_cd' => 74]);
+        $this->assertSame(['EMI', 'EMH'], $policy->actions($package, 20));
+        $package = array_replace($package, ['event_cd' => 36, 'operational_event_cd' => 36]);
+        $this->assertSame(['EDH', 'HANDOVER_AGENT', 'EMI'], $policy->actions($package, 20));
+    }
 }

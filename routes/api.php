@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\CdsDeclarationLookupController;
+use App\Http\Controllers\Api\CustomsOperationsController;
 use App\Http\Controllers\Api\IpsController;
 use App\Http\Controllers\Api\SqlServerExternalDestinationsBatchController;
 use App\Http\Controllers\Api\SqlServerExternalSearchAllController;
@@ -8,6 +9,7 @@ use App\Http\Controllers\Api\SqlServerExternalSearchBatchController;
 use App\Http\Controllers\Api\SqlServerExternalSearchSafeController;
 use App\Http\Controllers\Api\SqlServerPackageListController;
 use App\Http\Middleware\AuthorizeIps;
+use App\Http\Middleware\AuthorizeCustoms;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1/ips')->middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
@@ -19,12 +21,31 @@ Route::prefix('v1/ips')->middleware(['auth:sanctum', 'throttle:60,1'])->group(fu
         Route::get('paquetes', [IpsController::class, 'index']);
         Route::get('paquetes/pendientes-entrega', [IpsController::class, 'index'])->defaults('ips_pending', true);
         Route::get('paquetes/{codigo}', [IpsController::class, 'show'])->where('codigo', '[A-Za-z0-9-]{1,35}');
+        Route::get('envases/{codigo}', [IpsController::class, 'showReceptacle'])->where('codigo', '[A-Za-z0-9-]{1,35}');
     });
     Route::get('operaciones/{id}', [IpsController::class, 'operation'])->whereUuid('id')->middleware(AuthorizeIps::class.':ips.operations');
     Route::post('paquetes', [IpsController::class, 'write'])->defaults('ips_action', 'create')->middleware(AuthorizeIps::class.':ips.create');
     Route::post('usuarios', [IpsController::class, 'createUser'])->middleware(AuthorizeIps::class.':ips.write');
     Route::post('paquetes/{codigo}/eventos', [IpsController::class, 'write'])->where('codigo', '[A-Za-z0-9-]{1,35}')->middleware(AuthorizeIps::class.':ips.events');
+    Route::post('envases/{codigo}/eventos', [IpsController::class, 'write'])->where('codigo', '[A-Za-z0-9-]{1,35}')->defaults('ips_action', 'receptacle')->middleware(AuthorizeIps::class.':ips.events');
     Route::post('paquetes/{codigo}/entrega', [IpsController::class, 'write'])->where('codigo', '[A-Za-z0-9-]{1,35}')->defaults('ips_event', 'EMI')->middleware(AuthorizeIps::class.':ips.deliver');
+});
+
+Route::prefix('v1/aduana')->middleware(['auth:sanctum', 'throttle:30,1'])->group(function () {
+    Route::get('despachos/{codigo}', [CustomsOperationsController::class, 'dispatch'])
+        ->where('codigo', '[A-Za-z0-9-]{1,35}')->middleware(AuthorizeCustoms::class.':customs.read');
+    Route::get('sacas/{codigo}', [CustomsOperationsController::class, 'receptacle'])
+        ->where('codigo', '[A-Za-z0-9-]{1,35}')->middleware(AuthorizeCustoms::class.':customs.read');
+    Route::post('sacas/{codigo}/eventos', [CustomsOperationsController::class, 'receptacleEvent'])
+        ->where('codigo', '[A-Za-z0-9-]{1,35}')->middleware(AuthorizeCustoms::class.':customs.process');
+    Route::post('sesiones', [CustomsOperationsController::class, 'openSession'])
+        ->middleware(AuthorizeCustoms::class.':customs.process');
+    Route::post('sesiones/{session}/escaneos', [CustomsOperationsController::class, 'scan'])
+        ->whereUuid('session')->middleware(AuthorizeCustoms::class.':customs.process');
+    Route::post('sesiones/{session}/envios/{codigo}/{action}', [CustomsOperationsController::class, 'packageAction'])
+        ->whereUuid('session')->where('codigo', '[A-Za-z0-9-]{1,35}')
+        ->whereIn('action', ['present', 'decision', 'return'])
+        ->middleware(AuthorizeCustoms::class.':customs.process');
 });
 
 Route::middleware(['auth:sanctum'])->group(function () {

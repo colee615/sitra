@@ -12,12 +12,28 @@ use Throwable;
 
 class IpsOperationService
 {
-    public function __construct(private readonly IpsWorkflowService $workflow) {}
+    public function __construct(
+        private readonly IpsWorkflowService $workflow,
+        private readonly IpsReceptacleWorkflowService $receptacles,
+    ) {}
 
     public function submit(int $userId, string $action, array $input): array
     {
         $key = hash('sha256', $input['idempotency_key']);
         unset($input['idempotency_key']);
+
+        $existingOperation = DB::table('ips_operations')->where('user_id', $userId)->where('key_hash', $key)->first();
+        if (empty($input['occurred_at']) && $action === 'event' && ($input['event'] ?? null) === 'EMI') {
+            $input['occurred_at'] = $existingOperation
+                ? (IpsEventTime::present(
+                    $existingOperation->event_at_utc ?? null,
+                    isset($existingOperation->event_local_offset_minutes)
+                        ? (int) $existingOperation->event_local_offset_minutes / 60
+                        : null,
+                )['event_at_local'] ?? null)
+                : null;
+            $input['occurred_at'] ??= Carbon::now(config('ips.operation_timezone', 'America/La_Paz'))->format('Y-m-d\TH:i:sP');
+        }
         $effectiveTime = Carbon::parse($input['occurred_at']);
         $registeredAtUtc = now('UTC');
         if ($effectiveTime->lt($registeredAtUtc->copy()->subMinutes(2)) && empty($input['time_reason'])) {
@@ -36,9 +52,7 @@ class IpsOperationService
             'registered_at_utc' => $registeredAtUtc->toIso8601String(),
             'delivery_mode' => $input['delivery_mode'] ?? null,
             'time_reason' => $input['time_reason'] ?? null,
-            'customs_return_event_at_utc' => !empty($input['customs_return_confirmed'])
-                ? $effectiveTime->copy()->subSecond()->utc()->toIso8601String()
-                : null,
+            'customs_return_event_at_utc' => null,
         ]);
         $operation = DB::table('ips_operations')->where('user_id', $userId)->where('key_hash', $key)->first();
         if (! $operation) {
@@ -55,10 +69,14 @@ class IpsOperationService
             return ['body' => ['operation_id' => $operation->id, 'status' => $operation->status, 'message' => 'Operación en curso o pendiente de verificación. Consulte su estado; no use otra clave.'], 'status' => 409, 'replayed' => true];
         }
         try {
-            $result = $this->workflow->execute($action, $input);
+            $result = $action === 'receptacle'
+                ? $this->receptacles->execute($input)
+                : $this->workflow->execute($action, $input);
             $body = ['operation_id' => $id, 'status' => 'succeeded', 'data' => $result];
-            if (! empty($result['customs_return'])) {
-                $body['message'] = 'Retorno de Aduana y entrega registrados en IPS.';
+            if ($action === 'receptacle') {
+                $body['message'] = $input['event'] === 'RECEPTACLE_RECEIVE'
+                    ? 'Recepción física del envase registrada en IPS.'
+                    : 'Apertura del envase registrada en IPS.';
             }
             $status = $action === 'create' ? 201 : 200;
             $this->finish($id, 'succeeded', $body, $status);

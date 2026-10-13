@@ -21,11 +21,13 @@ class IpsStagePolicy
         [$key, $label, $tone] = match ($event) {
             30, 42, 43, 44 => ['exchange', 'En oficina de intercambio', 'info'],
             35, 72 => ['transport', 'Despachado a destino', 'info'],
-            38 => ['customs_return', 'Retornado de aduana', 'info'],
+            31 => ['customs', 'Enviado a Aduana', 'warning'],
+            34 => ['customs', 'Información aduanera registrada', 'warning'],
+            38 => ['customs_return', 'Retornado de Aduana', 'info'],
             32 => ['received', 'Recibido en oficina de entrega', 'primary'],
             75 => ['pickup', 'Disponible para retiro', 'primary'],
             74 => ['delivery', 'En reparto', 'primary'],
-            39 => ['agent', 'Entregado al agente de distribución', 'info'],
+            39 => ['agent', 'Transferido al cartero', 'info'],
             36 => ['attempt', 'Intento de entrega fallido', 'warning'],
             71, 33 => ['sorting', 'En clasificación / ubicación interna', 'info'],
             13 => ['outbound_bag', 'En saca nacional (salida)', 'secondary'],
@@ -42,11 +44,33 @@ class IpsStagePolicy
         $state = $package['state_cd'];
         $currentOffice = (int) ($package['operational_office_cd'] ?? $package['office_cd']);
         $next = $package['next_office_cd'] ?? null;
-        if (($package['destination_country'] ?? '') === 'BO' && empty($package['terminal'])
-            && $state === 1 && in_array($event, [31, 34], true) && $currentOffice === $office) {
-            // Aduana mantiene el paquete en estado 1. La oficina solo puede
-            // darlo de baja mediante EMI después de confirmar la devolución física.
-            return ['EMI'];
+        if (($package['destination_country'] ?? '') === 'BO' && empty($package['terminal'])) {
+            if (($package['origin_country'] ?? '') !== 'BO'
+                && in_array($event, config('ips.exchange_receipt_candidate_events', []), true)
+                && in_array($state, [0, 2, 3], true)
+                && in_array($office, $package['exchange_office_cds'] ?? [], true)) {
+                return ['EMR'];
+            }
+            if ($event === 30 && $state === 0 && $currentOffice === $office
+                && in_array($office, $package['exchange_office_cds'] ?? [], true)) {
+                return ['EDN', 'CUSTOMS_PRESENT'];
+            }
+            if ($event === 31 && $state === 1 && $currentOffice === $office) {
+                return ['CUSTOMS_INFO', 'CUSTOMS_RETURN'];
+            }
+            if ($event === 34 && $state === 1 && $currentOffice === $office) {
+                return ['CUSTOMS_RETURN'];
+            }
+            if ($event === 38 && $state === 0 && $currentOffice === $office) {
+                return ['EDN'];
+            }
+            if ($event === 35 && $state === 0 && $currentOffice === $office && $next !== null) {
+                return ['EIB'];
+            }
+            if ($event === 13 && $state === 6
+                && in_array($office, $package['receipt_office_cds'] ?? [], true)) {
+                return ['EMG'];
+            }
         }
         if (($package['destination_country'] ?? '') !== 'BO' || ! empty($package['terminal']) || in_array($state, [1, 4, 5, 7], true)) {
             return [];
@@ -59,14 +83,18 @@ class IpsStagePolicy
             && in_array($state, [0, 2, 3, 6], true)) {
             $actions[] = 'EMG';
         }
-        if ($currentOffice === $office && $state === 0 && in_array($event, [32, 36, 39, 75], true)) {
-            if ($event !== 75) {
-                $actions[] = 'EDH';
-            }
+        if ($currentOffice === $office && $state === 0 && in_array($event, [32, 36], true)) {
+            $actions[] = 'EDH';
+            $actions[] = 'HANDOVER_AGENT';
+        }
+        if ($currentOffice === $office && $state === 0 && $event === 39) {
             $actions[] = 'EDG';
         }
+        if ($currentOffice === $office && $state === 0 && $event === 75) {
+            $actions[] = 'EMI';
+        }
         if ($currentOffice === $office && in_array($state, [0, 8], true)
-            && in_array($event, [32, 36, 39, 74, 75], true)) {
+            && in_array($event, [32, 36, 74, 75], true)) {
             $actions[] = 'EMI';
         }
         if ($currentOffice === $office && in_array($state, [0, 8], true) && $event === 74) {

@@ -83,6 +83,63 @@ class ReceptacleSearchService
             ->paginate((int) ($filters['por_pagina'] ?? 25))->withQueryString();
     }
 
+    /** Paginated, read-only register of S9 receptacles with their linked S8 and package counts. */
+    public function listReceptacles(array $filters = []): LengthAwarePaginator
+    {
+        $db = DB::connection(config('postal.ips_read_connection', config('tracking.sqlserver.connection', 'sqlsrv')));
+        $linkedPackageCount = $db->table('dbo.L_MAILITM_EVENTS as package_events')
+            ->selectRaw('COUNT(DISTINCT package_events.MAILITM_PID)')
+            ->whereColumn('package_events.RECPTCL_PID', 'r.RECPTCL_PID')
+            ->whereNotNull('package_events.MAILITM_PID');
+
+        $query = $db->table('dbo.L_RECPTCLS as r')
+            ->leftJoin('dbo.L_DESPTCHS as d', 'd.DESPTCH_PID', '=', 'r.DESPTCH_PID')
+            ->select([
+                'r.RECPTCL_PID', 'r.RECPTCL_FID', 'r.RECPTCL_REG_NO', 'r.RECPTCL_INS_NO',
+                'r.RECPTCL_WEIGHT', 'r.RECPTCL_MAILITMS_NO', 'r.RECPTCL_SEAL_NUMBER',
+                'r.EVT_GMT_DT', 'r.DESPTCH_PID', 'd.DESPTCH_FID', 'd.ORIG_OFFICE_FCD',
+                'd.DEST_OFFICE_FCD', 'd.DESPTCH_DEPARTURE_DT',
+            ])
+            ->selectSub($linkedPackageCount, 'LINKED_MAILITMS_NO');
+
+        $search = strtoupper(trim((string) ($filters['buscar'] ?? '')));
+        if ($search !== '') {
+            $analysis = UpuDispatchIdentifier::parse($search);
+            if (($analysis['type'] ?? null) === 's8') {
+                $dispatchCode = $analysis['code'];
+                $query->where(function ($where) use ($dispatchCode) {
+                    $where->whereRaw('UPPER(RTRIM(LTRIM(d.DESPTCH_FID))) = ?', [$dispatchCode])
+                        ->orWhereRaw('UPPER(RTRIM(LTRIM(r.RECPTCL_FID))) LIKE ?', [$dispatchCode.'%']);
+                });
+            } else {
+                $like = '%'.$search.'%';
+                $query->where(function ($where) use ($search, $like, $analysis) {
+                    if (($analysis['type'] ?? null) === 's9') {
+                        $where->whereRaw('UPPER(RTRIM(LTRIM(r.RECPTCL_FID))) = ?', [$analysis['code']]);
+                    } else {
+                        $where->whereRaw('UPPER(RTRIM(LTRIM(r.RECPTCL_FID))) LIKE ?', [$like]);
+                    }
+                    $where->orWhereRaw('UPPER(RTRIM(LTRIM(r.RECPTCL_REG_NO))) LIKE ?', [$like])
+                        ->orWhereRaw('UPPER(RTRIM(LTRIM(r.RECPTCL_INS_NO))) LIKE ?', [$like])
+                        ->orWhereRaw('UPPER(RTRIM(LTRIM(r.RECPTCL_SEAL_NUMBER))) LIKE ?', [$like])
+                        ->orWhereRaw('UPPER(RTRIM(LTRIM(d.DESPTCH_FID))) LIKE ?', [$like])
+                        ->orWhereRaw('UPPER(RTRIM(LTRIM(d.ORIG_OFFICE_FCD))) LIKE ?', [$like])
+                        ->orWhereRaw('UPPER(RTRIM(LTRIM(d.DEST_OFFICE_FCD))) LIKE ?', [$like]);
+                });
+            }
+        }
+
+        if (!empty($filters['desde'])) {
+            $query->whereDate('r.EVT_GMT_DT', '>=', $filters['desde']);
+        }
+        if (!empty($filters['hasta'])) {
+            $query->whereDate('r.EVT_GMT_DT', '<=', $filters['hasta']);
+        }
+
+        return $query->orderByDesc('r.EVT_GMT_DT')->orderByDesc('r.RECPTCL_FID')
+            ->paginate((int) ($filters['por_pagina'] ?? 25))->withQueryString();
+    }
+
     public function search(string $identifier): array
     {
         $identifier = strtoupper(trim($identifier));
@@ -150,9 +207,9 @@ class ReceptacleSearchService
             ->leftJoin('dbo.C_MAIL_CLASSES as mail_class','mail_class.MAIL_CLASS_CD','=','mi.MAIL_CLASS_CD')
             ->leftJoin('dbo.C_POSTAL_STATUSES as postal_status','postal_status.POSTAL_STATUS_CD','=','mi.POSTAL_STATUS_CD')
             ->whereIn('mi.MAILITM_PID',$itemIds)->orderBy('mi.MAILITM_FID')->orderBy('mi.MAILITM_LOCAL_ID')
-            ->get(['mi.MAILITM_FID','mi.MAILITM_LOCAL_ID','mi.MAILITM_WEIGHT','mi.MAILITM_VALUE',
+            ->get(['mi.MAILITM_PID','mi.MAILITM_FID','mi.MAILITM_LOCAL_ID','mi.MAILITM_WEIGHT','mi.MAILITM_VALUE',
                 'mail_class.MAIL_CLASS_NM as MAIL_CLASS_NAME','postal_status.POSTAL_STATUS_NM as POSTAL_STATUS_NAME',
-                'mi.MAIL_CLASS_CD','mi.POSTAL_STATUS_CD','mi.EVT_GMT_DT','mi.EVT_TYPE_CD','local_event_type.LOCAL_EVENT_TYPE_NM as EVENT_NAME_ES',
+                'mi.MAIL_CLASS_CD','mi.POSTAL_STATUS_CD','mi.STATE_IND_CD','mi.ORIG_COUNTRY_CD','mi.EVT_OFFICE_CD','mi.EVT_GMT_DT','mi.EVT_TYPE_CD','local_event_type.LOCAL_EVENT_TYPE_NM as EVENT_NAME_ES',
                 'event_type.EVENT_TYPE_NM as EVENT_NAME','origin.COUNTRY_NM as ORIGIN_COUNTRY',
                 'destination.COUNTRY_NM as DEST_COUNTRY']);
 

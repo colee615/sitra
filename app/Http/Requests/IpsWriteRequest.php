@@ -33,34 +33,45 @@ class IpsWriteRequest extends FormRequest
             }
         }
 
-        $this->merge([
+        $normalized = [
             'codigo' => strtoupper(trim((string) ($this->route('codigo') ?? $this->input('codigo')))),
             'event' => $this->route()->defaults['ips_event'] ?? strtoupper(trim((string) $this->input('event'))),
             'idempotency_key' => $this->header('Idempotency-Key') ?? $this->input('idempotency_key'),
-            'occurred_at' => $occurredAt,
-        ]);
+        ];
+        if ($occurredAt !== null) $normalized['occurred_at'] = $occurredAt;
+        $this->merge($normalized);
     }
 
     public function rules(): array
     {
         $creating = ($this->route()->defaults['ips_action'] ?? '') === 'create';
+        $receptacleAction = ($this->route()->defaults['ips_action'] ?? '') === 'receptacle';
         $delivery = ! $creating && $this->input('event') === 'EMI';
+        $inboundReceipt = in_array($this->input('event'), ['EMR', 'EMD'], true);
+        $receptacleEvent = $receptacleAction ? array_keys(config('ips.receptacle_events', [])) : [];
 
         return [
             'idempotency_key' => ['required', 'string', 'min:8', 'max:128', 'regex:/^[A-Za-z0-9_.:-]+$/'],
             'codigo' => ['required', 'string', 'max:35', 'regex:/^[A-Z0-9][A-Z0-9-]*$/'],
-            'event' => ['required', Rule::in($creating ? ['EMA', 'EMD'] : array_keys(config('ips.events')))],
+            'event' => ['required', Rule::in($creating ? ['EMA', 'EMD'] : ($receptacleAction ? $receptacleEvent : array_keys(config('ips.events'))))],
             'occurred_at' => [$delivery ? 'sometimes' : 'required', 'date_format:Y-m-d\TH:i:sP', 'before_or_equal:now'],
             'office_cd' => [$delivery ? 'sometimes' : 'required', 'integer', 'min:0', 'max:32767'],
             'expected_event_cd' => [$creating ? 'prohibited' : ($delivery ? 'sometimes' : 'required'), 'integer'],
             'expected_event_at' => [$creating ? 'prohibited' : ($delivery ? 'sometimes' : 'required'), 'date_format:Y-m-d\TH:i:sP,Y-m-d\TH:i:s.vP'],
+            'next_office_cd' => [Rule::requiredIf($this->input('event') === 'EDN'), 'nullable', 'integer', 'min:0', 'max:32767'],
+            'domestic_receptacle_pid' => [Rule::requiredIf($this->input('event') === 'EIB'), 'nullable', 'uuid'],
+            'receptacle_pid' => [Rule::requiredIf($inboundReceipt), 'nullable', Rule::prohibitedIf(! $creating && $this->input('event') !== 'EMR'), 'uuid'],
             'signatory' => ['nullable', 'string', 'max:64'],
-            'delivery_mode' => [Rule::requiredIf($this->input('event') === 'EMI'), 'nullable', Rule::in(['DOMICILIARIA', 'NO_DOMICILIARIA'])],
+            'delivery_mode' => [$delivery ? 'sometimes' : Rule::requiredIf($this->input('event') === 'EMI'), 'nullable', Rule::in(['DOMICILIARIA', 'NO_DOMICILIARIA'])],
+            'delivery_agent_cd' => [Rule::requiredIf($this->input('event') === 'HANDOVER_AGENT'), 'nullable', 'string', 'size:2', 'regex:/^[A-Za-z0-9]{2}$/'],
+            'customs_office_cd' => [Rule::requiredIf($this->input('event') === 'CUSTOMS_PRESENT'), 'nullable', 'integer', 'min:1', 'max:32767'],
+            'customs_office_type_cd' => [Rule::requiredIf($this->input('event') === 'CUSTOMS_PRESENT'), 'nullable', 'string', 'max:3', 'regex:/^[A-Za-z0-9]+$/'],
+            'customs_release_status_cd' => [Rule::requiredIf($this->input('event') === 'CUSTOMS_INFO'), 'nullable', 'string', 'max:3', 'regex:/^[A-Za-z0-9]+$/'],
+            'customs_return_confirmed' => [Rule::excludeIf($this->input('event') !== 'CUSTOMS_RETURN'), 'required', 'boolean', 'accepted'],
             'time_reason' => ['nullable', 'string', 'max:255'],
             'actor_user_pid' => ['sometimes', 'integer', 'min:1', 'max:32767'],
             'external_actor_id' => ['sometimes', 'string', 'max:80'],
-            'physical_receipt_confirmed' => ['exclude_unless:event,EMG', 'required', 'boolean', 'accepted'],
-            'customs_return_confirmed' => ['exclude_unless:event,EMI', 'sometimes', 'boolean', 'accepted'],
+            'physical_receipt_confirmed' => [Rule::excludeIf(! in_array($this->input('event'), ['EMG', 'EMR', 'EMD', 'CUSTOMS_RETURN', 'RECEPTACLE_RECEIVE'], true)), 'required', 'boolean', 'accepted'],
             'delivery_location' => ['nullable', 'string', 'max:25'],
             'non_delivery_reason' => [Rule::requiredIf($this->input('event') === 'EMH'), 'nullable', 'integer', 'min:1'],
             'non_delivery_measure' => [Rule::requiredIf($this->input('event') === 'EMH'), 'nullable', 'string', 'size:1'],
@@ -68,6 +79,7 @@ class IpsWriteRequest extends FormRequest
             'origin_country' => [$creating ? 'required' : 'prohibited', 'string', 'regex:/^[A-Z]{2}$/'],
             'destination_country' => [$creating ? 'required' : 'prohibited', 'string', 'regex:/^[A-Z]{2}$/'],
             'weight_kg' => [$creating ? 'required' : 'prohibited', 'numeric', 'gt:0', 'max:999.999', 'decimal:0,3'],
+            'condition_cd' => [Rule::requiredIf(in_array($this->input('event'), ['EMR', 'EMD'], true)), 'nullable', 'integer', 'min:1', Rule::prohibitedIf(! in_array($this->input('event'), ['EMR', 'EMD'], true))],
             'sender' => [$creating ? 'required' : 'prohibited', 'array:name,address,city,country,postcode,phone,email'],
             'recipient' => [$creating ? 'required' : 'prohibited', 'array:name,address,city,country,postcode,phone,email'],
             'sender.name' => ['required_with:sender', 'string', 'max:64'],

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Support\Collection;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 
 class SqlServerSearchService
@@ -531,6 +532,31 @@ class SqlServerSearchService
         ];
     }
 
+    /** Paginated IPS package register for the postal workspace. */
+    public function packageRegister(array $filters = []): LengthAwarePaginator
+    {
+        $page = max(1, (int) ($filters['page'] ?? LengthAwarePaginator::resolveCurrentPage()));
+        $perPage = min(100, max(1, (int) ($filters['por_pagina'] ?? 25)));
+        $search = trim((string) ($filters['buscar'] ?? ''));
+        $from = $filters['desde'] ?? null;
+        $until = $filters['hasta'] ?? null;
+        [$whereSql, $bindings] = $this->packageListFilters($search, $from, $until);
+        $connection = DB::connection($this->connectionName());
+        $count = $connection->selectOne(
+            "SELECT COUNT_BIG(*) AS total FROM dbo.L_MAILITMS mi {$whereSql}",
+            $bindings
+        );
+        $rows = $this->fetchPackageRowsLight(($page - 1) * $perPage, $perPage, $search, $from, $until);
+
+        return new LengthAwarePaginator(
+            $rows,
+            (int) ($count->total ?? 0),
+            $perPage,
+            $page,
+            ['path' => LengthAwarePaginator::resolveCurrentPath(), 'query' => request()->query()]
+        );
+    }
+
     public function trackingRowsForPackageRows(iterable $packageRows): Collection
     {
         $packageRows = collect($packageRows);
@@ -748,9 +774,9 @@ class SqlServerSearchService
         ));
     }
 
-    private function fetchPackageRowsLight(int $offset, int $limit, ?string $search = null): Collection
+    private function fetchPackageRowsLight(int $offset, int $limit, ?string $search = null, ?string $from = null, ?string $until = null): Collection
     {
-        [$whereSql, $bindings] = $this->packageListFilters($search);
+        [$whereSql, $bindings] = $this->packageListFilters($search, $from, $until);
         $connection = $this->connectionName();
 
         return collect(DB::connection($connection)->select(
@@ -792,6 +818,15 @@ class SqlServerSearchService
                       AND e.RECPTCL_PID IS NOT NULL
                     ORDER BY e.EVENT_GMT_DT DESC
                 ) AS DESPTCH_FID
+                ,
+                (
+                    SELECT TOP 1 RTRIM(LTRIM(r.RECPTCL_FID))
+                    FROM dbo.L_MAILITM_EVENTS e
+                    INNER JOIN dbo.L_RECPTCLS r ON r.RECPTCL_PID = e.RECPTCL_PID
+                    WHERE e.MAILITM_PID = mi.MAILITM_PID
+                      AND e.RECPTCL_PID IS NOT NULL
+                    ORDER BY e.EVENT_GMT_DT DESC
+                ) AS RECPTCL_FID
                 ,
                 (
                     SELECT TOP 1 RTRIM(LTRIM(mc.CUSTOMER_PHONE_NO))
@@ -895,23 +930,27 @@ class SqlServerSearchService
         ));
     }
 
-    private function packageListFilters(?string $search = null): array
+    private function packageListFilters(?string $search = null, ?string $from = null, ?string $until = null): array
     {
         $search = strtoupper(trim((string) $search));
-
-        if ($search === '') {
-            return ['', []];
+        $conditions = [];
+        $bindings = [];
+        if ($search !== '') {
+            $like = "%{$search}%";
+            $conditions[] = '(UPPER(RTRIM(LTRIM(mi.MAILITM_FID))) LIKE ? OR UPPER(RTRIM(LTRIM(mi.MAILITM_LOCAL_ID))) LIKE ?)';
+            $bindings[] = $like;
+            $bindings[] = $like;
+        }
+        if ($from !== null && $from !== '') {
+            $conditions[] = 'mi.EVT_GMT_DT >= ?';
+            $bindings[] = $from;
+        }
+        if ($until !== null && $until !== '') {
+            $conditions[] = 'mi.EVT_GMT_DT < DATEADD(day, 1, ?)';
+            $bindings[] = $until;
         }
 
-        $like = "%{$search}%";
-
-        return [
-            "
-                WHERE UPPER(RTRIM(LTRIM(mi.MAILITM_FID))) LIKE ?
-                   OR UPPER(RTRIM(LTRIM(mi.MAILITM_LOCAL_ID))) LIKE ?
-            ",
-            [$like, $like],
-        ];
+        return [$conditions ? 'WHERE '.implode(' AND ', $conditions) : '', $bindings];
     }
 
     private function similarCodes(string $codigo)

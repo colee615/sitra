@@ -1,25 +1,23 @@
 @extends('adminlte::page')
 @section('title', $sectionTitle.' | SITRA')
-@section('content_header')
-    <div class="postal-heading"><div><span class="postal-eyebrow">SITRA · CONSULTA POSTAL</span><h1>{{ $sectionTitle }}</h1><p>{{ $sectionDescription }}</p></div><span class="postal-source"><i class="fas fa-shield-alt" aria-hidden="true"></i> Consulta interna</span></div>
-@stop
 @section('content')
 <div class="postal-workspace">
-    @if($section === 'cds' && !$code)
-        <div class="postal-actions mb-3"><a class="btn btn-primary" href="{{ route('postal.customs.remittance') }}"><i class="fas fa-file-export"></i> Preparar remisión con varios paquetes</a><span class="postal-note align-self-center">Reúne las declaraciones CDS para revisión y entrega a Aduana.</span></div>
-    @endif
+    @if($code)
     <form class="postal-search" action="{{ $searchRoute }}" method="get">
         <label for="postal-code">Código S10 o identificador local</label>
         <div class="postal-search-row"><i class="fas fa-barcode" aria-hidden="true"></i><input id="postal-code" name="codigo" value="{{ $code }}" maxlength="35" required autocomplete="off" placeholder="Escanea o escribe el código del paquete"><button class="btn btn-primary"><i class="fas fa-search" aria-hidden="true"></i> Buscar en {{ $searchTarget }}</button></div>
         @error('codigo')<p class="text-danger">{{ $message }}</p>@enderror
     </form>
+    @endif
+    @if($code)
     <div class="postal-sources" role="status">
         @foreach($sources as $source => $state)
             <div class="postal-source {{ $state === 'unavailable' ? 'postal-warning' : '' }}"><span class="postal-dot {{ $state === 'ok' ? 'is-ready' : '' }}"></span><strong>{{ $source }}</strong><span>{{ $sourceLabels[$state] }}</span></div>
         @endforeach
     </div>
+    @endif
     @if(!$code)
-        <div class="postal-empty"><i class="fas fa-box-open" aria-hidden="true"></i><h2>Comienza con el código del envío</h2><p>Podrás revisar su recorrido, artículos declarados, documentos y responsables registrados.</p></div>
+        @include('postal.partials.package-register')
     @else
         @if(($identifier['valid'] ?? null) === false)<div class="alert alert-warning">{{ $identifier['message'] }} La consulta conserva el código que ingresaste.</div>@endif
         @if(!$found)
@@ -29,11 +27,6 @@
                 <div><span class="postal-eyebrow">EXPEDIENTE DEL ENVÍO</span><h2>{{ $ipsPackage->MAILITM_FID ?? $cdsPackage->MAIL_OBJECT_ID ?? $code }}</h2><p>{{ $identifier['type'] }} · {{ $operationsMetrics['content_count'] }} artículos declarados encontrados entre las fuentes consultadas</p></div>
                 <div class="postal-actions"><a class="btn btn-light" href="{{ route('postal.package.csv', ['codigo'=>$code]) }}"><i class="fas fa-file-csv"></i> Descargar expediente</a><a target="_blank" rel="noopener" class="btn btn-light" href="{{ route('postal.document', ['kind'=>'marbete','codigo'=>$code]) }}"><i class="fas fa-barcode"></i> Marbete interno</a>@if($declarations)<a target="_blank" rel="noopener" class="btn btn-light" href="{{ route('postal.document', ['kind'=>'aduana','codigo'=>$code]) }}"><i class="fas fa-print"></i> Imprimir CN23</a>@endif</div>
             </section>
-            @if($section !== 'conjunto' && $showIps !== $showCds)
-                @can($section === 'ips' ? 'postal.cds' : 'postal.ips')
-                    <div class="postal-actions mb-3"><a class="btn btn-outline-primary" href="{{ route('postal.combined', ['codigo'=>$code]) }}"><i class="fas fa-project-diagram"></i> Ver expediente IPS + CDS de este envío</a></div>
-                @endcan
-            @endif
             <nav class="postal-expedient-nav" aria-label="Secciones del expediente">
                 @if($showCds)
                     <a href="#customs"><strong><i class="fas fa-clipboard-list"></i> Declaraciones y respuestas CDS</strong><small>{{ count($declarations) }} declaraciones · {{ count($responses) }} respuestas · {{ count($cds['events'] ?? []) }} eventos</small></a>
@@ -109,5 +102,5 @@
 </div>
 @include('footer')
 @stop
-@section('css')<link rel="stylesheet" href="{{ asset('css/postal-operations.css') }}"><link rel="stylesheet" href="{{ asset('css/postal-navigation.css') }}">@stop
+@section('css')<link rel="stylesheet" href="{{ asset('css/postal-operations.css') }}"><link rel="stylesheet" href="{{ asset('css/postal-dispatches.css') }}"><link rel="stylesheet" href="{{ asset('css/postal-navigation.css') }}">@stop
 @section('js')<script src="{{ asset('js/postal-workspace.js') }}" defer></script>@stop

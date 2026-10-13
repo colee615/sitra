@@ -100,11 +100,6 @@
 .postal-workspace .postal-section-heading i { color: var(--correos-blue); }
 .postal-workspace .postal-current { border-left-color: var(--correos-yellow); background: var(--correos-blue-soft); }
 .postal-workspace .postal-response { border-left-color: var(--correos-blue); background: var(--correos-blue-soft); }
-.postal-workspace .postal-flow-step.is-active { background: var(--correos-blue); border-color: var(--correos-blue); }
-.postal-workspace .postal-flow-step.is-active .postal-flow-number { background: var(--correos-yellow); color: var(--correos-blue-dark); }
-.postal-workspace .postal-flow-step.is-active strong small { background: var(--correos-yellow-soft); color: var(--correos-blue-dark); }
-.postal-workspace .postal-flow-number { background: var(--correos-blue-soft); color: var(--correos-blue); }
-.postal-workspace .postal-logistics-explainer { border-left-color: var(--correos-yellow); }
 .postal-workspace input[type="checkbox"] { accent-color: var(--correos-blue); }
 .postal-workspace .postal-search input:focus,
 .postal-workspace .postal-search textarea:focus { outline-color: #fecb3470; border-color: var(--correos-blue); }

@@ -131,19 +131,21 @@ class OperationalDashboardTest extends TestCase
         $this->actingAs(User::factory()->create())->getJson('/dashboard/datos')->assertForbidden();
     }
 
-    public function test_cds_rejects_unmapped_filters_and_retains_office_zero(): void
+    public function test_cds_accepts_office_zero_and_rejects_unmapped_filters(): void
     {
         config(['postal.cds_enabled' => true]);
         $filters = DashboardFilters::fromRequest(Request::create('/dashboard/datos', 'GET', $this->filters(['office' => '0'])));
         $this->assertSame('0', $filters['office']);
-        $this->assertSame('unsupported', app(OperationalDashboard::class)->cds($filters)['status']);
+        $this->assertSame('ok', app(OperationalDashboard::class)->cds($filters)['status']);
+        $unmapped = DashboardFilters::fromRequest(Request::create('/dashboard/datos', 'GET', $this->filters(['state' => 'delivered'])));
+        $this->assertSame('unsupported', app(OperationalDashboard::class)->cds($unmapped)['status']);
     }
 
     public function test_admin_forms_render_without_legacy_form_dependency(): void
     {
         $admin = User::factory()->create();
         $admin->assignRole(Role::findOrCreate('admin', 'web'));
-        foreach (['/role/create', '/permission/create', '/role-has-permission/create', '/users/create', '/profile', '/centro-de-trabajo'] as $url) {
+        foreach (['/role/create', '/permission/create', '/role-has-permission/create', '/users/create', '/profile'] as $url) {
             $this->actingAs($admin)->get($url)->assertOk()->assertSee('sitra-design.css');
         }
     }

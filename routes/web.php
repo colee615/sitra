@@ -35,16 +35,10 @@ Route::get('/dashboard/conjunto', [\App\Http\Controllers\OperationalDashboardCon
 Route::get('/dashboard/ips', [\App\Http\Controllers\OperationalDashboardController::class, 'ips'])->middleware(['auth', 'verified', 'can:postal.ips'])->name('dashboard.ips');
 Route::get('/dashboard/cds', [\App\Http\Controllers\OperationalDashboardController::class, 'cds'])->middleware(['auth', 'verified', 'can:postal.cds'])->name('dashboard.cds');
 Route::get('/dashboard/datos', [\App\Http\Controllers\OperationalDashboardController::class, 'data'])->middleware(['auth', 'verified', 'can:postal.access', 'throttle:30,1'])->name('dashboard.data');
-Route::view('/centro-de-trabajo', 'postal.workbench')->middleware(['auth', 'verified'])->name('postal.workbench');
-
 Route::middleware('auth')->group(function () {
     Route::get('/consultas', [PostalIntelligenceController::class, 'index'])->middleware('can:postal.access')->name('consultas.index');
-    Route::get('/ips', [PostalIntelligenceController::class, 'ips'])->middleware('can:postal.ips')->name('postal.ips');
-    Route::get('/cds', [PostalIntelligenceController::class, 'cds'])->middleware('can:postal.cds')->name('postal.cds');
-    Route::get('/cds/declaracion/imprimir', [PostalIntelligenceController::class, 'customsDeclarationPrint'])->middleware('can:postal.cds')->name('postal.cds.declaration.print');
-    Route::get('/aduana/remision', [PostalIntelligenceController::class, 'customsRemittance'])->middleware('can:postal.cds')->name('postal.customs.remittance');
-    Route::get('/aduana/remision/imprimir', [PostalIntelligenceController::class, 'customsRemittancePrint'])->middleware('can:postal.cds')->name('postal.customs.remittance.print');
-    Route::get('/aduana/remision.csv', [PostalIntelligenceController::class, 'customsRemittanceCsv'])->middleware('can:postal.cds')->name('postal.customs.remittance.csv');
+    Route::get('/ips', [PostalIntelligenceController::class, 'ips'])->middleware('can:postal.access')->name('postal.ips');
+    Route::get('/consultas/declaracion/imprimir', [PostalIntelligenceController::class, 'customsDeclarationPrint'])->middleware('can:postal.cds')->name('postal.declaration.print');
     Route::get('/conjunto', [PostalIntelligenceController::class, 'index'])->middleware('can:postal.access')->name('postal.combined');
     Route::get('/operaciones-postales', [PostalIntelligenceController::class, 'activityReport'])->middleware('can:postal.ips')->name('postal.operations');
     Route::get('/operaciones-postales/reporte.csv', [PostalIntelligenceController::class, 'activityReportCsv'])->middleware('can:postal.ips')->name('postal.operations.csv');
@@ -53,9 +47,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/reporte-entregas.csv', [\App\Http\Controllers\PostalDeliveryPerformanceController::class, 'csv'])->middleware('can:postal.ips')->name('postal.deliveries.performance.csv');
     Route::get('/consultas/expediente.csv', [PostalIntelligenceController::class, 'packageCsv'])->middleware('can:postal.access')->name('postal.package.csv');
     Route::get('/despachos', [PostalIntelligenceController::class, 'dispatches'])->middleware('can:postal.ips')->name('postal.dispatches');
+    Route::get('/despachos/{codigo}/sacas', [PostalIntelligenceController::class, 'dispatchSacks'])->middleware('can:postal.ips')->name('postal.dispatches.sacks');
     Route::get('/marbetes', [PostalIntelligenceController::class, 'receptacles'])->middleware('can:postal.ips')->name('postal.receptacles');
+    Route::get('/marbetes/{codigo}/paquetes', [PostalIntelligenceController::class, 'receptaclePackagesModal'])->middleware('can:postal.ips')->name('postal.receptacles.packages');
     Route::get('/marbetes/documento/{type}', [PostalIntelligenceController::class, 'receptacleDocument'])->middleware('can:postal.ips')->name('postal.receptacles.document');
-    Route::get('/aduana', [PostalIntelligenceController::class, 'cds'])->middleware('can:postal.cds')->name('postal.customs');
     Route::get('/consultas/documentos/{kind}', [PostalIntelligenceController::class, 'document'])->middleware('can:postal.access')->name('postal.document');
     Route::get('/sqlserver/datos', [SqlServerDataController::class, 'index'])->middleware('can:ips.read')->name('sqlserver.datos');
     Route::get('/tracking-event-rules', [TrackingEventRuleController::class, 'index'])->name('tracking-event-rules.index');
@@ -88,12 +83,10 @@ Route::middleware('auth')->group(function () {
         Route::get('users/{id}/delete', [UserController::class, 'delete'])->name('users.delete');
         Route::post('users/{id}/restore', [UserController::class, 'restore'])->name('users.restore');
         Route::put('utest/{id}/restoring', [UserController::class, 'restoring'])->name('users.restoring');
-        Route::put('users/{user}', [UserController::class, 'update'])->name('users.update');
 
         // Roles
         Route::get('/roles', [RoleController::class, 'index'])->name('roles.index');
         Route::get('/role/create', [RoleController::class, 'create'])->name('roles.create');
-        // Route::get('/role/{role}', [RoleController::class, 'show'])->name('roles.show');
         Route::post('/role', [RoleController::class, 'store'])->name('roles.store');
         Route::get('/role/{role}/edit', [RoleController::class, 'edit'])->name('roles.edit');
         Route::put('/role/{role}', [RoleController::class, 'update'])->name('roles.update');
@@ -102,7 +95,6 @@ Route::middleware('auth')->group(function () {
         // Permisos
         Route::get('/permissions', [PermissionController::class, 'index'])->name('permissions.index');
         Route::get('/permission/create', [PermissionController::class, 'create'])->name('permissions.create');
-        // Route::get('/permission/{permission}', [PermissionController::class, 'show'])->name('permissions.show');
         Route::post('/permission', [PermissionController::class, 'store'])->name('permissions.store');
         Route::get('/permission/{permission}/edit', [PermissionController::class, 'edit'])->name('permissions.edit');
         Route::put('/permission/{permission}', [PermissionController::class, 'update'])->name('permissions.update');
@@ -111,7 +103,6 @@ Route::middleware('auth')->group(function () {
         // Accesos
         Route::get('/role-has-permissions', [RoleHasPermissionController::class, 'index'])->name('role-has-permissions.index');
         Route::get('/role-has-permission/create', [RoleHasPermissionController::class, 'create'])->name('role-has-permissions.create');
-        // Route::get('/role-has-permission/{roleHasPermission}', [RoleHasPermissionController::class, 'show'])->name('role-has-permissions.show');
         Route::post('/role-has-permission', [RoleHasPermissionController::class, 'store'])->name('role-has-permissions.store');
         Route::get('/role-has-permission/{roleHasPermission}/edit', [RoleHasPermissionController::class, 'edit'])->name('role-has-permissions.edit');
         Route::put('/role-has-permission/{roleHasPermission}', [RoleHasPermissionController::class, 'update'])->name('role-has-permissions.update');

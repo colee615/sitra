@@ -65,7 +65,7 @@ class IpsWorkflowTest extends TestCase
             $p['EventLocalOffset'] == -4 && $p['Signatory'] === 'Receptor' &&
             $p['Weight'] === '1.250' && $p['DelivInfoValid'] === '1' && (int) $p['StateInd'] === 5
         ));
-        $repo->shouldReceive('verifyWrite')->once()->with('11111111-1111-4111-8111-111111111111', 37, '2026-01-02 16:00:00', 'Receptor');
+        $repo->shouldReceive('verifyWrite')->once()->with('11111111-1111-4111-8111-111111111111', 37, '2026-01-02 16:00:00', 'Receptor', null, null, null);
         $result = (new IpsWorkflowService($repo))->execute('event', $this->input());
         $this->assertSame(37, $result['event_cd']);
         $this->assertSame('2026-01-02T16:00:00+00:00', $result['event_at']);
@@ -79,7 +79,7 @@ class IpsWorkflowTest extends TestCase
             $p['Office'] === 1 && $p['EventGmtDt'] === '2026-01-02 16:00:00' &&
             $p['DelivLocation'] === 'LA PAZ LC/AO' && $p['Signatory'] === null
         ));
-        $repo->shouldReceive('verifyWrite')->once()->with('11111111-1111-4111-8111-111111111111', 37, '2026-01-02 16:00:00', null);
+        $repo->shouldReceive('verifyWrite')->once()->with('11111111-1111-4111-8111-111111111111', 37, '2026-01-02 16:00:00', null, null, null, null);
 
         $result = (new IpsWorkflowService($repo))->execute('event', ['codigo' => 'TEST01', 'event' => 'EMI']);
 
@@ -137,11 +137,11 @@ class IpsWorkflowTest extends TestCase
 
     public function test_failed_delivery_keeps_reason_and_does_not_report_emi(): void
     {
-        $repo = $this->repository($this->item(), 'EMH');
+        $repo = $this->repository($this->item(['EVT_TYPE_CD' => 74]), 'EMH');
         $repo->shouldReceive('callProcedure')->once()->with('SP_SET_MAILITM', Mockery::on(fn ($p) => $p['EventType'] === 36 && $p['Signatory'] === null && $p['NonDeliveryReason'] === 1 && $p['NonDeliveryMeasure'] === 'A'
         ));
         $repo->shouldReceive('verifyWrite')->once();
-        $result = (new IpsWorkflowService($repo))->execute('event', $this->input(['event' => 'EMH', 'non_delivery_reason' => 1, 'non_delivery_measure' => 'A']));
+        $result = (new IpsWorkflowService($repo))->execute('event', $this->input(['event' => 'EMH', 'expected_event_cd' => 74, 'non_delivery_reason' => 1, 'non_delivery_measure' => 'A']));
         $this->assertSame(36, $result['event_cd']);
     }
 

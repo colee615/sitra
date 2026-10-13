@@ -43,8 +43,6 @@
 
                                         <th>Permiso</th>
                                         <th>Rol</th>
-
-                                        <th></th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -55,15 +53,6 @@
                                             <td>{{ $permissions[$roleHasPermission->permission_id] }}</td>
                                             <td>{{ $roles[$roleHasPermission->role_id] }}</td>
 
-                                            {{-- <td>
-                                                <form action="{{ route('role-has-permissions.destroy',$roleHasPermission->id) }}" method="POST">
-                                                    <a class="btn btn-sm btn-primary " href="{{ route('role-has-permissions.show',$roleHasPermission->id) }}"><i class="fa fa-fw fa-eye"></i> {{ __('Show') }}</a>
-                                                    
-                                                    @csrf
-                                                    @method('DELETE')
-                                                    <button type="submit" class="btn btn-danger btn-sm"><i class="fa fa-fw fa-trash"></i> {{ __('Delete') }}</button>
-                                                </form>
-                                            </td> --}}
                                         </tr>
                                     @endforeach
                                 </tbody>

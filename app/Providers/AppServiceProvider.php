@@ -28,6 +28,11 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('postal.ips', fn ($user) => $user->hasRole('admin') || $user->checkPermissionTo('ips.read', 'web'));
         Gate::define('postal.cds', fn ($user) => $user->hasRole('admin') || $user->checkPermissionTo('cds.read', 'web'));
         Gate::define('postal.access', fn ($user) => $user->can('postal.ips') || $user->can('postal.cds'));
+        Gate::define('customs.read', fn ($user) => $user->hasRole('admin')
+            || $user->can('postal.cds')
+            || $user->checkPermissionTo('customs.read', 'web')
+            || $user->checkPermissionTo('customs.process', 'web'));
+        Gate::define('customs.process', fn ($user) => $user->hasRole('admin') || $user->checkPermissionTo('customs.process', 'web'));
 
         foreach (['ips.read', 'ips.create', 'ips.events', 'ips.deliver', 'ips.operations'] as $ability) {
             Gate::define($ability, function ($user) use ($ability) {

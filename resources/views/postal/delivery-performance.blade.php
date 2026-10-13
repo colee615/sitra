@@ -3,7 +3,7 @@
 @section('title', 'Rendimiento de entregas IPS | SITRA')
 
 @section('css')
-    <link rel="stylesheet" href="{{ asset('css/postal-delivery-performance.css') }}?v=1">
+    <link rel="stylesheet" href="{{ asset('css/postal-delivery-performance.css') }}?v=2">
 @stop
 
 @section('content')
@@ -11,16 +11,6 @@
     $formatNumber = static fn ($value, $decimals = 0) => number_format((float) $value, $decimals, ',', '.');
 @endphp
 <main class="delivery-report" id="delivery-report">
-    <header class="delivery-hero">
-        <div class="delivery-brand-mark"><i class="fas fa-box-open" aria-hidden="true"></i></div>
-        <div class="delivery-hero-copy">
-            <span class="delivery-eyebrow">INTELIGENCIA POSTAL · IPS · BOA</span>
-            <h1>Rendimiento de entregas</h1>
-            <p>Volumen entregado, actividad por oficina y usuarios que registraron la entrega.</p>
-        </div>
-        <div class="delivery-hero-source"><i class="fas fa-database"></i><span>Fuente oficial<br><strong>Eventos IPS</strong></span></div>
-    </header>
-
     <section class="delivery-toolbar" aria-label="Acciones del reporte">
         <div class="delivery-toolbar-title"><i class="fas fa-chart-line"></i><span>Reporte ejecutivo <small>· consulta operativa</small></span></div>
         <div class="delivery-toolbar-actions">
@@ -134,7 +124,7 @@
                     <tbody>
                     @forelse($result['rows'] as $row)
                         @php($localTime = \Carbon\CarbonImmutable::parse($row->EVENT_GMT_DT, 'UTC')->setTimezone($filters['timezone']))
-                        <tr><td><span class="delivery-table-index">{{ str_pad((string) ($loop->iteration), 3, '0', STR_PAD_LEFT) }}</span></td><td><strong>{{ $localTime->format('d/m/Y') }}</strong><small>{{ $localTime->format('H:i') }} · Bolivia</small></td><td><a href="{{ route('postal.ips', ['codigo'=>$row->MAILITM_FID ?: $row->MAILITM_LOCAL_ID]) }}">{{ $row->MAILITM_FID ?: 'Código no informado' }}</a>@if($row->MAILITM_LOCAL_ID)<small>ID local: {{ $row->MAILITM_LOCAL_ID }}</small>@endif</td><td><strong>{{ $row->EVENT_NAME ?: 'Evento de entrega IPS' }}</strong><small>Código {{ $row->EVENT_TYPE_CD }}</small></td><td>{{ trim(($row->OFFICE_FCD ?? '').' '.($row->OFFICE_NM ?? '')) ?: 'Oficina no informada' }}</td><td>{{ $row->USER_NM ?: $row->USER_FID ?: 'Usuario no informado por IPS' }}@if($row->USER_FID)<small>ID IPS: {{ $row->USER_FID }}</small>@endif</td><td><span class="delivery-service-pill">{{ $row->MAIL_CLASS_NM ?: $row->MAIL_CLASS_CD ?: 'No informada' }}</span></td></tr>
+                        <tr><td><span class="delivery-table-index">{{ str_pad((string) ($loop->iteration), 3, '0', STR_PAD_LEFT) }}</span></td><td><strong>{{ $localTime->format('d/m/Y') }}</strong><small>{{ $localTime->format('H:i') }} · Bolivia</small></td><td><a href="{{ route('postal.combined', ['codigo'=>$row->MAILITM_FID ?: $row->MAILITM_LOCAL_ID]) }}">{{ $row->MAILITM_FID ?: 'Código no informado' }}</a>@if($row->MAILITM_LOCAL_ID)<small>ID local: {{ $row->MAILITM_LOCAL_ID }}</small>@endif</td><td><strong>{{ $row->EVENT_NAME ?: 'Evento de entrega IPS' }}</strong><small>Código {{ $row->EVENT_TYPE_CD }}</small></td><td>{{ trim(($row->OFFICE_FCD ?? '').' '.($row->OFFICE_NM ?? '')) ?: 'Oficina no informada' }}</td><td>{{ $row->USER_NM ?: $row->USER_FID ?: 'Usuario no informado por IPS' }}@if($row->USER_FID)<small>ID IPS: {{ $row->USER_FID }}</small>@endif</td><td><span class="delivery-service-pill">{{ $row->MAIL_CLASS_NM ?: $row->MAIL_CLASS_CD ?: 'No informada' }}</span></td></tr>
                     @empty
                         <tr><td colspan="7"><div class="delivery-empty-state"><span><i class="fas fa-inbox"></i></span><strong>No hay entregas para estos filtros</strong><small>Prueba ampliando el periodo o selecciona todas las oficinas.</small></div></td></tr>
                     @endforelse

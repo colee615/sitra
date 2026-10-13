@@ -103,4 +103,16 @@ return [
         'POBoxNumber',
         'IsPosteRestante',
     ],
+    'SP_SET_DOMRECPTLSMAILITEMS' => [
+        'DOM_REC_PID',
+        'MAILITM_PID',
+    ],
+    'SP_SET_RECPTCL' => [
+        'PId', 'FId', 'StateInd', 'PostalStatus', 'DispatchPId', 'MailSubClass', 'Weight', 'MailItemsNo',
+        'RegNo', 'InsNo', 'ReceptacleContentFormat', 'ReceptacleCharacteristic', 'ReceptacleSubType', 'TypeWeight',
+        'ReceptacleOwner', 'SealNo', 'LockUser', 'LockWorkstation', 'ReceptacleSendingCustomer', 'Comments',
+        'DocumentationEnclosed', 'ReceptacleCustomerNo', 'ProductType', 'EventType', 'EventGmtDt',
+        'EventLocalOffset', 'Office', 'User', 'Workstation', 'Condition', 'ConsignmentPId', 'ContainerPId',
+        'NextOffice', 'SecurityCheckPId', 'WORKSTATION_FID',
+    ],
 ];

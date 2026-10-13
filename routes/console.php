@@ -24,12 +24,6 @@ Artisan::command('token:issue {email} {--name=integration-sitra} {--ability=sqls
         return self::FAILURE;
     }
 
-    if (! $user->hasRole('admin')) {
-        $this->error("El usuario {$email} debe tener rol admin para emitir token de integracion.");
-
-        return self::FAILURE;
-    }
-
     $expiresAt = null;
 
     if (is_string($expiresAtInput) && trim($expiresAtInput) !== '') {
@@ -57,10 +51,26 @@ Artisan::command('token:issue {email} {--name=integration-sitra} {--ability=sqls
     }
 
     $abilities = array_values(array_unique(array_filter(array_map('trim', explode(',', $ability)))));
-    $allowed = ['sqlserver.read', 'cds.read', 'ips.read', 'ips.write', 'ips.create', 'ips.events', 'ips.deliver', 'ips.operations'];
+    $allowed = ['sqlserver.read', 'cds.read', 'ips.read', 'ips.write', 'ips.create', 'ips.events', 'ips.deliver', 'ips.operations', 'customs.read', 'customs.process'];
     if ($abilities === [] || array_diff($abilities, $allowed)) {
         $this->error('Permisos admitidos: '.implode(',', $allowed));
 
+        return self::FAILURE;
+    }
+    $isAdmin = $user->hasRole('admin');
+    $customsAbilities = array_intersect($abilities, ['customs.read', 'customs.process']);
+    if (!$isAdmin && array_diff($abilities, ['customs.read', 'customs.process'])) {
+        $this->error("El usuario {$email} no es administrador; solo se emiten tokens aduaneros según sus permisos SITRA.");
+        return self::FAILURE;
+    }
+    if (!$isAdmin && in_array('customs.read', $customsAbilities, true)
+        && !$user->checkPermissionTo('customs.read', 'web') && !$user->checkPermissionTo('customs.process', 'web')) {
+        $this->error("El usuario {$email} no tiene permiso SITRA customs.read.");
+        return self::FAILURE;
+    }
+    if (!$isAdmin && in_array('customs.process', $customsAbilities, true)
+        && !$user->checkPermissionTo('customs.process', 'web')) {
+        $this->error("El usuario {$email} no tiene permiso SITRA customs.process.");
         return self::FAILURE;
     }
     $token = $user->createToken($name, $abilities, $expiresAt);

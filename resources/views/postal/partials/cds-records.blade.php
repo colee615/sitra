@@ -1,7 +1,6 @@
 <section id="customs" class="postal-panel" aria-label="Registros CDS por objeto">
     <div class="postal-section-heading">
         <div><h2><i class="fas fa-clipboard-list"></i> Declaraciones y respuestas de Aduana</h2><span>{{ $cdsPackageGroups->count() }} objeto(s) postal(es) · CDS</span></div>
-        <a class="btn btn-outline-primary" href="{{ route('postal.customs.remittance', ['codigos'=>$code]) }}"><i class="fas fa-file-export"></i> Preparar remisión</a>
     </div>
     <p class="postal-note">Cada registro CDS reúne aquí sus declaraciones y respuestas. El estado aduanero no confirma una entrega al destinatario.</p>
     @if($cdsPackageGroups->count() > 1)

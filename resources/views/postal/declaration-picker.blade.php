@@ -24,7 +24,7 @@
                             <p class="postal-note mb-0">Estado: {{ $declaration['state'] ?? 'No informado' }} · ID CDS {{ $declaration['id'] }}</p>
                         </div>
                         <a class="btn btn-primary" target="_blank" rel="noopener"
-                           href="{{ route('postal.cds.declaration.print', ['codigo' => $code, 'declaracion' => $declaration['id']]) }}">
+                           href="{{ route('postal.declaration.print', ['codigo' => $code, 'declaracion' => $declaration['id']]) }}">
                             <i class="fas fa-print" aria-hidden="true"></i> Imprimir CN23
                         </a>
                     </div>

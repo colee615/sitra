@@ -4,8 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Services\Postal\PostalWorkspace;
 use App\Services\Postal\PostalActivityReport;
-use App\Services\Postal\CustomsRemittanceBuilder;
 use App\Services\Postal\ReceptacleSearchService;
+use App\Services\SqlServerSearchService;
 use App\Support\IpsEventTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
@@ -16,19 +16,14 @@ use Throwable;
 
 class PostalIntelligenceController extends Controller
 {
-    public function index(Request $request, PostalWorkspace $workspace)
+    public function index(Request $request, PostalWorkspace $workspace, SqlServerSearchService $packageSearch)
     {
-        return $this->renderSection($request, $workspace, 'conjunto');
+        return $this->renderSection($request, $workspace, $packageSearch);
     }
 
-    public function ips(Request $request, PostalWorkspace $workspace)
+    public function ips(Request $request)
     {
-        return $this->renderSection($request, $workspace, 'ips');
-    }
-
-    public function cds(Request $request, PostalWorkspace $workspace)
-    {
-        return $this->renderSection($request, $workspace, 'cds');
+        return redirect()->route('postal.combined', $request->query());
     }
 
     public function customsDeclarationPrint(Request $request, PostalWorkspace $workspace)
@@ -222,291 +217,66 @@ class PostalIntelligenceController extends Controller
         ])->header('Cache-Control', 'private, no-store')->header('X-Robots-Tag', 'noindex, nofollow');
     }
 
-    public function customsRemittance(Request $request, CustomsRemittanceBuilder $builder, ReceptacleSearchService $receptacles)
+    private function renderSection(Request $request, PostalWorkspace $workspace, SqlServerSearchService $packageSearch)
     {
-        return response()->view('postal.customs-remittance', $this->customsRemittanceData($request, $builder, $receptacles))
-            ->header('Cache-Control', 'private, no-store');
-    }
-
-    public function customsRemittancePrint(Request $request, CustomsRemittanceBuilder $builder, ReceptacleSearchService $receptacles)
-    {
-        $data = $this->customsRemittanceData($request, $builder, $receptacles);
-        abort_unless($data['manifest'] && $data['manifest']['codes'], 422, 'Ingresa códigos y consulta CDS antes de preparar la impresión.');
-
-        return response()->view('postal.customs-remittance-print', $data)->header('Cache-Control', 'private, no-store');
-    }
-
-    public function customsRemittanceCsv(Request $request, CustomsRemittanceBuilder $builder, ReceptacleSearchService $receptacles)
-    {
-        $data = $this->customsRemittanceData($request, $builder, $receptacles);
-        abort_unless($data['manifest'] && $data['manifest']['codes'], 422, 'Ingresa códigos y consulta CDS antes de descargar el listado.');
-        $manifest = $data['manifest'];
-        $sourceBag = $data['marbete'];
-        $filename = 'remision-aduana-'.now(config('postal.timezone'))->format('Ymd-His').'.csv';
-
-        return response()->streamDownload(function () use ($manifest, $sourceBag) {
-            $stream = fopen('php://output', 'w');
-            fwrite($stream, "\xEF\xBB\xBF");
-            fputcsv($stream, [
-                'Marbete / saca de origen', 'Código consultado', 'Código postal CDS', 'Identificador local', 'ID paquete CDS', 'ID declaración',
-                'Estado CDS', 'Estado declaración', 'Respuesta Aduana', 'Remitente', 'País de origen',
-                'Destinatario', 'País de destino', 'Naturaleza', 'Peso bruto declarado', 'Descripción artículo',
-                'Unidades', 'Valor artículo', 'Moneda', 'Peso neto', 'País de fabricación', 'Documentos declarados',
-            ]);
-
-            $writeRow = static function (array $row) use ($stream, $sourceBag): void {
-                array_unshift($row, $sourceBag);
-                $safe = array_map(static function ($cell) {
-                    $value = (string) ($cell ?? '');
-                    return preg_match('/^[\s]*[=+@\-\t\r]/', $value) ? "'".$value : $value;
-                }, $row);
-                fputcsv($stream, $safe);
-            };
-
-            foreach ($manifest['packages'] as $group) {
-                foreach ($group['records'] ?? [[
-                    'package' => $group['package'], 'declarations' => $group['declarations'], 'responses' => $group['responses'],
-                ]] as $record) {
-                    $package = $record['package'];
-                    $packageCode = $package->MAIL_OBJECT_ID ?? '';
-                    $localCode = $package->MAIL_OBJECT_LOCAL_ID ?? $package->MAIL_OBJECT_LOCAL_ID2 ?? '';
-                    $matchedCode = implode(' / ', $group['matched_codes']);
-                    $responseText = collect($record['responses'])->map(fn ($response) => implode(': ', array_filter([
-                        $response['decision'] ?? null,
-                        $response['state'] ?? null,
-                    ])))->filter()->implode(' | ');
-
-                    if (!$record['declarations']) {
-                        $writeRow([$matchedCode, $packageCode, $localCode, $package->MAIL_OBJECT_PID ?? '', '',
-                            $package->MAIL_STATE_NM ?? '', 'Registro CDS sin declaración', $responseText, '', '', '', '', '', '', '', '', '', '', '', '', '']);
-                        continue;
-                    }
-
-                    foreach ($record['declarations'] as $declaration) {
-                        $fields = $declaration['data']['fields'] ?? [];
-                        $pieces = $declaration['data']['pieces'] ?? [];
-                        $documents = collect($declaration['data']['documents'] ?? [])->map(function ($document) {
-                            $values = collect($document['fields'] ?? [])->map(fn ($value, $key) => $key.'='.$value)->implode(' ');
-                            return trim(($document['type'] ?? 'Documento').($values ? ' '.$values : ''));
-                        })->implode(' | ');
-                        if (!$pieces) $pieces = [[]];
-
-                        foreach ($pieces as $piece) {
-                            $writeRow([
-                                $matchedCode, $packageCode, $localCode, $package->MAIL_OBJECT_PID ?? '', $declaration['id'] ?? '',
-                                $package->MAIL_STATE_NM ?? '', $declaration['state'] ?? 'Estado no informado', $responseText,
-                                $fields['SNm'] ?? '', $declaration['countries'][$fields['SCtr'] ?? ''] ?? $fields['SCtr'] ?? '',
-                                $fields['RNm'] ?? '', $declaration['countries'][$fields['RCtr'] ?? ''] ?? $fields['RCtr'] ?? '',
-                                $declaration['nature'] ?? $fields['NTypDesc'] ?? $fields['NTyp'] ?? '', $fields['GWgt'] ?? '',
-                                $piece['Desc'] ?? '', $piece['No'] ?? '', $piece['Amt'] ?? '', $piece['Cur'] ?? '', $piece['NWgt'] ?? '',
-                                $declaration['countries'][$piece['OCtr'] ?? ''] ?? $piece['OCtr'] ?? '', $documents,
-                            ]);
-                        }
-                    }
-                }
-            }
-
-            foreach ($manifest['missing_codes'] as $code) {
-                $writeRow([$code, '', '', '', '', '', 'No encontrado en CDS', '', '', '', '', '', '', '', '', '', '', '', '', '', '']);
-            }
-            foreach ($manifest['unconfirmed_codes'] ?? [] as $code) {
-                $writeRow([$code, '', '', '', '', '', 'No confirmado: límite de resultados CDS', '', '', '', '', '', '', '', '', '', '', '', '', '', '']);
-            }
-            fclose($stream);
-        }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8', 'Cache-Control' => 'private, no-store']);
-    }
-
-    private function customsRemittanceData(Request $request, CustomsRemittanceBuilder $builder, ReceptacleSearchService $receptacles): array
-    {
+        $section = 'conjunto';
         $validated = $request->validate([
-            'codigos' => ['nullable', 'string', 'max:3000'],
-            'marbete' => ['nullable', 'string', 'max:80'],
-            'seleccionados' => ['sometimes', 'array', 'max:50'],
-            'seleccionados.*' => ['required', 'string', 'max:35'],
+            'codigo' => ['nullable', 'string', 'max:35'],
+            'buscar' => ['nullable', 'string', 'max:80'],
+            'desde' => ['nullable', 'date_format:Y-m-d'],
+            'hasta' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:desde'],
+            'por_pagina' => ['nullable', 'integer', 'in:25,50,100'],
+            'page' => ['nullable', 'integer', 'min:1'],
         ]);
-        $selectedCodes = $validated['seleccionados'] ?? [];
-        $input = $selectedCodes
-            ? implode("\n", $selectedCodes)
-            : trim((string) ($validated['codigos'] ?? ''));
-        $manifest = null;
-        $error = null;
-        $bagIdentifier = trim((string) ($validated['marbete'] ?? ''));
-        $bagResult = null;
-        $bagRows = [];
-        $bagError = null;
-        $bagIndexTruncated = false;
-
-        if ($input !== '') {
-            if (!config('postal.cds_enabled')) {
-                $error = 'La conexión CDS está deshabilitada. Contacta al administrador para habilitar la consulta.';
-            } else {
-                try {
-                    $manifest = $builder->build($input);
-                    $manifest['generated_at'] = now(config('postal.timezone'));
-                } catch (ValidationException $exception) {
-                    throw $exception;
-                } catch (Throwable $exception) {
-                    Log::warning('Customs remittance unavailable', ['exception' => get_class($exception)]);
-                    $error = 'No se pudo consultar CDS. No se generó el listado; revisa la conexión e intenta de nuevo.';
-                }
-            }
-        }
-
-        if ($bagIdentifier !== '') {
-            if (!Gate::allows('postal.ips')) {
-                $bagError = 'Para consultar el contenido de un marbete necesitas permiso de lectura IPS. Puedes usar la búsqueda manual por códigos.';
-            } else {
-                try {
-                    $bagResult = $receptacles->search($bagIdentifier);
-                    if (count($bagResult['receptacles'] ?? []) === 1) {
-                        $items = collect($bagResult['items'] ?? []);
-                        $identifiers = $items->flatMap(fn ($item) => array_filter([
-                            $item->MAILITM_FID ?? null,
-                            $item->MAILITM_LOCAL_ID ?? null,
-                        ]))->unique()->values()->all();
-
-                        if ($identifiers && config('postal.cds_enabled')) {
-                            try {
-                                $index = $builder->indexForPackages($identifiers);
-                                $bagIndexTruncated = $index['truncated'];
-                                foreach ($items as $item) {
-                                    $itemCodes = array_values(array_filter([
-                                        strtoupper(trim((string) ($item->MAILITM_FID ?? ''))),
-                                        strtoupper(trim((string) ($item->MAILITM_LOCAL_ID ?? ''))),
-                                    ]));
-                                    // An S10 can have several CDS objects. The builder returns one
-                                    // consolidated group with every matching object and declaration.
-                                    $group = collect($index['packages'])->first(fn ($candidate) => array_intersect($itemCodes, $candidate['matched_codes']) !== []);
-                                    $hasDeclaration = $group && ($group['has_active_declaration'] ?? count($group['declarations']) > 0);
-                                    $package = $group['package'] ?? null;
-                                    $selectCode = $package?->MAIL_OBJECT_ID ?: $package?->MAIL_OBJECT_LOCAL_ID ?: $package?->MAIL_OBJECT_LOCAL_ID2;
-                                    $status = $hasDeclaration
-                                        ? 'Con declaración CDS'
-                                        : ($group
-                                            ? (($index['declarations_truncated'] ?? false) ? 'No confirmado por límite de consulta' : (($group['deleted_declaration_count'] ?? 0) > 0 ? 'Solo declaración eliminada' : 'Registro CDS sin declaración'))
-                                            : ($bagIndexTruncated ? 'No confirmado por límite de consulta' : 'No encontrado en CDS'));
-                                    $bagRows[] = [
-                                        'item' => $item,
-                                        'code' => $itemCodes[0] ?? '',
-                                        'group' => $group,
-                                        'has_declaration' => (bool) $hasDeclaration,
-                                        'has_any_declaration' => (bool) ($group && count($group['declarations']) > 0),
-                                        'cds_match' => $hasDeclaration ? 'declared' : ($group
-                                            ? (($group['deleted_declaration_count'] ?? 0) > 0 ? 'deleted' : 'record_only')
-                                            : (($bagIndexTruncated || ($index['declarations_truncated'] ?? false)) ? 'unknown' : 'missing')),
-                                        'declaration_count' => count($group['declarations'] ?? []),
-                                        'declaration_states' => collect($group['declarations'] ?? [])->map(function ($declaration) {
-                                            $stage = $declaration['workflow_stage'] ?? $declaration['state'] ?? 'Estado no informado';
-                                            return $stage.(!empty($declaration['content_summary']) ? ' · '.$declaration['content_summary'] : '');
-                                        })->unique()->implode('; '),
-                                        'select_code' => $selectCode,
-                                        'status' => $status,
-                                    ];
-                                }
-                            } catch (ValidationException $exception) {
-                                throw $exception;
-                            } catch (Throwable $exception) {
-                                Log::warning('Customs receptacle declaration index unavailable', ['exception' => get_class($exception)]);
-                                $bagError = 'Se encontró el marbete, pero no se pudo cruzar con CDS. No se marcaron paquetes como disponibles para remisión.';
-                            }
-                        } elseif (!config('postal.cds_enabled')) {
-                            $bagError = 'Se encontró el marbete, pero la conexión CDS no está habilitada para comprobar sus declaraciones.';
-                        }
-                    }
-                } catch (ValidationException $exception) {
-                    $bagError = collect($exception->errors())->flatten()->first() ?? 'La saca contiene identificadores que no se pueden consultar en CDS.';
-                } catch (Throwable $exception) {
-                    Log::warning('Customs receptacle lookup unavailable', ['exception' => get_class($exception)]);
-                    $bagError = 'No se pudo consultar el marbete en IPS. Revisa la conexión e intenta de nuevo.';
-                }
-            }
-        }
-
-        if ($bagResult && count($bagResult['receptacles'] ?? []) === 1 && !$bagRows) {
-            foreach ($bagResult['items'] ?? [] as $item) {
-                $bagRows[] = [
-                    'item' => $item,
-                    'code' => strtoupper(trim((string) ($item->MAILITM_FID ?: $item->MAILITM_LOCAL_ID ?: ''))),
-                    'group' => null,
-                    'has_declaration' => false,
-                    'has_any_declaration' => false,
-                    'cds_match' => 'unknown',
-                    'declaration_count' => 0,
-                    'declaration_states' => '',
-                    'select_code' => null,
-                    'status' => $bagError ? 'CDS no consultable' : 'Sin identificador para CDS',
-                ];
-            }
-        }
-
-        return [
-            'input' => $input,
-            'selectedCodes' => $selectedCodes,
-            'manifest' => $manifest,
-            'error' => $error,
-            'marbete' => $bagIdentifier,
-            'bagResult' => $bagResult,
-            'bag' => count($bagResult['receptacles'] ?? []) === 1 ? $bagResult['receptacles'][0] : null,
-            'bagRows' => $bagRows,
-            'bagDeclarationCount' => count(array_filter($bagRows, fn ($row) => $row['has_declaration'])),
-            'bagError' => $bagError,
-            'bagIndexTruncated' => $bagIndexTruncated,
-            'canUseBag' => Gate::allows('postal.ips'),
-        ];
-    }
-
-    private function renderSection(Request $request, PostalWorkspace $workspace, string $section)
-    {
-        $request->validate(['codigo' => ['nullable', 'string', 'max:35']]);
-        $allowIps = $section !== 'cds' && Gate::allows('postal.ips');
-        $allowCds = $section !== 'ips' && Gate::allows('postal.cds');
-        $data = $workspace->search((string) $request->input('codigo', ''), $allowIps, $allowCds);
+        $allowIps = Gate::allows('postal.ips');
+        $allowCds = Gate::allows('postal.cds');
+        $data = $workspace->search((string) ($validated['codigo'] ?? ''), $allowIps, $allowCds);
         $data['section'] = $section;
         $data['showIps'] = $allowIps;
         $data['showCds'] = $allowCds;
+        $data['packageRowsPage'] = null;
+        $data['packageListError'] = null;
+        $data['packageListFilters'] = [
+            'buscar' => trim((string) ($validated['buscar'] ?? '')),
+            'desde' => $validated['desde'] ?? '',
+            'hasta' => $validated['hasta'] ?? '',
+            'por_pagina' => (int) ($validated['por_pagina'] ?? 25),
+        ];
+
+        if ($data['code'] === '' && $allowIps) {
+            try {
+                $packageRowsPage = $packageSearch
+                    ->onConnection(config('postal.ips_read_connection', config('tracking.sqlserver.connection', 'sqlsrv')))
+                    ->packageRegister($data['packageListFilters']);
+                $data['packageRowsPage'] = $packageRowsPage;
+                $data['sources']['IPS'] = $packageRowsPage->total() > 0 ? 'ok' : 'empty';
+            } catch (Throwable $exception) {
+                Log::warning('IPS package register unavailable', ['exception' => get_class($exception)]);
+                $data['packageListError'] = 'No se pudo consultar el registro de paquetes IPS en este momento. Vuelve a intentarlo.';
+                $data['sources']['IPS'] = 'unavailable';
+            }
+        }
 
         // Keep view data explicit. In this project the Blade compiler can leave
         // @php blocks as literal text, which means their variables never exist.
         $sectionDetails = [
-            'ips' => [
-                'route' => 'postal.ips',
-                'target' => 'paquetes IPS',
-                'title' => 'Paquetes y movimientos IPS',
-                'description' => 'Busca envíos, movimientos, operadores y despachos registrados en IPS.',
-            ],
-            'cds' => [
-                'route' => 'postal.cds',
-                'target' => 'Aduana CDS',
-                'title' => 'Declaraciones y trámites CDS',
-                'description' => 'Consulta declaraciones, contenido, decisiones y usuarios que registraron trámites en CDS.',
-            ],
-            'conjunto' => [
-                'route' => 'postal.combined',
-                'target' => 'IPS y CDS',
-                'title' => 'Consulta IPS + CDS',
-                'description' => 'Busca una vez y compara el recorrido postal de IPS con la información aduanera de CDS.',
-            ],
-        ][$section];
+            'route' => 'postal.combined',
+            'target' => 'IPS y CDS',
+            'title' => 'Consulta S10 · IPS + CDS',
+        ];
 
         $data['searchRoute'] = route($sectionDetails['route']);
         $data['searchTarget'] = $sectionDetails['target'];
         $data['sectionTitle'] = $sectionDetails['title'];
-        $data['sectionDescription'] = $sectionDetails['description'];
         $data['sourceLabels'] = [
             'idle' => 'Listo para consultar',
             'ok' => 'Datos encontrados',
-            'empty' => 'Sin registros para este código',
+            'empty' => 'Sin registros para esta consulta',
             'unavailable' => 'No disponible. Vuelve a consultar.',
             'disabled' => 'Conexión pendiente de configurar',
             'forbidden' => 'Sin permiso de consulta',
             'not_queried' => 'No se consulta en esta vista',
         ];
-        if ($section === 'ips') {
-            $data['sources']['CDS'] = 'not_queried';
-        } elseif ($section === 'cds') {
-            $data['sources']['IPS'] = 'not_queried';
-        }
-
         $data['ipsPackage'] = collect($data['ips']['packageRows'] ?? [])->first();
         $data['cdsPackageGroups'] = collect($data['cds']['packages'] ?? [])->map(function ($package) use ($data) {
             $packageId = (string) ($package->MAIL_OBJECT_PID ?? '');
@@ -684,10 +454,14 @@ class PostalIntelligenceController extends Controller
         return response()->streamDownload(function () use ($result) {
             $stream = fopen('php://output', 'w');
             fwrite($stream, "\xEF\xBB\xBF");
-            fputcsv($stream, ['Código del paquete','ID local','Fecha y hora del evento (GMT)','Movimiento registrado','Estado actual IPS','Oficina del evento','Siguiente oficina','Registrado por','Clase postal','Origen','Destino','Peso (kg)','Saca / marbete','Motivo de retención (código)','Condición registrada','Lugar de intento de entrega']);
+            fputcsv($stream, ['Código del paquete','ID local','Fecha y hora local del evento','Movimiento registrado','Estado actual IPS','Oficina del evento','Siguiente oficina','Registrado por','Clase postal','Origen','Destino','Peso (kg)','Saca / marbete','Motivo de retención (código)','Condición registrada','Lugar de intento de entrega']);
             foreach ($result['rows'] as $row) {
+                $eventTime = IpsEventTime::present($row->EVENT_GMT_DT, $row->EVENT_LOCAL_OFFSET ?? null);
+                $localDate = !empty($eventTime['event_at_local']) && isset($eventTime['event_offset_minutes'])
+                    ? CarbonImmutable::parse($eventTime['event_at_local'])->format('d/m/Y H:i:s')
+                    : 'Hora local no informada';
                 $cells = [
-                    $row->MAILITM_FID, $row->MAILITM_LOCAL_ID, $row->EVENT_GMT_DT, $row->EVENT_NAME ?: 'Movimiento sin descripción',
+                    $row->MAILITM_FID, $row->MAILITM_LOCAL_ID, $localDate, $row->EVENT_NAME ?: 'Movimiento sin descripción',
                     $row->POSTAL_STATUS_NM, trim(($row->OFFICE_FCD ?? '').' '.($row->OFFICE_NM ?? '')),
                     trim(($row->NEXT_OFFICE_FCD ?? '').' '.($row->NEXT_OFFICE_NM ?? '')),
                     $row->USER_NM ?: $row->USER_FID, $row->MAIL_CLASS_NM ?: $row->MAIL_CLASS_CD,
@@ -869,6 +643,54 @@ class PostalIntelligenceController extends Controller
         return preg_match('/^[\s]*[=+@\-\t\r]/', $value) ? "'".$value : $value;
     }
 
+    public function dispatchSacks(ReceptacleSearchService $service, string $codigo)
+    {
+        try {
+            $result = $service->search($codigo);
+        } catch (Throwable $exception) {
+            Log::warning('IPS dispatch sacks modal unavailable', ['exception' => get_class($exception)]);
+
+            return response()->view('postal.partials.dispatch-sacks-modal-body', [
+                'error' => 'No se pudieron consultar las sacas de este despacho. Vuelve a intentarlo.',
+                'result' => null,
+            ]);
+        }
+
+        abort_unless(($result['search_type'] ?? null) === 's8', 404);
+
+        return response()->view('postal.partials.dispatch-sacks-modal-body', [
+            'error' => null,
+            'result' => $result,
+        ])->header('Cache-Control', 'private, no-store');
+    }
+
+    public function receptaclePackagesModal(ReceptacleSearchService $service, string $codigo)
+    {
+        try {
+            $result = $service->search($codigo);
+        } catch (Throwable $exception) {
+            Log::warning('IPS receptacle packages modal unavailable', ['exception' => get_class($exception)]);
+
+            return response()->view('postal.partials.receptacle-packages-modal-body', [
+                'error' => 'No se pudieron consultar los paquetes de esta saca. Vuelve a intentarlo.',
+                'identifier' => $codigo,
+                'result' => null,
+                'bag' => null,
+            ])->header('Cache-Control', 'private, no-store');
+        }
+
+        abort_unless(($result['search_type'] ?? null) !== 's8', 404);
+        $bags = collect($result['receptacles'] ?? []);
+        $bag = $bags->count() === 1 ? $bags->first() : null;
+
+        return response()->view('postal.partials.receptacle-packages-modal-body', [
+            'error' => null,
+            'identifier' => $codigo,
+            'result' => $result,
+            'bag' => $bag,
+        ])->header('Cache-Control', 'private, no-store');
+    }
+
     public function dispatches(Request $request, ReceptacleSearchService $service)
     {
         $validated = $request->validate([
@@ -899,15 +721,37 @@ class PostalIntelligenceController extends Controller
 
     public function receptacles(Request $request, ReceptacleSearchService $receptacles)
     {
-        $request->validate(['marbete'=>['nullable','string','max:80']]);
+        $validated = $request->validate([
+            'marbete'=>['nullable','string','max:80'],
+            'buscar'=>['nullable','string','max:80'],
+            'desde'=>['nullable','date_format:Y-m-d'],
+            'hasta'=>['nullable','date_format:Y-m-d','after_or_equal:desde'],
+            'por_pagina'=>['nullable','integer','in:25,50,100'],
+        ]);
+        $filters = [
+            'buscar'=>trim((string)($validated['buscar'] ?? '')),
+            'desde'=>$validated['desde'] ?? null,
+            'hasta'=>$validated['hasta'] ?? null,
+            'por_pagina'=>(int)($validated['por_pagina'] ?? 25),
+        ];
+        $identifier = (string)($validated['marbete'] ?? '');
+        $detailMode = $identifier !== '';
         $result = null;
         $error = null;
-        if ($request->filled('marbete')) {
+        $receptacleRows = null;
+        if ($detailMode) {
             try {
-                $result = $receptacles->search($request->string('marbete')->toString());
+                $result = $receptacles->search($identifier);
             } catch (\Throwable $exception) {
                 \Illuminate\Support\Facades\Log::warning('IPS receptacle lookup unavailable',['exception'=>get_class($exception)]);
                 $error = 'No se pudo consultar IPS en este momento. Vuelve a intentarlo.';
+            }
+        } else {
+            try {
+                $receptacleRows = $receptacles->listReceptacles($filters);
+            } catch (\Throwable $exception) {
+                \Illuminate\Support\Facades\Log::warning('IPS receptacle register unavailable',['exception'=>get_class($exception)]);
+                $error = 'No se pudo consultar el registro de sacas IPS en este momento. Vuelve a intentarlo.';
             }
         }
         $reconciliation = null;
@@ -927,7 +771,15 @@ class PostalIntelligenceController extends Controller
                 'can_compare' => !$result['truncated'],
             ];
         }
-        return response()->view('postal.receptacles',['identifier'=>(string)$request->input('marbete',''),'result'=>$result,'error'=>$error,'reconciliation'=>$reconciliation])
+        return response()->view('postal.receptacles',[
+            'identifier'=>$identifier,
+            'detailMode'=>$detailMode,
+            'filters'=>$filters,
+            'receptacleRows'=>$receptacleRows,
+            'result'=>$result,
+            'error'=>$error,
+            'reconciliation'=>$reconciliation,
+        ])
             ->header('Cache-Control','private, no-store');
     }
 
@@ -975,7 +827,7 @@ class PostalIntelligenceController extends Controller
             $declarations = collect($data['cds']['declarations'] ?? []);
 
             if ($declarations->count() === 1) {
-                return redirect()->route('postal.cds.declaration.print', [
+                return redirect()->route('postal.declaration.print', [
                     'codigo' => $request->string('codigo')->toString(),
                     'declaracion' => $declarations->first()['id'],
                 ]);

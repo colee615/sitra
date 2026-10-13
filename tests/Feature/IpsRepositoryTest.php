@@ -20,7 +20,7 @@ class IpsRepositoryTest extends TestCase
         $db->statement('CREATE TABLE dbo.L_MAILITMS (MAILITM_PID TEXT, MAILITM_FID TEXT, MAILITM_LOCAL_ID TEXT, MAILITM_WEIGHT NUMERIC, ORIG_COUNTRY_CD TEXT, DEST_COUNTRY_CD TEXT, STATE_IND_CD INTEGER, EVT_TYPE_CD INTEGER, EVT_GMT_DT TEXT, EVT_OFFICE_CD INTEGER, POSTAL_STATUS_CD INTEGER)');
         $db->statement('CREATE TABLE dbo.C_EVENT_TYPES (EVENT_TYPE_CD INTEGER, EVENT_TYPE_NM TEXT)');
         $db->statement('CREATE TABLE dbo.N_OWN_OFFICES (OWN_OFFICE_CD INTEGER, OFFICE_NM TEXT)');
-        $db->statement('CREATE TABLE dbo.L_MAILITM_EVENTS (MAILITM_PID TEXT, EVENT_TYPE_CD INTEGER, EVENT_GMT_DT TEXT, EVENT_OFFICE_CD INTEGER, NEXT_OFFICE_CD INTEGER)');
+        $db->statement('CREATE TABLE dbo.L_MAILITM_EVENTS (MAILITM_PID TEXT, EVENT_TYPE_CD INTEGER, EVENT_GMT_DT TEXT, EVENT_LOCAL_OFFSET INTEGER, EVENT_OFFICE_CD INTEGER, NEXT_OFFICE_CD INTEGER)');
         $db->statement('CREATE TABLE dbo.L_MAILITM_CUSTOMERS (MAILITM_PID TEXT, SENDER_PAYEE_IND TEXT, CUSTOMER_NAME TEXT, CUSTOMER_FORENAME TEXT, CUSTOMER_PHONE_NO TEXT, CUSTOMER_CITY TEXT, CUSTOMER_ADDRESS TEXT)');
         $db->table('dbo.N_OWN_OFFICES')->insert(['OWN_OFFICE_CD' => 1, 'OFFICE_NM' => 'Oficina de prueba']);
         foreach ([32, 37, 61, 74, 75] as $code) {
@@ -138,6 +138,26 @@ class IpsRepositoryTest extends TestCase
         $this->assertCount(0, $this->ips->packages(['status' => 'reception', 'office_cd' => 1])['data']);
     }
 
+    public function test_international_sack_arrival_is_pending_only_at_its_declared_destination(): void
+    {
+        $db = DB::connection('ips_fixture');
+        $db->table('dbo.L_MAILITMS')->insert([
+            'MAILITM_PID' => 'SACK', 'MAILITM_FID' => 'SACK', 'MAILITM_LOCAL_ID' => 'LOCAL-SACK',
+            'MAILITM_WEIGHT' => 1, 'ORIG_COUNTRY_CD' => 'MY', 'DEST_COUNTRY_CD' => 'BO',
+            'STATE_IND_CD' => 6, 'EVT_TYPE_CD' => 13, 'EVT_GMT_DT' => '2026-01-02 12:00:00', 'EVT_OFFICE_CD' => 1,
+        ]);
+        $db->table('dbo.L_MAILITM_EVENTS')->insert([
+            'MAILITM_PID' => 'SACK', 'EVENT_TYPE_CD' => 13, 'EVENT_GMT_DT' => '2026-01-02 12:00:00',
+            'EVENT_OFFICE_CD' => 1, 'NEXT_OFFICE_CD' => 2,
+        ]);
+
+        $destination = $this->ips->packages(['status' => 'pending', 'office_cd' => 2, 'q' => 'SACK']);
+        $this->assertSame(['SACK'], array_column($destination['data'], 'codigo'));
+        $this->assertSame(['EMG'], $destination['data'][0]['allowed_actions']);
+        $this->assertSame([], $this->ips->packages(['status' => 'pending', 'office_cd' => 1, 'q' => 'SACK'])['data']);
+        $this->assertSame([], $this->ips->packages(['status' => 'pending', 'office_cd' => 3, 'q' => 'SACK'])['data']);
+    }
+
     public function test_technical_update_preserves_operational_stage_and_expected_event(): void
     {
         $db = DB::connection('ips_fixture');
@@ -149,5 +169,10 @@ class IpsRepositoryTest extends TestCase
         $this->assertSame('received', $package['stage']['key']);
         $this->assertContains('EMI', $package['allowed_actions']);
         $this->assertNotContains('EMG', $package['allowed_actions']);
+
+        $workflowPackage = $this->ips->packages(['q' => 'OFFICE', 'office_cd' => 1, 'event_cd' => 32]);
+        $this->assertSame(['OFFICE'], array_column($workflowPackage['data'], 'codigo'));
+        $this->assertSame(61, $workflowPackage['data'][0]['event_cd']);
+        $this->assertSame(32, $workflowPackage['data'][0]['operational_event_cd']);
     }
 }

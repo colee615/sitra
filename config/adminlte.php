@@ -312,35 +312,20 @@ return [
         ],
         ['header' => 'SITRA POSTAL'],
         [
-            'text' => 'Panel IPS + CDS',
+            'text' => 'Dashboard',
             'url' => '/dashboard/conjunto',
             'icon' => 'fas fa-chart-pie',
             'can' => 'postal.access',
             'active' => ['dashboard/conjunto'],
         ],
         [
-            'text' => 'Gestión diaria',
-            'url' => '/centro-de-trabajo',
-            'icon' => 'fas fa-th-large',
-        ],
-        [
             'text' => 'Envíos y logística',
             'icon' => 'fas fa-boxes',
             'can' => 'postal.access',
             'submenu' => [
-                ['text'=>'Expediente IPS + CDS','url'=>'/conjunto','active'=>['conjunto','consultas'],'icon'=>'fas fa-project-diagram','can'=>'postal.access'],
                 ['text'=>'Despachos (S8)','url'=>'/despachos','icon'=>'fas fa-plane-departure','can'=>'postal.ips'],
                 ['text'=>'Sacas y marbetes (S9)','url'=>'/marbetes','icon'=>'fas fa-barcode','can'=>'postal.ips'],
-                ['text'=>'Paquetes IPS','url'=>'/ips','icon'=>'fas fa-globe-americas','can'=>'postal.ips'],
-            ],
-        ],
-        [
-            'text' => 'Gestión aduanera',
-            'icon' => 'fas fa-clipboard-list',
-            'can' => 'postal.cds',
-            'submenu' => [
-                ['text'=>'Declaraciones CDS','url'=>'/cds','active'=>['cds','cds/*','aduana'],'icon'=>'fas fa-clipboard-list','can'=>'postal.cds'],
-                ['text'=>'Remisión a Aduana','url'=>'/aduana/remision','active'=>['aduana/remision','aduana/remision/*','aduana/remision.csv'],'icon'=>'fas fa-file-export','can'=>'postal.cds'],
+                ['text'=>'Paquete (S10)','url'=>'/conjunto','active'=>['conjunto','consultas'],'icon'=>'fas fa-barcode','can'=>'postal.access'],
             ],
         ],
         [
@@ -395,6 +380,7 @@ return [
         JeroenNoten\LaravelAdminLte\Menu\Filters\HrefFilter::class,
         JeroenNoten\LaravelAdminLte\Menu\Filters\SearchFilter::class,
         JeroenNoten\LaravelAdminLte\Menu\Filters\ActiveFilter::class,
+        App\Menu\Filters\PostalDispatchActiveFilter::class,
         JeroenNoten\LaravelAdminLte\Menu\Filters\ClassesFilter::class,
         JeroenNoten\LaravelAdminLte\Menu\Filters\LangFilter::class,
         JeroenNoten\LaravelAdminLte\Menu\Filters\DataFilter::class,

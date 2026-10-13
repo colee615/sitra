@@ -13,3 +13,69 @@
 @media(max-width:767px){.delivery-report{padding:10px 8px 26px}.delivery-hero{padding:18px;min-height:auto;gap:12px}.delivery-brand-mark{width:47px;height:47px;border-radius:12px;font-size:20px}.delivery-hero h1{font-size:21px}.delivery-hero p{font-size:11px}.delivery-hero-source{display:none}.delivery-toolbar{align-items:flex-start;flex-direction:column}.delivery-toolbar-actions{width:100%;flex-wrap:wrap}.delivery-button{padding:8px 10px}.delivery-filter-panel{padding:15px 13px}.delivery-filter-heading{align-items:flex-start}.delivery-filter-heading p{max-width:230px;line-height:1.4}.delivery-operator-chip{font-size:0;padding:9px}.delivery-operator-chip i{font-size:13px;margin:0}.delivery-filter-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.delivery-filter-wide{grid-column:span 2}.delivery-filter-footer{align-items:stretch;flex-direction:column}.delivery-filter-footer>.delivery-button{width:100%}.delivery-presets{justify-content:flex-start}.delivery-period-line{align-items:flex-start;flex-direction:column}.delivery-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.delivery-kpi{min-height:105px;padding:12px 10px;gap:8px}.delivery-kpi-icon{width:30px;height:30px;flex-basis:30px}.delivery-kpi-label{font-size:8px}.delivery-kpi strong{font-size:21px}.delivery-kpi .delivery-kpi-name{font-size:12px}.delivery-kpi small{font-size:8px}.delivery-insight-strip{align-items:flex-start;flex-wrap:wrap;font-size:9px}.delivery-insight-average{margin:3px 0 0 22px;padding:0;border:0;width:100%}.delivery-analysis-grid{grid-template-columns:1fr}.delivery-trend-panel,.delivery-service-panel{grid-column:auto}.delivery-panel{padding:13px 12px}.delivery-trend-chart{height:160px;gap:1px}.delivery-trend-value{font-size:7px}.delivery-trend-column small{font-size:7px}.delivery-panel-heading h2{font-size:11px}.delivery-detail-panel>.delivery-panel-heading{align-items:flex-start}.delivery-detail-footer{align-items:flex-start;flex-direction:column}.delivery-detail-badge{font-size:0}.delivery-detail-badge i{font-size:12px;margin:0}}
 @media(max-width:390px){.delivery-kpis{grid-template-columns:1fr}.delivery-kpi{min-height:84px}.delivery-filter-grid{grid-template-columns:1fr}.delivery-filter-wide{grid-column:auto}.delivery-hero h1{font-size:19px}.delivery-trend-chart{height:140px}.delivery-toolbar-actions .delivery-button{font-size:9px}}
 .delivery-active-filters{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:-4px 2px 10px;color:#8091a1;font-size:9px}.delivery-active-filters>span{font-weight:700;color:#698098;margin-right:2px}.delivery-active-filters>span i{color:#18868d;margin-right:4px}.delivery-active-filters>b{display:inline-flex;align-items:center;gap:4px;padding:5px 8px;border:1px solid #e1e8ee;border-radius:20px;background:#fff;color:#49647d;font-size:8px;font-weight:700}.delivery-active-filters>b i{color:#16838d;font-size:8px}
+
+/* Improve readability on wide report screens. */
+@media(min-width:768px){
+    .delivery-report{padding:26px 28px 46px}
+    .delivery-toolbar{padding:17px 3px 16px}
+    .delivery-toolbar-title{font-size:15px}
+    .delivery-toolbar-title small{font-size:13px}
+    .delivery-button{padding:11px 15px;font-size:13px}
+    .delivery-filter-panel{padding:22px 24px 19px;margin:18px 0 16px}
+    .delivery-filter-heading{margin-bottom:18px}
+    .delivery-filter-heading h2{font-size:15px}
+    .delivery-filter-heading p{font-size:12px}
+    .delivery-operator-chip{font-size:12px}
+    .delivery-filter-grid{gap:14px}
+    .delivery-filter-grid label>span{font-size:12px}
+    .delivery-filter-grid input,.delivery-filter-grid select{height:44px;font-size:13px;padding:0 12px}
+    .delivery-filter-footer{margin-top:17px}
+    .delivery-presets button,.delivery-presets a{padding:8px 11px;font-size:12px}
+    .delivery-validation{font-size:13px;padding:11px 13px}
+    .delivery-period-line{font-size:12px;margin:14px 3px}
+    .delivery-kpis{gap:14px}
+    .delivery-kpi{min-height:132px;gap:14px;padding:19px 17px}
+    .delivery-kpi-icon{flex-basis:40px;width:40px;height:40px;font-size:16px}
+    .delivery-kpi-label{font-size:11px;min-height:29px}
+    .delivery-kpi strong{font-size:30px}
+    .delivery-kpi small{font-size:11px}
+    .delivery-kpi .delivery-kpi-name{font-size:17px;max-width:240px}
+    .delivery-insight-strip{font-size:12px;padding:12px 15px;margin:12px 0 16px}
+    .delivery-insight-average strong{font-size:16px}
+    .delivery-analysis-grid{gap:15px}
+    .delivery-panel{padding:18px 20px}
+    .delivery-panel-heading{min-height:44px;margin-bottom:16px}
+    .delivery-panel-icon{flex-basis:38px;width:38px;height:38px}
+    .delivery-panel-heading h2{font-size:14px}
+    .delivery-panel-heading p{font-size:11px}
+    .delivery-panel-total{font-size:19px}
+    .delivery-trend-chart{height:220px}
+    .delivery-trend-value{font-size:10px;height:17px;line-height:17px}
+    .delivery-trend-track{width:min(22px,75%)}
+    .delivery-trend-column small{font-size:10px}
+    .delivery-chart-foot{font-size:11px}
+    .delivery-rank-row{padding:10px 6px;gap:11px}
+    .delivery-rank-position{width:30px;height:30px;font-size:11px}
+    .delivery-rank-label strong{font-size:12px}
+    .delivery-rank-label small{font-size:10px}
+    .delivery-rank-value{font-size:14px}
+    .delivery-office-row{padding:10px 5px;gap:11px}
+    .delivery-office-label strong{font-size:11px}
+    .delivery-office-label small{font-size:10px}
+    .delivery-office-row>b,.delivery-service-row strong{font-size:13px}
+    .delivery-service-row{font-size:11px;padding:12px 2px}
+    .delivery-detail-panel{margin-top:16px}
+    .delivery-detail-panel>.delivery-panel-heading{padding:18px 20px 15px}
+    .delivery-detail-badge{font-size:11px}
+    .delivery-detail-table thead th{font-size:10px;padding:12px 13px}
+    .delivery-detail-table tbody td{font-size:11px;padding:12px 13px}
+    .delivery-detail-table td small,.delivery-table-index,.delivery-service-pill{font-size:10px}
+    .delivery-empty-state strong{font-size:13px}
+    .delivery-empty-state small{font-size:11px}
+    .delivery-detail-footer{font-size:10px;padding:12px 18px}
+    .delivery-method-note{font-size:11px}
+    .delivery-error strong{font-size:14px}
+    .delivery-error p{font-size:12px}
+    .delivery-active-filters{font-size:11px}
+    .delivery-active-filters>b{font-size:10px}
+}

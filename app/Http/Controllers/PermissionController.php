@@ -37,13 +37,6 @@ class PermissionController extends Controller
             ->with('success', 'Permiso creado correctamente.');
     }
 
-    public function show($id)
-    {
-        $permission = Permission::find($id);
-
-        return view('permission.show', compact('permission'));
-    }
-
     public function edit($id)
     {
         $permission = Permission::find($id);

@@ -30,10 +30,11 @@ class IpsApiTest extends TestCase
 
     private function delivery(): array
     {
+        $now = now('UTC');
         return [
-            'occurred_at' => '2026-01-02T12:00:00-04:00',
+            'occurred_at' => $now->copy()->setTimezone('America/La_Paz')->format('Y-m-d\TH:i:sP'),
             'office_cd' => 1, 'expected_event_cd' => 75,
-            'expected_event_at' => '2026-01-01T12:00:00+00:00',
+            'expected_event_at' => $now->copy()->subMinute()->format('Y-m-d\TH:i:sP'),
             'signatory' => 'Receptor de prueba',
         ];
     }
@@ -107,13 +108,15 @@ class IpsApiTest extends TestCase
         $this->assertSame(1, $totals->remember(['status' => 'pending'], fn () => 1));
         $workflow = Mockery::mock(IpsWorkflowService::class);
         $workflow->shouldReceive('execute')->once()->with('event', Mockery::on(fn ($v) => $v['event'] === 'EMI' &&
-            $v['codigo'] === 'TEST01' && ! array_key_exists('occurred_at', $v) && ! array_key_exists('office_cd', $v)
+            $v['codigo'] === 'TEST01' && isset($v['occurred_at']) && ! array_key_exists('office_cd', $v)
         ))->andReturn(['codigo' => 'TEST01', 'event' => 'EMI', 'event_cd' => 37]);
         $this->app->instance(IpsWorkflowService::class, $workflow);
 
         $this->withToken($this->token(['ips.deliver']))->withHeader('Idempotency-Key', 'delivery-minimal-01')
             ->postJson('/api/v1/ips/paquetes/TEST01/entrega', [])
-            ->assertOk()->assertJsonPath('status', 'succeeded');
+            ->assertOk()->assertJsonPath('status', 'succeeded')->assertHeader('Idempotency-Replayed', 'false');
+        $this->postJson('/api/v1/ips/paquetes/TEST01/entrega', [])
+            ->assertOk()->assertJsonPath('status', 'succeeded')->assertHeader('Idempotency-Replayed', 'true');
         $this->assertSame(0, $totals->remember(['status' => 'pending'], fn () => 0));
     }
 

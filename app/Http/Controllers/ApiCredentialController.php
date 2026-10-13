@@ -20,6 +20,8 @@ class ApiCredentialController extends Controller
         'ips.events' => 'Registrar eventos IPS',
         'ips.deliver' => 'Registrar entregas IPS',
         'ips.operations' => 'Consultar operaciones IPS',
+        'customs.read' => 'Consultar expedientes aduaneros IPS/CDS',
+        'customs.process' => 'Registrar operación aduanera y eventos IPS',
     ];
 
     public function index(Request $request)
@@ -171,6 +173,48 @@ class ApiCredentialController extends Controller
                 'path' => '/api/tracking/cds/declaraciones',
                 'description' => 'Lista todos los paquetes CDS (50 por página; max 100); codes[]=CODIGO filtra. También acepta POST para lotes.',
                 'ability' => 'cds.read',
+            ],
+            [
+                'group' => 'Aduana',
+                'method' => 'GET',
+                'path' => '/api/v1/aduana/despachos/{codigo}',
+                'description' => 'Consulta un despacho S8 y sus sacas S9 relacionadas en IPS.',
+                'ability' => 'customs.read',
+            ],
+            [
+                'group' => 'Aduana',
+                'method' => 'GET',
+                'path' => '/api/v1/aduana/sacas/{codigo}',
+                'description' => 'Consulta una saca, paquetes enlazados en IPS y sus declaraciones CDS.',
+                'ability' => 'customs.read',
+            ],
+            [
+                'group' => 'Aduana',
+                'method' => 'POST',
+                'path' => '/api/v1/aduana/sacas/{codigo}/eventos',
+                'description' => 'Registra recepción o apertura física del marbete en IPS. Requiere Idempotency-Key y physical_receipt_confirmed=true.',
+                'ability' => 'customs.process',
+            ],
+            [
+                'group' => 'Aduana',
+                'method' => 'POST',
+                'path' => '/api/v1/aduana/sesiones',
+                'description' => 'Abre el expediente local de un marbete que ya figura abierto en IPS.',
+                'ability' => 'customs.process',
+            ],
+            [
+                'group' => 'Aduana',
+                'method' => 'POST',
+                'path' => '/api/v1/aduana/sesiones/{id}/escaneos',
+                'description' => 'Registra un escaneo físico y coteja el paquete contra la saca IPS.',
+                'ability' => 'customs.process',
+            ],
+            [
+                'group' => 'Aduana',
+                'method' => 'POST',
+                'path' => '/api/v1/aduana/sesiones/{id}/envios/{codigo}/{accion}',
+                'description' => 'Registra presentación a Aduana, resultado aduanero en IPS o retorno físico desde Aduana. Requiere Idempotency-Key.',
+                'ability' => 'customs.process',
             ],
             [
                 'group' => 'IPS',

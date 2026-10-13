@@ -55,19 +55,6 @@ class RoleHasPermissionController extends Controller
     }
 
     /**
-     * Display the specified resource.
-     *
-     * @param  int $id
-     * @return \Illuminate\Http\Response
-     */
-    public function show($id)
-    {
-        $roleHasPermission = RoleHasPermission::find($id);
-
-        return view('role-has-permission.show', compact('roleHasPermission'));
-    }
-
-    /**
      * Show the form for editing the specified resource.
      *
      * @param  int $id

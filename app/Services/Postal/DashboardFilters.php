@@ -15,7 +15,7 @@ class DashboardFilters
             'from' => ['nullable', 'date_format:Y-m-d'],
             'to' => ['nullable', 'date_format:Y-m-d'],
             'operator' => ['nullable', Rule::in(['BOA'])],
-            'office' => ['nullable', 'string', 'regex:/^[A-Za-z0-9_-]{1,10}$/'],
+            'office' => ['nullable', 'string', 'regex:/^(?!-\\d+$)[A-Za-z0-9_-]{1,10}$/'],
             'cds_office' => ['nullable', 'string', 'regex:/^[A-Za-z0-9_-]{1,10}$/'],
             'service' => ['nullable', 'string', 'max:3'],
             'mail_category' => ['nullable', 'string', 'regex:/^[A-Za-z0-9_-]{1,5}$/'],

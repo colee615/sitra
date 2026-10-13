@@ -38,18 +38,15 @@ class PostalNavigationTest extends TestCase
         if ($admin) $user->assignRole(Role::findOrCreate('admin', 'web'));
         $this->mock(SqlServerSearchService::class)->shouldNotReceive('search');
         $this->mock(CdsRepository::class)->shouldNotReceive('search');
-        $response = $this->actingAs($user)->get('/dashboard')->assertOk();
+        $response = $this->followingRedirects()->actingAs($user)->get('/dashboard')->assertOk();
         $xpath = $this->html($response->getContent());
         $sidebar = '//aside[contains(@class, "main-sidebar")]';
         $ips = $admin || in_array('ips.read', $permissions, true);
         $cds = $admin || in_array('cds.read', $permissions, true);
         $routes = [
             'postal.combined' => $ips || $cds,
-            'postal.ips' => $ips,
             'postal.dispatches' => $ips,
             'postal.receptacles' => $ips,
-            'postal.cds' => $cds,
-            'postal.customs.remittance' => $cds,
             'postal.operations' => $ips,
             'operaciones.index' => in_array('ips.read', $permissions, true),
             'sqlserver.datos' => in_array('ips.read', $permissions, true),
@@ -58,11 +55,10 @@ class PostalNavigationTest extends TestCase
         foreach ($routes as $route => $allowed) {
             $this->assertSame($allowed ? 1 : 0, $xpath->query($sidebar.'//a[@href="'.route($route).'"]')->length, $route);
         }
-        // The old addresses still work, but do not create duplicate menu entries.
+        // The query alias stays available without duplicating the canonical menu entry.
         $this->assertSame(0, $xpath->query($sidebar.'//a[@href="'.route('consultas.index').'"]')->length);
-        $this->assertSame(0, $xpath->query($sidebar.'//a[@href="'.route('postal.customs').'"]')->length);
-        if ($cds) {
-            $this->assertSame(1, $xpath->query($sidebar.'//li[./a/p[contains(., "Gestión aduanera")]]//a[@href="'.route('postal.customs.remittance').'"]')->length);
+        foreach (['Gestión aduanera', 'Declaraciones CDS', 'Remisión a Aduana', 'Operativa aduanera'] as $label) {
+            $this->assertSame(0, $xpath->query($sidebar.'//a[.//p[contains(normalize-space(.), "'.$label.'")]]')->length, $label);
         }
         if (in_array('ips.read', $permissions, true)) {
             $this->assertSame(1, $xpath->query($sidebar.'//li[./a/p[contains(., "Supervisión del sistema")]]//a[@href="'.route('sqlserver.datos').'"]')->length);
@@ -74,8 +70,6 @@ class PostalNavigationTest extends TestCase
         return [
             'consulta anterior' => ['/consultas', 'postal.combined'],
             'expediente' => ['/conjunto', 'postal.combined'],
-            'CDS' => ['/cds', 'postal.cds'],
-            'aduana anterior' => ['/aduana', 'postal.cds'],
         ];
     }
 

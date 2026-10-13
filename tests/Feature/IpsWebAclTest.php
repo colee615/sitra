@@ -74,7 +74,7 @@ class IpsWebAclTest extends TestCase
         $user = User::factory()->create();
         $user->assignRole(Role::findOrCreate('admin', 'web'));
 
-        $this->actingAs($user)->get('/dashboard')->assertOk()->assertSee('fas fa-globe-americas');
+        $this->followingRedirects()->actingAs($user)->get('/dashboard')->assertOk()->assertSee('fas fa-globe-americas');
     }
 
     public function test_admin_navigation_groups_keep_all_postal_and_admin_destinations(): void
@@ -83,17 +83,16 @@ class IpsWebAclTest extends TestCase
         $user->assignRole(Role::findOrCreate('admin', 'web'));
         $user->givePermissionTo(Permission::findByName('ips.read', 'web'));
 
-        $response = $this->actingAs($user)->get('/dashboard')->assertOk();
+        $response = $this->followingRedirects()->actingAs($user)->get('/dashboard')->assertOk();
         foreach ([
-            'Envíos y logística', 'Paquetes IPS', 'Declaraciones CDS', 'Expediente IPS + CDS',
-            'Gestión aduanera', 'Remisión a Aduana', 'Despachos (S8)', 'Sacas y marbetes (S9)',
+            'Envíos y logística', 'Paquete (S10)', 'Despachos (S8)', 'Sacas y marbetes (S9)',
             'Operación en oficina', 'Actividad por oficina', 'Movimientos y entregas',
             'Datos técnicos de IPS', 'Configuración y accesos', 'Reglas de eventos', 'Accesos postales',
             'Supervisión del sistema', 'Rendimiento', 'Registro técnico',
         ] as $label) {
             $response->assertSeeText($label);
         }
-        foreach (['/ips', '/cds', '/aduana/remision', '/conjunto', '/operaciones-postales', '/despachos', '/marbetes', '/operaciones', '/sqlserver/datos', '/tracking-event-rules', '/accesos', '/pulse', '/log-viewer'] as $path) {
+        foreach (['/conjunto', '/operaciones-postales', '/despachos', '/marbetes', '/operaciones', '/sqlserver/datos', '/tracking-event-rules', '/accesos', '/pulse', '/log-viewer'] as $path) {
             $response->assertSee('href="'.url($path).'"', false);
         }
     }
@@ -105,6 +104,6 @@ class IpsWebAclTest extends TestCase
         $user->givePermissionTo(Permission::findByName('ips.read', 'web'));
 
         $this->assertTrue(Gate::forUser($user)->allows('ips.read'));
-        $this->actingAs($user)->get('/dashboard')->assertOk()->assertSee('fas fa-globe-americas');
+        $this->followingRedirects()->actingAs($user)->get('/dashboard')->assertOk()->assertSee('fas fa-globe-americas');
     }
 }

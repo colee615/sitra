@@ -20,7 +20,6 @@ class RoleController extends Controller
 
     public function create()
     {
-        $permissions = Permission::all();
         $role = new Role();
         return view('role.create', compact('role'));
     }
@@ -36,13 +35,6 @@ class RoleController extends Controller
     
         return redirect()->route('roles.index')
             ->with('success', 'Rol creado correctamente.');
-    }
-
-    public function show($id)
-    {
-        $role = Role::find($id);
-
-        return view('role.show', compact('role'));
     }
 
     public function edit($id)
