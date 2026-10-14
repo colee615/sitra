@@ -32,20 +32,16 @@ Route::prefix('v1/ips')->middleware(['auth:sanctum', 'throttle:60,1'])->group(fu
 });
 
 Route::prefix('v1/aduana')->middleware(['auth:sanctum', 'throttle:30,1'])->group(function () {
+    Route::get('consulta/{codigo}', [CustomsOperationsController::class, 'lookup'])
+        ->where('codigo', '[A-Za-z0-9-]{1,35}')->middleware(AuthorizeCustoms::class.':customs.read');
+    Route::get('paquetes/{codigo}', [CustomsOperationsController::class, 'package'])
+        ->where('codigo', '[A-Za-z0-9-]{1,35}')->middleware(AuthorizeCustoms::class.':customs.read');
+    Route::get('declaraciones/{codigo}', [CustomsOperationsController::class, 'declarations'])
+        ->where('codigo', '[A-Za-z0-9-]{1,35}')->middleware(AuthorizeCustoms::class.':customs.read');
     Route::get('despachos/{codigo}', [CustomsOperationsController::class, 'dispatch'])
         ->where('codigo', '[A-Za-z0-9-]{1,35}')->middleware(AuthorizeCustoms::class.':customs.read');
     Route::get('sacas/{codigo}', [CustomsOperationsController::class, 'receptacle'])
         ->where('codigo', '[A-Za-z0-9-]{1,35}')->middleware(AuthorizeCustoms::class.':customs.read');
-    Route::post('sacas/{codigo}/eventos', [CustomsOperationsController::class, 'receptacleEvent'])
-        ->where('codigo', '[A-Za-z0-9-]{1,35}')->middleware(AuthorizeCustoms::class.':customs.process');
-    Route::post('sesiones', [CustomsOperationsController::class, 'openSession'])
-        ->middleware(AuthorizeCustoms::class.':customs.process');
-    Route::post('sesiones/{session}/escaneos', [CustomsOperationsController::class, 'scan'])
-        ->whereUuid('session')->middleware(AuthorizeCustoms::class.':customs.process');
-    Route::post('sesiones/{session}/envios/{codigo}/{action}', [CustomsOperationsController::class, 'packageAction'])
-        ->whereUuid('session')->where('codigo', '[A-Za-z0-9-]{1,35}')
-        ->whereIn('action', ['present', 'decision', 'return'])
-        ->middleware(AuthorizeCustoms::class.':customs.process');
 });
 
 Route::middleware(['auth:sanctum'])->group(function () {

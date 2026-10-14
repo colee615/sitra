@@ -6,7 +6,7 @@
     <div class="d-flex justify-content-between align-items-center flex-wrap">
         <div>
             <h1 class="mb-1">Credenciales API</h1>
-            <p class="text-muted mb-0">Consulta las APIs de SITRA y administra los tokens de esta cuenta administradora.</p>
+            <p class="text-muted mb-0">Consulta las APIs de SITRA y administra las credenciales de todas las cuentas administradoras.</p>
         </div>
         <div class="mt-2 mt-md-0">
             <button class="btn btn-warning mr-2" type="button" data-toggle="modal" data-target="#createApiCredentialModal">
@@ -97,11 +97,11 @@
         <section class="card api-credentials-card">
             <div class="card-header bg-white border-0 pt-4 px-4">
                 <h2 class="card-title h5 mb-1">Credenciales creadas</h2>
-                <p class="text-muted mb-0">URLs y tokens de esta cuenta administradora. Los tokens emitidos desde esta pantalla se guardan cifrados; los tokens anteriores siguen ocultos si no tienen secreto recuperable.</p>
+                <p class="text-muted mb-0">URLs y tokens de todas las cuentas con rol administrador. Puedes consultar y administrar sus credenciales desde aquí. Los tokens emitidos desde esta pantalla se guardan cifrados; los anteriores siguen ocultos si no tienen secreto recuperable.</p>
             </div>
             <div class="card-body pt-3">
                 @if ($tokens->isEmpty())
-                    <div class="alert alert-light border mb-0">Todavía no hay credenciales API para esta cuenta.</div>
+                    <div class="alert alert-light border mb-0">Todavía no hay credenciales API para las cuentas administradoras.</div>
                 @else
                     <div class="table-responsive">
                         <table class="table table-bordered table-hover api-credentials-table mb-0">
@@ -120,6 +120,7 @@
                                     <tr>
                                         <td>
                                             <strong>{{ $token->name }}</strong>
+                                            <div><small class="text-muted">Cuenta: {{ $token->owner_name }}</small></div>
                                             <div><small class="text-muted">Creado: {{ $token->created_at?->format('d/m/Y H:i') }}</small></div>
                                             <div><small class="text-muted">Vence: {{ $token->expires_at?->format('d/m/Y H:i') ?? 'Sin vencimiento' }}</small></div>
                                         </td>

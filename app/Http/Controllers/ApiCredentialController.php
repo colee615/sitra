@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Laravel\Sanctum\PersonalAccessToken;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class ApiCredentialController extends Controller
@@ -21,18 +23,25 @@ class ApiCredentialController extends Controller
         'ips.deliver' => 'Registrar entregas IPS',
         'ips.operations' => 'Consultar operaciones IPS',
         'customs.read' => 'Consultar expedientes aduaneros IPS/CDS',
-        'customs.process' => 'Registrar operación aduanera y eventos IPS',
     ];
 
     public function index(Request $request)
     {
-        $tokens = $request->user()->tokens()->latest()->get()->map(function ($token) {
-            $token->plain_text_token = $token->secret_encrypted
-                ? Crypt::decryptString($token->secret_encrypted)
-                : null;
+        $tokens = User::role('admin')
+            ->with(['tokens' => fn ($query) => $query->latest()])
+            ->get(['id', 'name'])
+            ->flatMap(function (User $owner) {
+                return $owner->tokens->map(function ($token) use ($owner) {
+                    $token->owner_name = $owner->name;
+                    $token->plain_text_token = $token->secret_encrypted
+                        ? Crypt::decryptString($token->secret_encrypted)
+                        : null;
 
-            return $token;
-        });
+                    return $token;
+                });
+            })
+            ->sortByDesc('created_at')
+            ->values();
 
         return view('api-credentials.index', [
             'apis' => $this->apiCatalog(),
@@ -72,7 +81,7 @@ class ApiCredentialController extends Controller
 
     public function revoke(Request $request, int $token): RedirectResponse
     {
-        $request->user()->tokens()->whereKey($token)->firstOrFail()->delete();
+        $this->findAdminToken($token)->delete();
 
         return redirect()->route('api-credentials.index')
             ->with('success', 'La credencial fue revocada.');
@@ -80,7 +89,7 @@ class ApiCredentialController extends Controller
 
     public function grantCdsRead(Request $request, int $token): RedirectResponse
     {
-        $credential = $request->user()->tokens()->whereKey($token)->firstOrFail();
+        $credential = $this->findAdminToken($token);
         $abilities = $credential->abilities ?? [];
 
         if (! in_array('cds.read', $abilities, true)) {
@@ -94,15 +103,16 @@ class ApiCredentialController extends Controller
 
     public function rotate(Request $request, int $token): RedirectResponse
     {
-        $oldToken = $request->user()->tokens()->whereKey($token)->firstOrFail();
+        $oldToken = $this->findAdminToken($token);
+        $owner = $oldToken->tokenable;
         $expiresAt = $oldToken->expires_at;
 
         if ($expiresAt !== null && $expiresAt->isPast()) {
             $expiresAt = now()->addDays(90);
         }
 
-        $newToken = DB::transaction(function () use ($request, $oldToken, $expiresAt) {
-            $token = $request->user()->createToken(
+        $newToken = DB::transaction(function () use ($owner, $oldToken, $expiresAt) {
+            $token = $owner->createToken(
                 $oldToken->name,
                 $oldToken->abilities ?? [],
                 $expiresAt,
@@ -177,44 +187,37 @@ class ApiCredentialController extends Controller
             [
                 'group' => 'Aduana',
                 'method' => 'GET',
+                'path' => '/api/v1/aduana/consulta/{codigo}',
+                'description' => 'Consulta general completa: detecta S8, S9, S10 o código local y devuelve la ficha IPS/CDS correspondiente con sus relaciones.',
+                'ability' => 'customs.read',
+            ],
+            [
+                'group' => 'Aduana',
+                'method' => 'GET',
+                'path' => '/api/v1/aduana/paquetes/{codigo}',
+                'description' => 'Resumen S10: datos del paquete, hasta 10 movimientos y solo códigos relacionados de sacas, despachos y declaraciones. Usa la ruta de declaraciones para consultar el detalle CDS.',
+                'ability' => 'customs.read',
+            ],
+            [
+                'group' => 'Aduana',
+                'method' => 'GET',
+                'path' => '/api/v1/aduana/declaraciones/{codigo}',
+                'description' => 'Declaraciones CDS y respuestas del S10, con articulos, documentos y eventos por registro.',
+                'ability' => 'customs.read',
+            ],
+            [
+                'group' => 'Aduana',
+                'method' => 'GET',
                 'path' => '/api/v1/aduana/despachos/{codigo}',
-                'description' => 'Consulta un despacho S8 y sus sacas S9 relacionadas en IPS.',
+                'description' => 'Resumen S8: número de despacho, origen y destino, peso, salida, transporte y sacas declaradas/vinculadas.',
                 'ability' => 'customs.read',
             ],
             [
                 'group' => 'Aduana',
                 'method' => 'GET',
                 'path' => '/api/v1/aduana/sacas/{codigo}',
-                'description' => 'Consulta una saca, paquetes enlazados en IPS y sus declaraciones CDS.',
+                'description' => 'Resumen S9: número y peso de la saca, despacho relacionado, paquetes y conteo de eventos/declaraciones; los detalles extensos se consultan en sus rutas S8, S10 y declaraciones.',
                 'ability' => 'customs.read',
-            ],
-            [
-                'group' => 'Aduana',
-                'method' => 'POST',
-                'path' => '/api/v1/aduana/sacas/{codigo}/eventos',
-                'description' => 'Registra recepción o apertura física del marbete en IPS. Requiere Idempotency-Key y physical_receipt_confirmed=true.',
-                'ability' => 'customs.process',
-            ],
-            [
-                'group' => 'Aduana',
-                'method' => 'POST',
-                'path' => '/api/v1/aduana/sesiones',
-                'description' => 'Abre el expediente local de un marbete que ya figura abierto en IPS.',
-                'ability' => 'customs.process',
-            ],
-            [
-                'group' => 'Aduana',
-                'method' => 'POST',
-                'path' => '/api/v1/aduana/sesiones/{id}/escaneos',
-                'description' => 'Registra un escaneo físico y coteja el paquete contra la saca IPS.',
-                'ability' => 'customs.process',
-            ],
-            [
-                'group' => 'Aduana',
-                'method' => 'POST',
-                'path' => '/api/v1/aduana/sesiones/{id}/envios/{codigo}/{accion}',
-                'description' => 'Registra presentación a Aduana, resultado aduanero en IPS o retorno físico desde Aduana. Requiere Idempotency-Key.',
-                'ability' => 'customs.process',
             ],
             [
                 'group' => 'IPS',
@@ -301,5 +304,16 @@ class ApiCredentialController extends Controller
                 'ability' => 'ips.deliver',
             ],
         ];
+    }
+
+    private function findAdminToken(int $token): PersonalAccessToken
+    {
+        $adminIds = User::role('admin')->select((new User())->getQualifiedKeyName());
+
+        return PersonalAccessToken::query()
+            ->where('tokenable_type', (new User())->getMorphClass())
+            ->whereIn('tokenable_id', $adminIds)
+            ->whereKey($token)
+            ->firstOrFail();
     }
 }

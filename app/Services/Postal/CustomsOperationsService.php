@@ -41,8 +41,15 @@ final class CustomsOperationsService
     public function inspectReceptacle(string $code, ?int $officeCd = null): array
     {
         $result = $this->receptacles->search($code);
-        if (($result['search_type'] ?? null) === 's8' || count($result['receptacles'] ?? []) !== 1) {
-            throw new IpsOperationException('Selecciona un único marbete S9 para ver sus paquetes.', 422);
+        if (($result['search_type'] ?? null) === 's8') {
+            throw new IpsOperationException('El código corresponde a un despacho S8; se requiere una saca S9.', 422);
+        }
+        $receptacleCount = count($result['receptacles'] ?? []);
+        if ($receptacleCount === 0) {
+            throw new IpsOperationException('No se encontró la saca S9 en IPS.', 404);
+        }
+        if ($receptacleCount !== 1) {
+            throw new IpsOperationException('El código identifica más de una saca; proporciona un S9 único.', 422);
         }
         if (!empty($result['truncated'])) {
             throw new IpsOperationException('La consulta del marbete está incompleta. No se habilitó el trámite.', 409);
@@ -50,6 +57,21 @@ final class CustomsOperationsService
 
         $bag = $result['receptacles'][0];
         $packages = collect($result['items'] ?? []);
+        $knownWeightPackages = $packages->filter(fn ($item) => is_numeric($item->MAILITM_WEIGHT ?? null));
+        $declaredPackageCount = is_numeric($bag->RECPTCL_MAILITMS_NO ?? null)
+            ? (int) $bag->RECPTCL_MAILITMS_NO : null;
+        $linkedPackageCount = $packages->count();
+        $isTruncated = (bool) ($result['truncated'] ?? false);
+        $reconciliation = [
+            'declared_count' => $declaredPackageCount,
+            'linked_count' => $linkedPackageCount,
+            'count_matches' => $declaredPackageCount === null || $isTruncated
+                ? null : $declaredPackageCount === $linkedPackageCount,
+            'item_weight_total_kg' => (float) $knownWeightPackages->sum(fn ($item) => (float) $item->MAILITM_WEIGHT),
+            'items_without_weight' => $packages->count() - $knownWeightPackages->count(),
+            'bag_weight_kg' => is_numeric($bag->RECPTCL_WEIGHT ?? null) ? (float) $bag->RECPTCL_WEIGHT : null,
+            'can_compare' => !$isTruncated,
+        ];
         $codes = $packages->flatMap(fn ($item) => array_filter([
             ShipmentCode::normalize((string) ($item->MAILITM_FID ?? '')),
             ShipmentCode::normalize((string) ($item->MAILITM_LOCAL_ID ?? '')),
@@ -104,6 +126,18 @@ final class CustomsOperationsService
                 ->orderByDesc('occurred_at')->limit(200)->get();
         }
 
+        $dispatch = !empty($bag->DESPTCH_PID) ? [
+            'pid' => (string) $bag->DESPTCH_PID,
+            'code' => $bag->DESPTCH_FID ?? null,
+            'origin' => $bag->ORIG_OFFICE_FCD ?? null,
+            'destination' => $bag->DEST_OFFICE_FCD ?? null,
+            'departure_at' => $bag->DESPTCH_DEPARTURE_DT ?? null,
+            'sacks_declared' => is_numeric($bag->DESPTCH_RECPTCLS_NO ?? null)
+                ? (int) $bag->DESPTCH_RECPTCLS_NO : null,
+            'weight_kg' => is_numeric($bag->DESPTCH_WEIGHT ?? null) ? (float) $bag->DESPTCH_WEIGHT : null,
+            'transport' => $bag->CONVEYANCE_TYPE_CD ?? null,
+        ] : null;
+
         $rows = $packages->map(function ($item) use ($declarationsByCode, $sessionItems, $officeCd) {
             $code = ShipmentCode::normalize((string) ($item->MAILITM_FID ?: $item->MAILITM_LOCAL_ID ?: ''));
             $localCode = ShipmentCode::normalize((string) ($item->MAILITM_LOCAL_ID ?? ''));
@@ -124,6 +158,13 @@ final class CustomsOperationsService
             return [
                 'pid'=>(string) ($item->MAILITM_PID ?? ''), 'code'=>$code,
                 'local_code'=>$localCode, 'weight_kg'=>$item->MAILITM_WEIGHT ?? null,
+                'class_code'=>$item->MAIL_CLASS_CD ?? null,
+                'class_name'=>$item->MAIL_CLASS_NAME ?? null,
+                'origin_country_code'=>$item->ORIG_COUNTRY_CD ?? null,
+                'origin_country'=>$item->ORIGIN_COUNTRY ?? null,
+                'destination_country'=>$item->DEST_COUNTRY ?? null,
+                'postal_status_code'=>$item->POSTAL_STATUS_CD ?? null,
+                'postal_status'=>$item->POSTAL_STATUS_NAME ?? null,
                 'event_name'=>$item->EVENT_NAME_ES ?: ($item->EVENT_NAME ?? null),
                 'event_cd'=>(int) ($item->EVT_TYPE_CD ?? 0), 'event_at'=>$item->EVT_GMT_DT ?? null,
                 'office_cd'=>isset($item->EVT_OFFICE_CD) ? (int) $item->EVT_OFFICE_CD : null,
@@ -139,9 +180,17 @@ final class CustomsOperationsService
 
         return [
             'identifier'=>strtoupper(trim($code)), 'receptacle'=>$bag,
-            'dispatch'=>$result['dispatches'][0] ?? null,
+            'code_analysis'=>$result['code_analysis'] ?? null,
+            'summary'=>[
+                'package_count'=>$linkedPackageCount,
+                'declared_package_count'=>$declaredPackageCount,
+                'count_matches'=>$reconciliation['count_matches'],
+                'reconciliation'=>$reconciliation,
+            ],
+            'dispatch'=>$dispatch,
             'receptacle_events'=>$result['events'] ?? [],
             'packages'=>$rows,
+            'manifests'=>$result['manifests'] ?? [],
             'cds'=>$cds,
             'office'=>$officeData,
             'session'=>$session,

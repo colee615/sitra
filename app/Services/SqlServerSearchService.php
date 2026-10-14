@@ -36,6 +36,7 @@ class SqlServerSearchService
         $ediRows = collect();
         $customsRows = collect();
         $contentPieceRows = collect();
+        $truncated = false;
         $tableMap = $this->tableMap();
 
         if ($codigo !== '') {
@@ -303,7 +304,7 @@ class SqlServerSearchService
 
             $ediRows = collect(DB::connection($connection)->select(
                 "
-                SELECT TOP 200
+                SELECT TOP 201
                     RTRIM(LTRIM(mi.MAILITM_FID)) AS MAILITM_FID,
                     ne.EVENT_TYPE_CD,
                     COALESCE(ct.LOCAL_EVENT_TYPE_NM, c.EVENT_TYPE_NM) AS EVENT_TYPE_NM_ES,
@@ -325,6 +326,10 @@ class SqlServerSearchService
                 ",
                 $params
             ));
+            if ($ediRows->count() > 200) {
+                $truncated = true;
+                $ediRows = $ediRows->take(200)->values();
+            }
 
             $customsRows = collect(DB::connection($connection)->select(
                 "
@@ -343,7 +348,7 @@ class SqlServerSearchService
 
             $contentPieceRows = collect(DB::connection($connection)->select(
                 "
-                SELECT TOP 200
+                SELECT TOP 201
                     cp.IDENTIFIER,
                     cp.NUMBER_OF_UNITS,
                     cp.DESCRIPTION,
@@ -360,6 +365,10 @@ class SqlServerSearchService
                 ",
                 $params
             ));
+            if ($contentPieceRows->count() > 200) {
+                $truncated = true;
+                $contentPieceRows = $contentPieceRows->take(200)->values();
+            }
         }
 
         return [
@@ -373,6 +382,7 @@ class SqlServerSearchService
             'ediRows' => $ediRows,
             'customsRows' => $customsRows,
             'contentPieceRows' => $contentPieceRows,
+            'truncated' => $truncated,
             'tableMap' => $tableMap,
             'similarCodes' => $this->similarCodes($codigo),
         ];

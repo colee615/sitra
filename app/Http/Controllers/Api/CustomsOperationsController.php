@@ -4,96 +4,116 @@ namespace App\Http\Controllers\Api;
 
 use App\Exceptions\IpsOperationException;
 use App\Http\Controllers\Controller;
+use App\Services\Postal\CustomsApiPresenter;
 use App\Services\Postal\CustomsOperationsService;
+use App\Services\Postal\PostalWorkspace;
+use App\Services\Postal\ShipmentCode;
+use App\Services\Postal\UpuDispatchIdentifier;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
 final class CustomsOperationsController extends Controller
 {
-    public function dispatch(string $codigo, CustomsOperationsService $customs): JsonResponse
+    public function lookup(string $codigo, CustomsOperationsService $customs, PostalWorkspace $workspace, CustomsApiPresenter $presenter): JsonResponse
     {
-        return $this->respond(fn () => ['data'=>$customs->inspectDispatch($codigo)]);
+        return $this->respond(function () use ($codigo, $customs, $workspace, $presenter) {
+            $codigo = ShipmentCode::normalize($codigo);
+            $analysis = UpuDispatchIdentifier::parse($codigo);
+
+            if (($analysis['type'] ?? null) === 's8') {
+                $result = $customs->inspectDispatch($codigo);
+                if (empty($result['dispatches'])) {
+                    throw new IpsOperationException('No se encontró el despacho S8 en IPS.', 404);
+                }
+
+                return ['data' => $presenter->general('S8', $result)];
+            }
+
+            if (($analysis['type'] ?? null) === 's9') {
+                $result = $customs->inspectReceptacle($codigo);
+
+                return ['data' => $presenter->general('S9', $result)];
+            }
+
+            $result = $workspace->search($codigo, true, true);
+            $sources = collect($result['sources'] ?? []);
+            if (!$sources->contains('ok')) {
+                if ($sources->contains('unavailable')) {
+                    throw new IpsOperationException('IPS o CDS no está disponible; la consulta general quedó incompleta.', 503);
+                }
+                throw new IpsOperationException('No se encontró el paquete o identificador en IPS/CDS.', 404);
+            }
+
+            $type = ShipmentCode::describe($codigo)['type'] === 'S10' ? 'S10' : 'Código local';
+
+            return ['data' => $presenter->general($type, $result)];
+        });
     }
 
-    public function receptacle(Request $request, string $codigo, CustomsOperationsService $customs): JsonResponse
+    public function package(string $codigo, PostalWorkspace $workspace, CustomsApiPresenter $presenter): JsonResponse
     {
-        $filters = $request->validate(['office_cd'=>['nullable','integer','min:1','max:32767']]);
-        return $this->respond(fn () => ['data'=>$customs->inspectReceptacle($codigo, isset($filters['office_cd']) ? (int) $filters['office_cd'] : null)]);
+        return $this->respond(function () use ($codigo, $workspace, $presenter) {
+            $result = $workspace->search($codigo, true, true);
+            $this->assertWorkspaceFound($result);
+
+            return ['data' => $presenter->package($result)];
+        });
     }
 
-    public function receptacleEvent(Request $request, string $codigo, CustomsOperationsService $customs): JsonResponse
+    public function declarations(string $codigo, PostalWorkspace $workspace, CustomsApiPresenter $presenter): JsonResponse
     {
-        $data = $request->validate([
-            'event'=>['required','in:RECEPTACLE_RECEIVE,RECEPTACLE_OPEN'],
-            'office_cd'=>['required','integer','min:1','max:32767'],
-            'physical_receipt_confirmed'=>['required','accepted'],
-        ]);
-        $key = $request->header('Idempotency-Key');
-        validator(['key'=>$key], ['key'=>['required','string','min:8','max:128','regex:/^[A-Za-z0-9_.:-]+$/']])->validate();
+        return $this->respond(function () use ($codigo, $workspace, $presenter) {
+            $result = $workspace->search($codigo, true, true);
+            $this->assertWorkspaceFound($result);
 
-        return $this->respond(function () use ($customs, $codigo, $data, $request, $key) {
-            $operation = $customs->recordReceptacleEvent(
-                $codigo, $data['event'], (int) $data['office_cd'], (int) $request->user()->id, $key, 'customs_api'
-            );
-            return ['status'=>$operation['body']['status'] ?? 'uncertain', 'result'=>$operation['body'] ?? [],
-                'replayed'=>(bool) ($operation['replayed'] ?? false)];
-        }, true);
+            return ['data' => $presenter->declarations($result)];
+        });
     }
 
-    public function openSession(Request $request, CustomsOperationsService $customs): JsonResponse
+    public function dispatch(string $codigo, CustomsOperationsService $customs, CustomsApiPresenter $presenter): JsonResponse
     {
-        $data = $request->validate([
-            'codigo'=>['required','string','max:35'], 'office_cd'=>['required','integer','min:1','max:32767'],
-        ]);
-        return $this->respond(fn () => ['data'=>(array) $customs->openSession(
-            $data['codigo'], (int) $data['office_cd'], (int) $request->user()->id, 'customs_api'
+        return $this->respond(function () use ($codigo, $customs, $presenter) {
+            $result = $customs->inspectDispatch($codigo);
+            if (empty($result['dispatches'])) {
+                throw new IpsOperationException('No se encontro el despacho S8 en IPS.', 404);
+            }
+
+            return ['data' => $presenter->dispatch($result)];
+        });
+    }
+
+    public function receptacle(string $codigo, CustomsOperationsService $customs, CustomsApiPresenter $presenter): JsonResponse
+    {
+        return $this->respond(fn () => ['data'=>$presenter->receptacle(
+            $customs->inspectReceptacle($codigo)
         )]);
     }
 
-    public function scan(Request $request, string $session, CustomsOperationsService $customs): JsonResponse
+    private function assertWorkspaceFound(array $result): void
     {
-        $data = $request->validate(['codigo'=>['required','string','max:35']]);
-        return $this->respond(fn () => ['data'=>$customs->recordPhysicalScan(
-            $session, $data['codigo'], (int) $request->user()->id
-        )]);
+        $sources = collect($result['sources'] ?? []);
+        if ($sources->contains('ok')) {
+            return;
+        }
+
+        if ($sources->contains('unavailable')) {
+            throw new IpsOperationException('IPS o CDS no esta disponible; la consulta quedo incompleta.', 503);
+        }
+
+        throw new IpsOperationException('No se encontro el paquete o identificador en IPS/CDS.', 404);
     }
 
-    public function packageAction(Request $request, string $session, string $codigo, string $action, CustomsOperationsService $customs): JsonResponse
-    {
-        $request->merge(['action'=>$action]);
-        $data = $request->validate([
-            'action'=>['required','in:present,decision,return'],
-            'customs_office_cd'=>['required_if:action,present','nullable','integer','min:1','max:32767'],
-            'customs_office_type_cd'=>['required_if:action,present','nullable','string','max:3','regex:/^[A-Za-z0-9]+$/'],
-            'customs_release_status_cd'=>['required_if:action,decision','nullable','string','max:3','regex:/^[A-Za-z0-9]+$/'],
-            'notes'=>['nullable','string','max:2000'], 'evidence_reference'=>['nullable','string','max:100'],
-            'physical_receipt_confirmed'=>[Rule::excludeIf($action !== 'return'),'required','accepted'],
-        ]);
-        $key = $request->header('Idempotency-Key');
-        validator(['key'=>$key], ['key'=>['required','string','min:8','max:128','regex:/^[A-Za-z0-9_.:-]+$/']])->validate();
-        $data['idempotency_key'] = $key;
-
-        return $this->respond(fn () => $customs->recordCaseAction(
-            $session, $codigo, $action, $data, (int) $request->user()->id, 'customs_api'
-        ), true);
-    }
-
-    private function respond(callable $callback, bool $operation = false): JsonResponse
+    private function respond(callable $callback): JsonResponse
     {
         try {
             $result = $callback();
-            $status = $operation ? (int) ($result['status'] === 'succeeded' ? 200 : ($result['status'] === 'uncertain' ? 503 : 409)) : 200;
-            $response = response()->json($result, $status)->header('Cache-Control', 'no-store');
-            if ($operation) $response->header('Idempotency-Replayed', !empty($result['replayed']) ? 'true' : 'false');
-            return $response;
+            return response()->json($result)->header('Cache-Control', 'no-store');
         } catch (IpsOperationException $exception) {
             return response()->json(['message'=>$exception->getMessage()], $exception->status)->header('Cache-Control', 'no-store');
         } catch (Throwable $exception) {
-            Log::warning('Customs API operation unavailable', ['exception_type'=>$exception::class]);
-            return response()->json(['message'=>'No se pudo completar la operación. Consulta su estado antes de reenviar.'], 503)
+            Log::warning('Customs API query unavailable', ['exception_type'=>$exception::class]);
+            return response()->json(['message'=>'No se pudo completar la consulta aduanera.'], 503)
                 ->header('Cache-Control', 'no-store');
         }
     }
