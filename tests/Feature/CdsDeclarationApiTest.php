@@ -71,6 +71,7 @@ class CdsDeclarationApiTest extends TestCase
             ->assertJsonPath('data.0.declaracion_cds.estado', 'declarada')
             ->assertJsonPath('data.0.declaracion_cds.objetos.0.declaraciones.0.destino_declarado.departamento', 'Tarija')
             ->assertJsonPath('data.0.declaracion_cds.objetos.0.declaraciones.0.destino_declarado.ciudad', 'Tarija')
+            ->assertJsonPath('data.0.declaracion_cds.objetos.0.declaraciones.0.destinatario_declarado.nombre', 'Destinatario')
             ->assertJsonPath('data.0.destinos_declarados.0.departamento', 'Tarija')
             ->assertJsonPath('data.0.declaracion_cds.objetos.0.declaraciones.0.articulos.0.Desc', 'Pieza de prueba');
     }

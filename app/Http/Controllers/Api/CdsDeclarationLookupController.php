@@ -161,6 +161,18 @@ class CdsDeclarationLookupController extends Controller
             'pais_codigo' => $countryCode,
         ];
 
+        $recipient = [
+            'nombre' => $this->nullableString($fields['RNm'] ?? null),
+            'direccion' => $this->nullableString(collect([
+                $fields['RAdL1'] ?? null,
+                $fields['RAdL2'] ?? null,
+            ])->filter(fn ($value): bool => trim((string) $value) !== '')->implode(' ')),
+            'ciudad' => $city,
+            'departamento' => $department,
+            'codigo_postal' => $this->nullableString($fields['RZip'] ?? null),
+            'pais_codigo' => $countryCode,
+        ];
+
         return [
             'id' => $declaration['id'] ?? null,
             'numero' => $declaration['declaration_number'] ?? null,
@@ -168,6 +180,7 @@ class CdsDeclarationLookupController extends Controller
             'etapa' => $declaration['workflow_stage'] ?? null,
             'estado_datos' => $declaration['data_status'] ?? null,
             'destino_declarado' => collect($destination)->contains(fn ($value) => $value !== null) ? $destination : null,
+            'destinatario_declarado' => collect($recipient)->contains(fn ($value) => $value !== null) ? $recipient : null,
             'resumen_contenido' => $declaration['content_summary'] ?? null,
             'cantidad_articulos' => $declaration['piece_count'] ?? 0,
             'cantidad_documentos' => $declaration['document_count'] ?? 0,
