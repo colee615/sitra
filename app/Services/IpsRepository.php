@@ -20,6 +20,10 @@ class IpsRepository
         $db = $this->connection();
         $exchangeOffices = $this->exchangeOfficeCds();
         $receptacleOffice = $office ?? ($exchangeOffices[0] ?? null);
+        $deliveryAgents = $db->table('dbo.N_DELIVERY_AGENTS')->whereIn('VALID_IND', ['1', '3']);
+        if ($office !== null) {
+            $deliveryAgents->where('DELIVERY_AGENT_FULL_CD', 'like', $this->deliveryAgentRegionPrefix($office).'%');
+        }
 
         return [
             'events' => $db->table('dbo.C_EVENT_TYPES as e')
@@ -44,7 +48,7 @@ class IpsRepository
                 }),
             'non_delivery_reasons' => $db->table('dbo.C_NON_DELIVERY_REASONS')->whereIn('VALID_IND', ['1', '3'])->get(['NON_DELIVERY_REASON_CD', 'NON_DELIVERY_REASON_NM']),
             'non_delivery_measures' => $db->table('dbo.C_NON_DELIVERY_MEASURES')->whereIn('VALID_IND', ['1', '3'])->get(['NON_DELIVERY_MEASURE_CD', 'NON_DELIVERY_MEASURE_NM']),
-            'delivery_agents' => $db->table('dbo.N_DELIVERY_AGENTS')->whereIn('VALID_IND', ['1', '3'])->orderBy('DELIVERY_AGENT_NM')->get(['DELIVERY_AGENT_CD', 'DELIVERY_AGENT_NM', 'DELIVERY_AGENT_FULL_CD']),
+            'delivery_agents' => $deliveryAgents->orderBy('DELIVERY_AGENT_NM')->get(['DELIVERY_AGENT_CD', 'DELIVERY_AGENT_NM', 'DELIVERY_AGENT_FULL_CD']),
             'customs_office_types' => $db->table('dbo.C_CUSTOMS_OFFICE_TYPES')->orderBy('CUSTOMS_OFFICE_TYPE_CD')->get(['CUSTOMS_OFFICE_TYPE_CD', 'CUSTOMS_OFFICE_TYPE_NM']),
             'customs_release_statuses' => $db->table('dbo.C_CUSTOMS_RELEASE_STATUSES')->orderBy('CUSTOMS_RELEASE_STATUS_CD')->get(['CUSTOMS_RELEASE_STATUS_CD', 'CUSTOMS_RELEASE_STATUS_NM']),
             'open_inbound_receptacles' => $receptacleOffice !== null
@@ -54,9 +58,10 @@ class IpsRepository
         ];
     }
 
-    public function deliveryCatalog(): array
+    public function deliveryCatalog(int $officeCd): array
     {
         $db = $this->connection();
+        $regionPrefix = $this->deliveryAgentRegionPrefix($officeCd);
 
         return [
             'non_delivery_reasons' => $db->table('dbo.C_NON_DELIVERY_REASONS')
@@ -66,7 +71,9 @@ class IpsRepository
                 ->whereIn('VALID_IND', ['1', '3'])->orderBy('NON_DELIVERY_MEASURE_CD')
                 ->get(['NON_DELIVERY_MEASURE_CD', 'NON_DELIVERY_MEASURE_NM']),
             'delivery_agents' => $db->table('dbo.N_DELIVERY_AGENTS')
-                ->whereIn('VALID_IND', ['1', '3'])->orderBy('DELIVERY_AGENT_NM')
+                ->whereIn('VALID_IND', ['1', '3'])
+                ->where('DELIVERY_AGENT_FULL_CD', 'like', $regionPrefix.'%')
+                ->orderBy('DELIVERY_AGENT_NM')
                 ->get(['DELIVERY_AGENT_CD', 'DELIVERY_AGENT_NM', 'DELIVERY_AGENT_FULL_CD']),
             'customs_office_types' => $db->table('dbo.C_CUSTOMS_OFFICE_TYPES')
                 ->orderBy('CUSTOMS_OFFICE_TYPE_CD')->get(['CUSTOMS_OFFICE_TYPE_CD', 'CUSTOMS_OFFICE_TYPE_NM']),
@@ -75,6 +82,38 @@ class IpsRepository
             'offices' => $db->table('dbo.N_OWN_OFFICES')->whereIn('VALID_IND', ['1', '3'])
                 ->orderBy('OFFICE_NM')->get(['OWN_OFFICE_CD', 'OFFICE_FCD', 'OFFICE_NM']),
         ];
+    }
+
+    public function deliveryAgentRegionPrefix(int $officeCd): string
+    {
+        $office = $this->connection()->table('dbo.N_OWN_OFFICES')
+            ->where('OWN_OFFICE_CD', $officeCd)
+            ->whereIn('VALID_IND', ['1', '3'])
+            ->first(['OFFICE_FCD']);
+
+        if (! $office) {
+            throw new IpsOperationException('La oficina IPS no existe o no está vigente.', 422);
+        }
+
+        $officeFcd = strtoupper(trim((string) $office->OFFICE_FCD));
+        $regionPrefix = config('ips.delivery_agent_region_by_office_fcd.'.$officeFcd);
+
+        if (! is_string($regionPrefix) || $regionPrefix === '') {
+            throw new IpsOperationException('No hay una regional de carteros configurada para esta oficina IPS.', 422);
+        }
+
+        return $regionPrefix;
+    }
+
+    public function isDeliveryAgentAllowedAtOffice(int $deliveryAgentCd, int $officeCd): bool
+    {
+        $regionPrefix = $this->deliveryAgentRegionPrefix($officeCd);
+
+        return $this->connection()->table('dbo.N_DELIVERY_AGENTS')
+            ->where('DELIVERY_AGENT_CD', $deliveryAgentCd)
+            ->whereIn('VALID_IND', ['1', '3'])
+            ->where('DELIVERY_AGENT_FULL_CD', 'like', $regionPrefix.'%')
+            ->exists();
     }
 
     public function packages(array $filters): array
@@ -203,6 +242,23 @@ class IpsRepository
             } elseif ($eventCodes !== []) {
                 $query->whereIn(DB::raw('COALESCE(op.EVENT_TYPE_CD, m.EVT_TYPE_CD)'), $eventCodes);
             }
+        }
+        if (isset($filters['delivery_agent_cd'])) {
+            $agentCode = strtoupper((string) $filters['delivery_agent_cd']);
+            $query->whereIn(DB::raw('COALESCE(op.EVENT_TYPE_CD, m.EVT_TYPE_CD)'), [39, 74])
+                ->whereIn('m.STATE_IND_CD', [0, 8])
+                ->whereExists(function ($assignments) use ($agentCode) {
+                    $assignments->selectRaw('1')->from('dbo.L_MAILITM_DELIV_INFOS as assignment')
+                        ->whereColumn('assignment.MAILITM_PID', 'm.MAILITM_PID')
+                        ->where('assignment.EVENT_TYPE_CD', 39)
+                        ->where('assignment.DELIVERY_AGENT_CD', $agentCode)
+                        ->whereNotExists(function ($newerAssignment) {
+                            $newerAssignment->selectRaw('1')->from('dbo.L_MAILITM_DELIV_INFOS as newer_assignment')
+                                ->whereColumn('newer_assignment.MAILITM_PID', 'assignment.MAILITM_PID')
+                                ->where('newer_assignment.EVENT_TYPE_CD', 39)
+                                ->whereRaw('newer_assignment.EVENT_GMT_DT > assignment.EVENT_GMT_DT');
+                        });
+                });
         }
         if (isset($filters['actor_user_pid'])) {
             $query->whereExists(function ($events) use ($filters) {
@@ -414,6 +470,31 @@ class IpsRepository
             ->get(['e.EVENT_TYPE_CD', 'e.EVENT_GMT_DT', 'e.EVENT_LOCAL_OFFSET', 'e.EVENT_OFFICE_CD', 'e.USER_PID', 't.EVENT_TYPE_NM', 'o.OFFICE_FCD', 'o.OFFICE_NM'])
             ->map(fn ($event) => array_merge((array) $event, IpsEventTime::present($event->EVENT_GMT_DT, $event->EVENT_LOCAL_OFFSET)));
 
+        $linkedItemQuery = $db->table('dbo.L_MAILITM_EVENTS')
+            ->where('RECPTCL_PID', $receptacle->RECPTCL_PID)
+            ->whereNotNull('MAILITM_PID')
+            ->distinct();
+        $linkedItemsCount = (clone $linkedItemQuery)->count('MAILITM_PID');
+        $itemIds = (clone $linkedItemQuery)->limit(1001)->pluck('MAILITM_PID');
+        $itemsTruncated = $itemIds->count() > 1000;
+        $itemIds = $itemIds->take(1000)->values();
+        $items = $itemIds->isEmpty() ? collect() : $db->table('dbo.L_MAILITMS as mi')
+            ->leftJoin('dbo.C_EVENT_TYPES as event_type', 'event_type.EVENT_TYPE_CD', '=', 'mi.EVT_TYPE_CD')
+            ->leftJoin('dbo.CT_EVENT_TYPES as local_event_type', function ($join) {
+                $join->on('local_event_type.EVENT_TYPE_CD', '=', 'mi.EVT_TYPE_CD')
+                    ->where('local_event_type.LANGUAGE_CD', '=', 'ES');
+            })
+            ->leftJoin('dbo.C_MAIL_CLASSES as mail_class', 'mail_class.MAIL_CLASS_CD', '=', 'mi.MAIL_CLASS_CD')
+            ->leftJoin('dbo.C_POSTAL_STATUSES as postal_status', 'postal_status.POSTAL_STATUS_CD', '=', 'mi.POSTAL_STATUS_CD')
+            ->whereIn('mi.MAILITM_PID', $itemIds)
+            ->orderBy('mi.MAILITM_FID')->orderBy('mi.MAILITM_LOCAL_ID')
+            ->get([
+                'mi.MAILITM_FID', 'mi.MAILITM_LOCAL_ID', 'mi.MAILITM_WEIGHT', 'mi.MAIL_CLASS_CD',
+                'mi.POSTAL_STATUS_CD', 'mi.EVT_TYPE_CD', 'mi.EVT_GMT_DT',
+                'mail_class.MAIL_CLASS_NM', 'postal_status.POSTAL_STATUS_NM',
+                'local_event_type.LOCAL_EVENT_TYPE_NM as EVENT_NAME_ES', 'event_type.EVENT_TYPE_NM as EVENT_NAME',
+            ]);
+
         return [
             'receptacle' => [
                 'id' => (string) $receptacle->RECPTCL_PID,
@@ -429,6 +510,9 @@ class IpsRepository
                 'allowed_actions' => $allowed,
             ],
             'events' => $events,
+            'items' => $items,
+            'linked_items_count' => $linkedItemsCount,
+            'items_truncated' => $itemsTruncated,
         ];
     }
 
@@ -525,7 +609,7 @@ class IpsRepository
                     ? $package['exchange_office_cds']
                     : [$package['operational_office_cd']],
         };
-        $package['next_offices'] = $package['operational_event_cd'] === 30
+        $package['next_offices'] = in_array($package['operational_event_cd'], [30, 38], true)
             ? $this->nextOffices((int) $package['operational_office_cd'])
             : collect();
         $package['domestic_receptacles'] = $package['operational_event_cd'] === 35
@@ -654,6 +738,10 @@ class IpsRepository
             ->whereIn('MAILITM_PID', $ids)->where('SENDER_PAYEE_IND', 'A')->get()->keyBy('MAILITM_PID');
         $events = $this->connection()->table('dbo.L_MAILITM_EVENTS')
             ->whereIn('MAILITM_PID', $ids)->orderByDesc('EVENT_GMT_DT')->orderByDesc('EVENT_TYPE_CD')->get()->groupBy('MAILITM_PID');
+        $deliveryAssignments = $this->connection()->table('dbo.L_MAILITM_DELIV_INFOS')
+            ->whereIn('MAILITM_PID', $ids)->where('EVENT_TYPE_CD', 39)
+            ->orderByDesc('EVENT_GMT_DT')->get(['MAILITM_PID', 'EVENT_GMT_DT', 'DELIVERY_AGENT_CD'])
+            ->groupBy('MAILITM_PID');
         $offices = $this->connection()->table('dbo.N_OWN_OFFICES')->whereIn('VALID_IND', ['1', '3'])->get()->keyBy('OWN_OFFICE_CD');
         $exchangeOfficeCds = $offices->filter(fn ($office) => in_array(trim((string) $office->OFFICE_FCD), config('ips.exchange_office_fcds', []), true))
             ->pluck('OWN_OFFICE_CD')->map(fn ($id) => (int) $id)->values()->all();
@@ -664,6 +752,7 @@ class IpsRepository
             $row->RECIPIENT_CITY = $customer?->CUSTOMER_CITY;
             $row->RECIPIENT_ADDRESS = $customer?->CUSTOMER_ADDRESS;
             $history = $events->get($row->MAILITM_PID, collect());
+            $latestAssignment = $deliveryAssignments->get($row->MAILITM_PID, collect())->first();
             $op = $history->first(fn ($e) => ! in_array((int) $e->EVENT_TYPE_CD, IpsStagePolicy::TECHNICAL_EVENTS, true));
             $currentEvent = $history->first(fn ($e) => (int) $e->EVENT_TYPE_CD === (int) $row->EVT_TYPE_CD
                 && Carbon::parse($e->EVENT_GMT_DT, 'UTC')->equalTo(Carbon::parse($row->EVT_GMT_DT, 'UTC')));
@@ -675,6 +764,9 @@ class IpsRepository
             $row->NEXT_OFFICE_NM = $offices->get($row->NEXT_OFFICE_CD)?->OFFICE_NM;
             $row->EXCHANGE_OFFICE_CDS = $exchangeOfficeCds;
             $row->TERMINAL = $history->contains(fn ($e) => in_array((int) $e->EVENT_TYPE_CD, [37, 76], true));
+            $row->DELIVERY_AGENT_CD = $latestAssignment?->DELIVERY_AGENT_CD !== null
+                ? trim((string) $latestAssignment->DELIVERY_AGENT_CD)
+                : null;
         }
 
         foreach ($rows as $row) {
@@ -687,7 +779,7 @@ class IpsRepository
     public function presentForOffice(object $item, ?int $office): array
     {
         $package = $this->present($item);
-        $package['allowed_actions'] = $office ? app(IpsStagePolicy::class)->actions($package, $office) : [];
+        $package['allowed_actions'] = $office !== null ? app(IpsStagePolicy::class)->actions($package, $office) : [];
 
         return $package;
     }
@@ -710,6 +802,7 @@ class IpsRepository
             'receipt_office_cds' => array_values(array_map('intval', $item->RECEIPT_OFFICE_CDS ?? [])),
             'exchange_office_cds' => array_values(array_map('intval', $item->EXCHANGE_OFFICE_CDS ?? [])),
             'terminal' => (bool) ($item->TERMINAL ?? false),
+            'delivery_agent_cd' => isset($item->DELIVERY_AGENT_CD) ? trim((string) $item->DELIVERY_AGENT_CD) : null,
             'address' => trim($item->RECIPIENT_ADDRESS ?? ''),
             'mail_class' => trim($item->MAIL_CLASS_CD ?? ''),
             'product_type' => trim($item->PRODUCT_TYPE_CD ?? ''),

@@ -23,6 +23,7 @@ class ApiCredentialController extends Controller
         'ips.deliver' => 'Registrar entregas IPS',
         'ips.operations' => 'Consultar operaciones IPS',
         'customs.read' => 'Consultar expedientes aduaneros IPS/CDS',
+        'customs.prealerts.read' => 'Consultar prealertas PREDES entrantes',
     ];
 
     public function index(Request $request)
@@ -187,36 +188,50 @@ class ApiCredentialController extends Controller
             [
                 'group' => 'Aduana',
                 'method' => 'GET',
-                'path' => '/api/v1/aduana/consulta/{codigo}',
-                'description' => 'Consulta general completa: detecta S8, S9, S10 o código local y devuelve la ficha IPS/CDS correspondiente con sus relaciones.',
-                'ability' => 'customs.read',
+                'path' => '/api/v1/aduana/prealertas',
+                'description' => 'Operación principal de sondeo: lista por fecha los PREDES S8 dirigidos a Bolivia, con conteos y cursor. No confirma llegada física.',
+                'ability' => 'customs.prealerts.read',
             ],
             [
                 'group' => 'Aduana',
                 'method' => 'GET',
-                'path' => '/api/v1/aduana/paquetes/{codigo}',
-                'description' => 'Resumen S10: datos del paquete, hasta 10 movimientos y solo códigos relacionados de sacas, despachos y declaraciones. Usa la ruta de declaraciones para consultar el detalle CDS.',
-                'ability' => 'customs.read',
-            ],
-            [
-                'group' => 'Aduana',
-                'method' => 'GET',
-                'path' => '/api/v1/aduana/declaraciones/{codigo}',
-                'description' => 'Declaraciones CDS y respuestas del S10, con articulos, documentos y eventos por registro.',
-                'ability' => 'customs.read',
+                'path' => '/api/v1/aduana/prealertas/{codigo}',
+                'description' => 'Operación principal por despacho: PREDES S8 con sus S9, S10, declaraciones/respuestas CDS enlazadas y recepción IPS registrada si existe.',
+                'ability' => 'customs.prealerts.read',
             ],
             [
                 'group' => 'Aduana',
                 'method' => 'GET',
                 'path' => '/api/v1/aduana/despachos/{codigo}',
-                'description' => 'Resumen S8: número de despacho, origen y destino, peso, salida, transporte y sacas declaradas/vinculadas.',
+                'description' => 'Consulta puntual del despacho operativo registrado en IPS. No representa el preaviso PREDES ni confirma recepción física.',
                 'ability' => 'customs.read',
             ],
             [
                 'group' => 'Aduana',
                 'method' => 'GET',
                 'path' => '/api/v1/aduana/sacas/{codigo}',
-                'description' => 'Resumen S9: número y peso de la saca, despacho relacionado, paquetes y conteo de eventos/declaraciones; los detalles extensos se consultan en sus rutas S8, S10 y declaraciones.',
+                'description' => 'Consulta puntual de una saca S9 y sus referencias a despacho y paquetes; complementa el detalle completo de una prealerta.',
+                'ability' => 'customs.read',
+            ],
+            [
+                'group' => 'Aduana',
+                'method' => 'GET',
+                'path' => '/api/v1/aduana/paquetes/{codigo}',
+                'description' => 'Consulta puntual de un S10: datos del paquete, su último movimiento IPS y referencias relacionadas. Complementa el flujo de prealertas.',
+                'ability' => 'customs.read',
+            ],
+            [
+                'group' => 'Aduana',
+                'method' => 'GET',
+                'path' => '/api/v1/aduana/declaraciones/{codigo}',
+                'description' => 'Consulta puntual de declaraciones CDS y respuestas por código postal o local del paquete; incluye datos de artículos, documentos y eventos.',
+                'ability' => 'customs.read',
+            ],
+            [
+                'group' => 'Aduana',
+                'method' => 'GET',
+                'path' => '/api/v1/aduana/consulta/{codigo}',
+                'description' => 'Consulta auxiliar por código (S8, S9, S10 o local). Para recibir carga entrante, usar primero el índice y detalle de prealertas PREDES.',
                 'ability' => 'customs.read',
             ],
             [

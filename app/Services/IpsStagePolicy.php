@@ -62,7 +62,9 @@ class IpsStagePolicy
                 return ['CUSTOMS_RETURN'];
             }
             if ($event === 38 && $state === 0 && $currentOffice === $office) {
-                return ['EDN'];
+                // Customs return is already a physical receipt at this office. From here the
+                // operator can route onward, hold for pickup, hand to a carrier, or deliver.
+                return ['EDN', 'EDH', 'HANDOVER_AGENT', 'EMI'];
             }
             if ($event === 35 && $state === 0 && $currentOffice === $office && $next !== null) {
                 return ['EIB'];
@@ -84,7 +86,10 @@ class IpsStagePolicy
             $actions[] = 'EMG';
         }
         if ($currentOffice === $office && $state === 0 && in_array($event, [32, 36], true)) {
-            $actions[] = 'EDH';
+            if ($event === 32) {
+                $actions[] = 'EDH';
+                $actions[] = 'CUSTOMS_PRESENT';
+            }
             $actions[] = 'HANDOVER_AGENT';
         }
         if ($currentOffice === $office && $state === 0 && $event === 39) {
@@ -94,7 +99,7 @@ class IpsStagePolicy
             $actions[] = 'EMI';
         }
         if ($currentOffice === $office && in_array($state, [0, 8], true)
-            && in_array($event, [32, 36, 74, 75], true)) {
+            && in_array($event, [32, 74, 75], true)) {
             $actions[] = 'EMI';
         }
         if ($currentOffice === $office && in_array($state, [0, 8], true) && $event === 74) {

@@ -51,6 +51,7 @@ final class CustomsApiPresenter
         return [
             'identifier' => $result['identifier'] ?? $rawSack['RECPTCL_FID'] ?? null,
             'sack' => [
+                'identifier' => $rawSack['RECPTCL_FID'] ?? null,
                 'number' => $analysis['receptacle_sequence'] ?? null,
                 'weight_kg' => $this->number($rawSack['RECPTCL_WEIGHT'] ?? null),
                 'packages_declared' => $reconciliation['declared_count'] ?? null,
@@ -82,7 +83,9 @@ final class CustomsApiPresenter
             'name' => $event['EVENT_TYPE_NM_ES'] ?? $event['EVENT_NAME_ES'] ?? $event['EVT_TYPE_NM_ES'] ?? $event['EVENT_NAME'] ?? null,
             'office' => $event['OFFICE_FCD'] ?? $event['EVT_OFFICE_FCD'] ?? null,
         ])->values();
-        $events = $allEvents->take(10)->values();
+        // The package API exposes only the latest IPS event. SqlServerSearchService
+        // orders trackingRows by event time descending before presenting them.
+        $events = $allEvents->take(1)->values();
         $cdsPackages = $this->workspaceCdsGroups($cds);
         $logistics = $this->rows($ips['logisticRows'] ?? []);
         $declarations = collect($cdsPackages)->flatMap(fn (array $group) => collect($group['declarations'] ?? [])->map(fn (array $declaration) => [
@@ -112,8 +115,7 @@ final class CustomsApiPresenter
             'truncated' => (bool) ($result['truncated'] ?? false)
                 || (bool) ($ips['truncated'] ?? false)
                 || (bool) ($cds['truncated'] ?? false)
-                || (bool) ($cds['declarations_truncated'] ?? false)
-                || $allEvents->count() > $events->count(),
+                || (bool) ($cds['declarations_truncated'] ?? false),
         ];
     }
 
@@ -208,6 +210,7 @@ final class CustomsApiPresenter
 
         return [
             'sack' => [
+                'identifier' => $rawSack['RECPTCL_FID'] ?? null,
                 'number' => $analysis['receptacle_sequence'] ?? null,
                 'weight_kg' => $this->number($rawSack['RECPTCL_WEIGHT'] ?? null),
                 'registration_number' => $rawSack['RECPTCL_REG_NO'] ?? null,
@@ -284,7 +287,9 @@ final class CustomsApiPresenter
         $ips = $result['ips'] ?? [];
         $cds = $result['cds'] ?? [];
         $package = $this->rows($ips['packageRows'] ?? [])->first() ?? [];
-        $events = $this->rows($ips['trackingRows'] ?? [])->map(fn (array $event) => $this->event($event))->values();
+        $allEvents = $this->rows($ips['trackingRows'] ?? [])->map(fn (array $event) => $this->event($event))->values();
+        // Keep the full count for context, but return only the newest event.
+        $events = $allEvents->take(1)->values();
         $deliveries = $this->rows($ips['deliveryRows'] ?? [])->map(fn (array $row) => [
             'occurred_at' => $row['EVENT_GMT_DT'] ?? null,
             'event_code' => $row['EVENT_TYPE_CD'] ?? null,
@@ -301,7 +306,7 @@ final class CustomsApiPresenter
         return [
             'sources' => $result['sources'] ?? [],
             'summary' => [
-                'movement_count' => $events->count(),
+                'movement_count' => $allEvents->count(),
                 'delivery_count' => $deliveries->count(),
                 'sack_count' => collect($ips['logisticRows'] ?? [])->pluck('RECPTCL_PID')->filter()->unique()->count(),
                 'manifest_count' => count($ips['manifestRows'] ?? []),

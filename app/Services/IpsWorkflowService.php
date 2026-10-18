@@ -191,6 +191,11 @@ class IpsWorkflowService
             if (!in_array($input['event'], app(IpsStagePolicy::class)->actions($package, (int) $input['office_cd']), true)) {
                 throw new IpsOperationException('La etapa u oficina actual no está habilitada para esta operación.');
             }
+            if ($input['event'] === 'HANDOVER_AGENT'
+                && (int) ($package['operational_event_cd'] ?? $package['event_cd']) === 36
+                && empty($input['physical_return_confirmed'])) {
+                throw new IpsOperationException('Confirme que el paquete regresó físicamente a la oficina antes de asignarlo para un nuevo intento.', 422);
+            }
             if ($input['event'] === 'EMG' && empty($input['physical_receipt_confirmed'])) {
                 throw new IpsOperationException('Confirme que recibió físicamente el paquete.', 422);
             }
@@ -253,8 +258,8 @@ class IpsWorkflowService
             throw new IpsOperationException('El estado de Aduana no existe en el catalogo IPS.', 422);
         }
         if ($input['event'] === 'HANDOVER_AGENT'
-            && ! $this->ips->reference('N_DELIVERY_AGENTS', 'DELIVERY_AGENT_CD', strtoupper($input['delivery_agent_cd']))) {
-            throw new IpsOperationException('El cartero no existe o esta inactivo en IPS.', 422);
+            && ! $this->ips->isDeliveryAgentAllowedAtOffice((int) $input['delivery_agent_cd'], (int) $input['office_cd'])) {
+            throw new IpsOperationException('El cartero no está vigente o no pertenece a la regional de esta oficina.', 422);
         }
         if (in_array($input['event'], ['EMR', 'EMD'], true) && ! empty($input['receptacle_pid'])) {
             $this->ips->assertOpenInboundReceptacle((string) $input['receptacle_pid'], (int) $input['office_cd']);

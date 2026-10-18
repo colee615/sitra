@@ -11,10 +11,17 @@ class AuthorizeCustoms
     public function handle(Request $request, Closure $next, string $ability = 'customs.read')
     {
         $user = $request->user();
-        abort_unless($user && ($user->hasRole('admin') || $user->checkPermissionTo($ability, 'web')
-            || ($ability === 'customs.read' && $user->checkPermissionTo('customs.process', 'web'))), 403);
+        $prealertsAbility = $ability === 'customs.prealerts.read';
+        $accountAllowed = $user && ($user->hasRole('admin')
+            || $user->checkPermissionTo('customs.read', 'web')
+            || $user->checkPermissionTo('customs.process', 'web')
+            || ($prealertsAbility && $user->can('postal.cds')));
+        abort_unless($accountAllowed, 403);
         abort_unless($request->bearerToken() && $user->currentAccessToken() instanceof PersonalAccessToken, 403);
-        abort_unless($user->tokenCan($ability) || ($ability === 'customs.read' && $user->tokenCan('customs.process')), 403,
+        $tokenAllowed = $user->tokenCan($ability)
+            || $user->tokenCan('customs.read')
+            || $user->tokenCan('customs.process');
+        abort_unless($tokenAllowed, 403,
             'El token no tiene permiso para esta operación aduanera.');
 
         return $next($request);

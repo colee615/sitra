@@ -4,13 +4,20 @@ namespace App\Http\Controllers\Api;
 
 use App\Exceptions\IpsOperationException;
 use App\Http\Controllers\Controller;
+use App\Http\Support\CustomsApiError;
 use App\Services\Postal\CustomsApiPresenter;
 use App\Services\Postal\CustomsOperationsService;
+use App\Services\Postal\CustomsPrealertService;
 use App\Services\Postal\PostalWorkspace;
 use App\Services\Postal\ShipmentCode;
 use App\Services\Postal\UpuDispatchIdentifier;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Database\ConnectionException;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 use Throwable;
 
 final class CustomsOperationsController extends Controller
@@ -76,7 +83,7 @@ final class CustomsOperationsController extends Controller
         return $this->respond(function () use ($codigo, $customs, $presenter) {
             $result = $customs->inspectDispatch($codigo);
             if (empty($result['dispatches'])) {
-                throw new IpsOperationException('No se encontro el despacho S8 en IPS.', 404);
+                throw new IpsOperationException('No se encontró el despacho S8 en IPS.', 404);
             }
 
             return ['data' => $presenter->dispatch($result)];
@@ -90,6 +97,53 @@ final class CustomsOperationsController extends Controller
         )]);
     }
 
+    public function prealerts(Request $request, CustomsPrealertService $prealerts): JsonResponse
+    {
+        $validator = Validator::make($request->query(), [
+            'desde' => ['nullable', 'date_format:Y-m-d'],
+            'hasta' => ['nullable', 'date_format:Y-m-d'],
+            'limite' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'cursor' => ['nullable', 'string', 'max:1024', 'regex:/^[A-Za-z0-9_-]+$/'],
+        ], [
+            'desde.date_format' => 'El parámetro desde debe usar el formato YYYY-MM-DD.',
+            'hasta.date_format' => 'El parámetro hasta debe usar el formato YYYY-MM-DD.',
+            'limite.integer' => 'El parámetro limite debe ser un número entero.',
+            'limite.min' => 'El parámetro limite debe ser al menos 1.',
+            'limite.max' => 'El parámetro limite no puede superar 100.',
+            'cursor.regex' => 'El cursor debe ser el valor opaco devuelto por SITRA.',
+        ]);
+        if ($validator->fails()) {
+            return CustomsApiError::response(
+                422,
+                'Los parámetros de consulta de prealertas no son válidos.',
+                $validator->errors()->toArray(),
+            );
+        }
+        $input = $validator->validated();
+        $timezone = (string) config('ips.operation_timezone', 'America/La_Paz');
+        $today = Carbon::now($timezone)->toDateString();
+        $from = $input['desde'] ?? Carbon::now($timezone)->subDays(6)->toDateString();
+        $to = $input['hasta'] ?? $today;
+        $fromDate = Carbon::createFromFormat('Y-m-d', $from, $timezone)->startOfDay();
+        $toDate = Carbon::createFromFormat('Y-m-d', $to, $timezone)->startOfDay();
+
+        return $this->respond(function () use ($prealerts, $from, $to, $fromDate, $toDate, $input) {
+            if ($fromDate->greaterThan($toDate)) {
+                throw new IpsOperationException('La fecha desde no puede ser posterior a la fecha hasta.', 422);
+            }
+            if ($fromDate->diffInDays($toDate) > 30) {
+                throw new IpsOperationException('El rango de consulta no puede superar 31 días.', 422);
+            }
+
+            return ['data' => $prealerts->index($from, $to, (int) ($input['limite'] ?? 20), $input['cursor'] ?? null)];
+        });
+    }
+
+    public function prealert(string $codigo, CustomsPrealertService $prealerts): JsonResponse
+    {
+        return $this->respond(fn () => ['data' => $prealerts->show($codigo)]);
+    }
+
     private function assertWorkspaceFound(array $result): void
     {
         $sources = collect($result['sources'] ?? []);
@@ -98,10 +152,10 @@ final class CustomsOperationsController extends Controller
         }
 
         if ($sources->contains('unavailable')) {
-            throw new IpsOperationException('IPS o CDS no esta disponible; la consulta quedo incompleta.', 503);
+            throw new IpsOperationException('IPS o CDS no está disponible; la consulta quedó incompleta.', 503);
         }
 
-        throw new IpsOperationException('No se encontro el paquete o identificador en IPS/CDS.', 404);
+        throw new IpsOperationException('No se encontró el paquete o identificador en IPS/CDS.', 404);
     }
 
     private function respond(callable $callback): JsonResponse
@@ -110,11 +164,43 @@ final class CustomsOperationsController extends Controller
             $result = $callback();
             return response()->json($result)->header('Cache-Control', 'no-store');
         } catch (IpsOperationException $exception) {
-            return response()->json(['message'=>$exception->getMessage()], $exception->status)->header('Cache-Control', 'no-store');
+            return CustomsApiError::response($exception->status, $exception->getMessage());
         } catch (Throwable $exception) {
-            Log::warning('Customs API query unavailable', ['exception_type'=>$exception::class]);
-            return response()->json(['message'=>'No se pudo completar la consulta aduanera.'], 503)
-                ->header('Cache-Control', 'no-store');
+            $requestId = (string) \Illuminate\Support\Str::uuid();
+            $unavailable = $this->isDependencyUnavailable($exception);
+            $status = $unavailable ? 503 : 500;
+            Log::log($unavailable ? 'warning' : 'error', 'Customs API request failed.', [
+                'request_id' => $requestId,
+                'exception_type' => $exception::class,
+            ]);
+
+            return CustomsApiError::response(
+                $status,
+                $unavailable
+                    ? 'Una fuente de datos necesaria no está disponible temporalmente.'
+                    : 'No se pudo completar la consulta aduanera.',
+                requestId: $requestId,
+            );
         }
+    }
+
+    private function isDependencyUnavailable(Throwable $exception): bool
+    {
+        while ($exception !== null) {
+            if ($exception instanceof ConnectionException) {
+                return true;
+            }
+
+            if ($exception instanceof QueryException) {
+                $sqlState = strtoupper((string) $exception->getCode());
+                if (str_starts_with($sqlState, '08') || in_array($sqlState, ['HYT00', 'HYT01'], true)) {
+                    return true;
+                }
+            }
+
+            $exception = $exception->getPrevious();
+        }
+
+        return false;
     }
 }

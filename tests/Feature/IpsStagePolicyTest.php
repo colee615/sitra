@@ -72,6 +72,6 @@ class IpsStagePolicyTest extends TestCase
         $package = array_replace($package, ['event_cd' => 74, 'operational_event_cd' => 74]);
         $this->assertSame(['EMI', 'EMH'], $policy->actions($package, 20));
         $package = array_replace($package, ['event_cd' => 36, 'operational_event_cd' => 36]);
-        $this->assertSame(['EDH', 'HANDOVER_AGENT', 'EMI'], $policy->actions($package, 20));
+        $this->assertSame(['HANDOVER_AGENT'], $policy->actions($package, 20));
     }
 }

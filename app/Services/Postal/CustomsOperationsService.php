@@ -52,7 +52,7 @@ final class CustomsOperationsService
             throw new IpsOperationException('El código identifica más de una saca; proporciona un S9 único.', 422);
         }
         if (!empty($result['truncated'])) {
-            throw new IpsOperationException('La consulta del marbete está incompleta. No se habilitó el trámite.', 409);
+            throw new IpsOperationException('La consulta de la saca está incompleta. No se puede confirmar el resultado.', 409);
         }
 
         $bag = $result['receptacles'][0];

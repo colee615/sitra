@@ -132,7 +132,10 @@
                                         <td class="api-url-cell">
                                             @php
                                                 $tokenApis = collect($apis)->filter(fn ($api) => in_array('*', $token->abilities ?? [], true)
-                                                    || in_array($api['ability'], $token->abilities ?? [], true));
+                                                    || in_array($api['ability'], $token->abilities ?? [], true)
+                                                    || (in_array($api['ability'], ['customs.read', 'customs.prealerts.read'], true)
+                                                        && (in_array('customs.read', $token->abilities ?? [], true)
+                                                            || in_array('customs.process', $token->abilities ?? [], true))));
                                             @endphp
                                             @forelse ($tokenApis as $api)
                                                 <div class="api-url-row">

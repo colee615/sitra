@@ -72,6 +72,7 @@ class IpsWriteRequest extends FormRequest
             'actor_user_pid' => ['sometimes', 'integer', 'min:1', 'max:32767'],
             'external_actor_id' => ['sometimes', 'string', 'max:80'],
             'physical_receipt_confirmed' => [Rule::excludeIf(! in_array($this->input('event'), ['EMG', 'EMR', 'EMD', 'CUSTOMS_RETURN', 'RECEPTACLE_RECEIVE'], true)), 'required', 'boolean', 'accepted'],
+            'physical_return_confirmed' => [Rule::excludeIf($this->input('event') !== 'HANDOVER_AGENT'), 'sometimes', 'boolean', 'accepted'],
             'delivery_location' => ['nullable', 'string', 'max:25'],
             'non_delivery_reason' => [Rule::requiredIf($this->input('event') === 'EMH'), 'nullable', 'integer', 'min:1'],
             'non_delivery_measure' => [Rule::requiredIf($this->input('event') === 'EMH'), 'nullable', 'string', 'size:1'],

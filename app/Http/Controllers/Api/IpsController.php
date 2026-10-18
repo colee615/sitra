@@ -9,6 +9,7 @@ use App\Services\IpsOperationService;
 use App\Services\IpsRepository;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 class IpsController extends Controller
@@ -16,6 +17,15 @@ class IpsController extends Controller
     public function index(Request $request, IpsRepository $ips)
     {
         $filters = $request->validate(self::filterRules());
+        if (isset($filters['delivery_agent_cd'])
+            && (($filters['status'] ?? null) !== 'warehouse' || ! isset($filters['office_cd']))) {
+            throw ValidationException::withMessages([
+                'delivery_agent_cd' => 'Filtra por oficina y por paquetes de almacén para consultar la bandeja de un cartero.',
+            ]);
+        }
+        if (isset($filters['delivery_agent_cd'])) {
+            $filters['delivery_agent_cd'] = strtoupper($filters['delivery_agent_cd']);
+        }
         if ($request->route()->defaults['ips_pending'] ?? false) {
             $filters['status'] = 'pending';
         }
@@ -28,11 +38,12 @@ class IpsController extends Controller
         return [
             'status' => ['nullable', 'in:all,pending,reception,returns,delivered,warehouse'],
             'q' => ['nullable', 'string', 'max:35'],
-            'office_cd' => ['nullable', 'integer', 'min:1', 'max:32767'],
+            'office_cd' => ['nullable', 'integer', 'min:0', 'max:32767'],
             'event_cd' => ['nullable'],
             'event_cd.*' => ['integer', 'min:1', 'max:32767'],
             'action_cd' => ['nullable', 'in:EDH,HANDOVER_AGENT,EDG,EMH,EMI'],
             'actor_user_pid' => ['nullable', 'integer', 'min:1', 'max:32767'],
+            'delivery_agent_cd' => ['nullable', 'string', 'size:2', 'regex:/^[A-Za-z0-9]{2}$/'],
             'page' => ['nullable', 'integer', 'min:1', 'max:100000'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
             'from' => ['nullable', 'date_format:Y-m-d\TH:i:sP'],
@@ -42,7 +53,7 @@ class IpsController extends Controller
 
     public function show(Request $request, string $codigo, IpsRepository $ips)
     {
-        $filters = $request->validate(['office_cd' => ['nullable', 'integer', 'min:1', 'max:32767']]);
+        $filters = $request->validate(['office_cd' => ['nullable', 'integer', 'min:0', 'max:32767']]);
         return $this->respond(function () use ($codigo, $ips, $filters) {
             $detail = $ips->detail(strtoupper($codigo));
             $detail['package']['allowed_actions'] = isset($filters['office_cd'])
@@ -56,21 +67,23 @@ class IpsController extends Controller
 
     public function showReceptacle(Request $request, string $codigo, IpsRepository $ips)
     {
-        $filters = $request->validate(['office_cd' => ['required', 'integer', 'min:1', 'max:32767']]);
+        $filters = $request->validate(['office_cd' => ['required', 'integer', 'min:0', 'max:32767']]);
 
         return $this->respond(fn () => ['data' => $ips->receptacleDetail(strtoupper($codigo), (int) $filters['office_cd'])]);
     }
 
     public function catalog(Request $request, IpsRepository $ips)
     {
-        $filters = $request->validate(['office_cd' => ['nullable', 'integer', 'min:1', 'max:32767']]);
+        $filters = $request->validate(['office_cd' => ['nullable', 'integer', 'min:0', 'max:32767']]);
 
         return $this->respond(fn () => ['data' => $ips->catalog(isset($filters['office_cd']) ? (int) $filters['office_cd'] : null)]);
     }
 
-    public function deliveryCatalog(IpsRepository $ips)
+    public function deliveryCatalog(Request $request, IpsRepository $ips)
     {
-        return $this->respond(fn () => ['data' => $ips->deliveryCatalog()]);
+        $filters = $request->validate(['office_cd' => ['required', 'integer', 'min:0', 'max:32767']]);
+
+        return $this->respond(fn () => ['data' => $ips->deliveryCatalog((int) $filters['office_cd'])]);
     }
 
     public function users(Request $request, IpsRepository $ips)
@@ -95,7 +108,7 @@ class IpsController extends Controller
             'user_fid' => ['required', 'string', 'max:256', 'regex:/^[A-Za-z0-9._-]+$/'],
             'user_name' => ['required', 'string', 'max:256'],
             'user_domain' => ['nullable', 'string', 'max:20', 'regex:/^[A-Za-z0-9._-]+$/'],
-            'office_cd' => ['nullable', 'integer', 'min:1', 'max:32767'],
+            'office_cd' => ['nullable', 'integer', 'min:0', 'max:32767'],
             'email' => ['nullable', 'email', 'max:256'],
         ]);
 

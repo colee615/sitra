@@ -70,6 +70,7 @@ class CustomsOperationsApiTest extends TestCase
             'receptacles'=>[$bag], 'items'=>[], 'events'=>[], 'manifests'=>[],
         ]);
         $search->shouldReceive('search')->with('S9TEST01')->once()->andReturn($sackResult);
+        $search->shouldReceive('search')->with('REG001')->once()->andReturn(array_replace($sackResult, ['identifier'=>'REG001']));
         $search->shouldReceive('search')->with('BOLPBCITMXPAACN60005')->twice()->andReturn([
             'search_type'=>'s8', 'truncated'=>false,
             'code_analysis'=>['type'=>'s8', 'code'=>'BOLPBCITMXPAACN60005'],
@@ -116,7 +117,7 @@ class CustomsOperationsApiTest extends TestCase
             'declarations_truncated'=>false, 'responses_truncated'=>false,
         ];
         $cds = Mockery::mock(CdsRepository::class);
-        $cds->shouldReceive('declarationIndex')->twice()
+        $cds->shouldReceive('declarationIndex')->times(3)
             ->withArgs(fn ($codes, $limit) => $codes === ['LX123456789US', 'LOCAL001'] && $limit === 1000)
             ->andReturn($cdsResult);
 
@@ -142,6 +143,7 @@ class CustomsOperationsApiTest extends TestCase
             ->assertJsonMissingPath('data.receptacles');
         $this->getJson('/api/v1/aduana/sacas/S9TEST01')
             ->assertOk()->assertJsonPath('data.identifier', 'S9TEST01')
+            ->assertJsonPath('data.sack.identifier', 'S9TEST01')
             ->assertJsonPath('data.sack.number', '001')
             ->assertJsonPath('data.sack.packages_declared', 1)
             ->assertJsonPath('data.sack.packages_linked', 1)
@@ -150,6 +152,9 @@ class CustomsOperationsApiTest extends TestCase
             ->assertJsonPath('data.related_identifiers.packages.0', 'LX123456789US')
             ->assertJsonMissingPath('data.code_analysis')
             ->assertJsonMissingPath('data.manifests');
+        $this->getJson('/api/v1/aduana/sacas/REG001')
+            ->assertOk()->assertJsonPath('data.identifier', 'REG001')
+            ->assertJsonPath('data.sack.identifier', 'S9TEST01');
 
         $this->getJson('/api/v1/aduana/consulta/'.$fullS8)
             ->assertOk()
@@ -165,6 +170,7 @@ class CustomsOperationsApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.type', 'S9')
             ->assertJsonPath('data.identifier', 'BOLPBCITMXPAACN60004001100091')
+            ->assertJsonPath('data.details.sack.identifier', 'BOLPBCITMXPAACN60004001100091')
             ->assertJsonPath('data.details.sack.weight_kg', 1)
             ->assertJsonPath('data.identifier_analysis.receptacle_sequence', '001')
             ->assertJsonPath('data.details.packages.0.identifier', 'LX123456789US');
@@ -199,9 +205,16 @@ class CustomsOperationsApiTest extends TestCase
                 'packageRows'=>[(object)[
                     'MAILITM_FID'=>'EE000738405BO', 'MAILITM_LOCAL_ID'=>'LOCAL-001',
                 ]],
-                'trackingRows'=>[(object)[
-                    'EVT_TYPE_CD'=>30, 'EVENT_NAME_ES'=>'Insertar envío en saca (salida)',
-                ]],
+                'trackingRows'=>[
+                    (object)[
+                        'EVENT_GMT_DT'=>'2026-10-18 12:00:00',
+                        'EVT_TYPE_CD'=>30, 'EVENT_NAME_ES'=>'Insertar envío en saca (salida)',
+                    ],
+                    (object)[
+                        'EVENT_GMT_DT'=>'2026-10-17 12:00:00',
+                        'EVT_TYPE_CD'=>20, 'EVENT_NAME_ES'=>'Evento anterior',
+                    ],
+                ],
             ],
             'cds'=>[
                 'packages'=>[(object)[
@@ -243,7 +256,7 @@ class CustomsOperationsApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.identifier', 'EE000738405BO')
             ->assertJsonPath('data.related_identifiers.declarations.0', 'CN23-0001')
-            ->assertJsonPath('data.summary.movement_count', 1)
+            ->assertJsonPath('data.summary.movement_count', 2)
             ->assertJsonPath('data.movements.0.code', 30)
             ->assertJsonMissingPath('data.package.code')
             ->assertJsonMissingPath('data.customs')
@@ -251,6 +264,7 @@ class CustomsOperationsApiTest extends TestCase
             ->assertJsonMissingPath('data.detail')
             ->assertJsonMissingPath('data.ips')
             ->assertJsonMissingPath('data.cds_package_groups');
+        $packageResponse->assertJsonCount(1, 'data.movements');
         $this->assertStringContainsString('no-store', (string) $packageResponse->headers->get('Cache-Control'));
 
         $declarationsResponse = $this->getJson('/api/v1/aduana/declaraciones/EE000738405BO')
@@ -261,7 +275,7 @@ class CustomsOperationsApiTest extends TestCase
             ->assertJsonMissingPath('data.detail');
         $this->assertStringContainsString('no-store', (string) $declarationsResponse->headers->get('Cache-Control'));
 
-        $this->getJson('/api/v1/aduana/consulta/EE000738405BO')
+        $generalResponse = $this->getJson('/api/v1/aduana/consulta/EE000738405BO')
             ->assertOk()
             ->assertJsonPath('data.type', 'S10')
             ->assertJsonPath('data.identifier', 'EE000738405BO')
@@ -270,7 +284,9 @@ class CustomsOperationsApiTest extends TestCase
             ->assertJsonPath('data.details.package.code', 'EE000738405BO')
             ->assertJsonPath('data.details.customs.cds.packages.0.declarations.0.number', 'CN23-0001')
             ->assertJsonPath('data.details.customs.cds.packages.0.declarations.0.data.pieces.0.description', 'Documentos')
+            ->assertJsonPath('data.details.summary.movement_count', 2)
             ->assertJsonPath('data.details.events.0.code', 30);
+        $generalResponse->assertJsonCount(1, 'data.details.events');
 
         $this->getJson('/api/v1/aduana/paquetes/UNKNOWN001')->assertNotFound();
         $this->getJson('/api/v1/aduana/declaraciones/UNKNOWN001')->assertNotFound();

@@ -200,6 +200,127 @@ class CdsRepository
         ];
     }
 
+    /**
+     * Read declarations for a complete prealert manifest efficiently. Package
+     * identifiers are queried separately in SQL Server-safe chunks (avoiding
+     * an OR across identifier columns), then their CDS records are loaded
+     * together so a large dispatch does not repeat declaration/response queries.
+     */
+    public function prealertIndex(array $codes, int $limit = 5000): array
+    {
+        $db = DB::connection(config('postal.cds_connection', 'cds'));
+        $limit = max(1, min($limit, 5000));
+        $codes = array_values(array_unique(array_filter(array_map([ShipmentCode::class, 'normalize'], $codes))));
+        if (!$codes) {
+            return ['packages' => [], 'declarations' => [], 'responses' => [], 'truncated' => false,
+                'packages_truncated' => false, 'declarations_truncated' => false, 'responses_truncated' => false];
+        }
+
+        $packages = collect();
+        $packagesTruncated = false;
+        foreach (['MAIL_OBJECT_ID', 'MAIL_OBJECT_LOCAL_ID', 'MAIL_OBJECT_LOCAL_ID2'] as $matchColumn) {
+            foreach (array_chunk($codes, 1500) as $chunk) {
+                $rows = $db->table('dbo.O_MAIL_OBJECTS as mo')
+                    ->leftJoin('dbo.M_MAIL_STATES as state', 'state.MAIL_STATE_CD', '=', 'mo.MAIL_STATE_CD')
+                    ->whereIn('mo.'.$matchColumn, $chunk)
+                    ->orderByDesc('mo.POSTING_DATE')->orderBy('mo.MAIL_OBJECT_PID')->limit($limit + 1)
+                    ->get(['mo.MAIL_OBJECT_PID', 'mo.MAIL_OBJECT_ID', 'mo.MAIL_OBJECT_LOCAL_ID', 'mo.MAIL_OBJECT_LOCAL_ID2',
+                        'mo.MAIL_OBJECT_TYPE_CD', 'mo.MAIL_CLASS_CD', 'mo.MAIL_FLOW_CD', 'mo.POSTING_DATE', 'state.MAIL_STATE_NM']);
+                $packages = $packages->concat($rows)->unique('MAIL_OBJECT_PID')->values();
+                if ($packages->count() > $limit) {
+                    $packagesTruncated = true;
+                    break 2;
+                }
+            }
+        }
+        $packagesTruncated = $packagesTruncated || $packages->count() > $limit;
+        $packages = $packages->take($limit)->values();
+        $ids = $packages->pluck('MAIL_OBJECT_PID')->all();
+        if (!$ids) {
+            return ['packages' => [], 'declarations' => [], 'responses' => [], 'truncated' => $packagesTruncated,
+                'packages_truncated' => $packagesTruncated, 'declarations_truncated' => false, 'responses_truncated' => false];
+        }
+
+        $declarationRows = collect();
+        $declarationsTruncated = false;
+        foreach (array_chunk($ids, 800) as $chunk) {
+            $rows = $db->table('dbo.O_DECLARATIONS as d')
+                ->leftJoin('dbo.M_CDS_STATES as state', 'state.CDS_STATE_CD', '=', 'd.CDS_STATE_CD')
+                ->whereIn('d.MAIL_OBJECT_PID', $chunk)->orderBy('d.DECLARATION_PID')->limit($limit + 1)
+                ->get(['d.DECLARATION_PID as id', 'd.MAIL_OBJECT_PID as package_id', 'd.AN_DECLARATION_ID as declaration_number',
+                    'state.CDS_STATE_NM as state', DB::raw('CONVERT(nvarchar(max), d.DATA) as payload')]);
+            $declarationRows = $declarationRows->concat($rows);
+            if ($declarationRows->count() > $limit) {
+                $declarationsTruncated = true;
+                break;
+            }
+        }
+        $declarationsTruncated = $declarationsTruncated || $declarationRows->count() > $limit;
+        $declarationRows = $declarationRows->take($limit)->values();
+        $declarations = $declarationRows->map(function ($row) {
+            $parsed = $this->xml->parse($row->payload, 'DecData');
+            return [
+                'id' => $row->id,
+                'package_id' => $row->package_id,
+                'declaration_number' => $row->declaration_number,
+                'state' => $row->state,
+                'workflow_stage' => $this->declarationStage($row->state),
+                'data_status' => $parsed['status'],
+                'piece_count' => count($parsed['pieces']),
+                'document_count' => count($parsed['documents']),
+                'content_summary' => $this->declarationContentSummary($parsed),
+                'data' => $parsed,
+            ];
+        })->all();
+
+        $responseRows = collect();
+        $responsesTruncated = false;
+        foreach (array_chunk($ids, 800) as $chunk) {
+            $rows = $db->table('dbo.O_RESPONSES as response')
+                ->leftJoin('dbo.M_CDS_STATES as state', 'state.CDS_STATE_CD', '=', 'response.CDS_STATE_CD')
+                ->whereIn('response.MAIL_OBJECT_PID', $chunk)->orderBy('response.RESPONSE_PID')->limit($limit + 1)
+                ->get(['response.RESPONSE_PID as id', 'response.MAIL_OBJECT_PID as package_id',
+                    'state.CDS_STATE_NM as state', DB::raw('CONVERT(nvarchar(max), response.DATA) as payload')]);
+            $responseRows = $responseRows->concat($rows);
+            if ($responseRows->count() > $limit) {
+                $responsesTruncated = true;
+                break;
+            }
+        }
+        $responsesTruncated = $responsesTruncated || $responseRows->count() > $limit;
+        $responseRows = $responseRows->take($limit)->values();
+        $responses = $responseRows->map(function ($row) {
+            $parsed = $this->xml->parse($row->payload, 'ResData');
+            return [
+                'id' => $row->id,
+                'package_id' => $row->package_id,
+                'state' => $row->state,
+                'decision_code' => $parsed['fields']['Decis'] ?? null,
+                'data_status' => $parsed['status'],
+                'data' => $parsed,
+            ];
+        })->values();
+        $decisionCodes = $responses->pluck('decision_code')->filter()->unique()->values()->all();
+        $decisions = $decisionCodes
+            ? $db->table('dbo.M_CUSTOMS_DECISIONS')->whereIn('CUSTOMS_DECISION_CD', $decisionCodes)->pluck('CUSTOMS_DECISION_NM', 'CUSTOMS_DECISION_CD')->all()
+            : [];
+        $responses = $responses->map(function (array $response) use ($decisions) {
+            $response['decision'] = $decisions[$response['decision_code'] ?? ''] ?? null;
+            return $response;
+        })->all();
+
+        $truncated = $packagesTruncated || $declarationsTruncated || $responsesTruncated;
+        return [
+            'packages' => $packages->all(),
+            'declarations' => $declarations,
+            'responses' => $responses,
+            'truncated' => $truncated,
+            'packages_truncated' => $packagesTruncated,
+            'declarations_truncated' => $declarationsTruncated,
+            'responses_truncated' => $responsesTruncated,
+        ];
+    }
+
     public function declarationPackageCodes(int $page, int $perPage): array
     {
         $db = DB::connection(config('postal.cds_connection', 'cds'));

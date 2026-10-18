@@ -31,13 +31,17 @@ Route::prefix('v1/ips')->middleware(['auth:sanctum', 'throttle:60,1'])->group(fu
     Route::post('paquetes/{codigo}/entrega', [IpsController::class, 'write'])->where('codigo', '[A-Za-z0-9-]{1,35}')->defaults('ips_event', 'EMI')->middleware(AuthorizeIps::class.':ips.deliver');
 });
 
-Route::prefix('v1/aduana')->middleware(['auth:sanctum', 'throttle:30,1'])->group(function () {
+Route::prefix('v1/aduana')->middleware(['auth:sanctum', 'throttle:customs-api'])->group(function () {
     Route::get('consulta/{codigo}', [CustomsOperationsController::class, 'lookup'])
         ->where('codigo', '[A-Za-z0-9-]{1,35}')->middleware(AuthorizeCustoms::class.':customs.read');
     Route::get('paquetes/{codigo}', [CustomsOperationsController::class, 'package'])
         ->where('codigo', '[A-Za-z0-9-]{1,35}')->middleware(AuthorizeCustoms::class.':customs.read');
     Route::get('declaraciones/{codigo}', [CustomsOperationsController::class, 'declarations'])
         ->where('codigo', '[A-Za-z0-9-]{1,35}')->middleware(AuthorizeCustoms::class.':customs.read');
+    Route::get('prealertas', [CustomsOperationsController::class, 'prealerts'])
+        ->middleware(AuthorizeCustoms::class.':customs.prealerts.read');
+    Route::get('prealertas/{codigo}', [CustomsOperationsController::class, 'prealert'])
+        ->where('codigo', '[A-Za-z0-9-]{1,35}')->middleware(AuthorizeCustoms::class.':customs.prealerts.read');
     Route::get('despachos/{codigo}', [CustomsOperationsController::class, 'dispatch'])
         ->where('codigo', '[A-Za-z0-9-]{1,35}')->middleware(AuthorizeCustoms::class.':customs.read');
     Route::get('sacas/{codigo}', [CustomsOperationsController::class, 'receptacle'])

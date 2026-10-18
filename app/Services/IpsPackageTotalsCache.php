@@ -16,13 +16,16 @@ class IpsPackageTotalsCache
         if ($ttl === 0 || ! empty($filters['q'])) {
             return (int) $count();
         }
-        $scope = array_intersect_key($filters, array_flip(['status', 'office_cd', 'event_cd', 'action_cd', 'actor_user_pid', 'from', 'to']));
+        $scope = array_intersect_key($filters, array_flip(['status', 'office_cd', 'event_cd', 'action_cd', 'actor_user_pid', 'delivery_agent_cd', 'from', 'to']));
         $scope = array_filter($scope, fn ($value) => $value !== null && $value !== '');
         $scope['status'] = $scope['status'] ?? 'all';
         foreach (['office_cd', 'event_cd', 'actor_user_pid'] as $name) {
             if (isset($scope[$name])) {
                 $scope[$name] = (int) $scope[$name];
             }
+        }
+        if (isset($scope['delivery_agent_cd'])) {
+            $scope['delivery_agent_cd'] = strtoupper((string) $scope['delivery_agent_cd']);
         }
         ksort($scope);
         try {

@@ -12,6 +12,25 @@ return [
     'workstation_pid' => env('IPS_WORKSTATION_PID'),
     'destination_country' => 'BO',
     'exchange_office_fcds' => ['BOSRZA', 'BOLPBA'],
+    // IPS delivery-agent codes use regional prefixes; map each Bolivian office explicitly.
+    'delivery_agent_region_by_office_fcd' => [
+        'BOCBBA' => 'CBB',
+        'BOLPBA' => 'LP',
+        'BOLPBB' => 'LP',
+        'BOLPBC' => 'LP',
+        'BOLPBD' => 'LP',
+        'BOLPBE' => 'LP',
+        'BOSRZA' => 'SC',
+        'BOSRZB' => 'SC',
+        'BOSRZC' => 'SC',
+        'BOSRZD' => 'SC',
+        'BOTDDB' => 'BN',
+        'BOCIJB' => 'PND',
+        'BOORUB' => 'OR',
+        'BOPOIB' => 'PT',
+        'BOSREB' => 'CHU',
+        'BOTJAB' => 'TJ',
+    ],
     'operation_timezone' => env('IPS_OPERATION_TIMEZONE', 'America/La_Paz'),
     // IDs verified in this installation's C_EVENT_TYPES on 2026-09-10.
     'events' => [
@@ -35,14 +54,14 @@ return [
         'RECEPTACLE_OPEN' => ['id' => 131, 'name' => 'Abrir envase recibido', 'result_state' => 20, 'direction' => 'I'],
     ],
     // Local operational policy, not a universal UPU transition requirement.
-    'delivery_candidate_events' => [13, 32, 39, 74, 75, 36],
+    'delivery_candidate_events' => [13, 32, 39, 74, 75, 36, 38],
     // Distribution work queues, narrowed to the action IPS currently allows at each event/state.
     'delivery_action_candidates' => [
-        'EDH' => ['events' => [32, 36], 'states' => [0]],
-        'HANDOVER_AGENT' => ['events' => [32, 36], 'states' => [0]],
+        'EDH' => ['events' => [32, 38], 'states' => [0]],
+        'HANDOVER_AGENT' => ['events' => [32, 36, 38], 'states' => [0]],
         'EDG' => ['events' => [39], 'states' => [0]],
         'EMH' => ['events' => [74], 'states' => [0, 8]],
-        'EMI' => ['events' => [32, 36, 74, 75], 'states' => [0, 8]],
+        'EMI' => ['events' => [32, 38, 74, 75], 'states' => [0, 8]],
     ],
     'exchange_receipt_candidate_events' => [1, 2, 3, 8, 14, 15],
     // Confirmación compuesta desde Almacén: devolución física de Aduana seguida de entrega.

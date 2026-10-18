@@ -175,7 +175,7 @@ class SqlServerSearchService
                         WHEN nee.CONDITION_CD = 30 THEN 'Envío recibido en buen estado'
                         ELSE COALESCE(ic.ITEM_CONDITION_NM, '')
                     END AS CONDITION_TXT,
-                    CONCAT('PaÃ­s Origen: ', COALESCE(co.COUNTRY_NM, nee.PLACE_OF_ORIGIN_OFFICE_CD, '')) AS DETAIL_TXT,
+                    CONCAT(N'País Origen: ', COALESCE(co.COUNTRY_NM, nee.PLACE_OF_ORIGIN_OFFICE_CD, N'')) AS DETAIL_TXT,
                     'IPS5Db-EDI' AS SOURCE_DB
                 FROM dbo.N_EDI_MAILITM_EVENTS nee
                 INNER JOIN dbo.N_EDI_MAILITMS ne ON ne.MAILITM_PID = nee.MAILITM_PID
@@ -602,7 +602,7 @@ class SqlServerSearchService
                 CONCAT(COALESCE(u.USER_DOMAIN,''), '-', RTRIM(COALESCE(u.USER_FID,''))) AS SCANNED_TXT,
                 CONCAT(RTRIM(COALESCE(w.WORKSTATION_FID,'')), '-', RTRIM(COALESCE(w.WORKSTATION_DOMAIN,''))) AS WORKSTATION_TXT,
                 CASE
-                    WHEN e.CONDITION_CD = 30 THEN 'EnvÃ­o recibido en buen estado'
+                    WHEN e.CONDITION_CD = 30 THEN N'Envío recibido en buen estado'
                     ELSE COALESCE(ic.ITEM_CONDITION_NM, '')
                 END AS CONDITION_TXT,
                 CAST('' AS varchar(200)) AS DETAIL_TXT,
@@ -645,10 +645,10 @@ class SqlServerSearchService
                 CAST('' AS varchar(200)) AS SCANNED_TXT,
                 CAST('' AS varchar(200)) AS WORKSTATION_TXT,
                 CASE
-                    WHEN nee.CONDITION_CD = 30 THEN 'EnvÃ­o recibido en buen estado'
+                    WHEN nee.CONDITION_CD = 30 THEN N'Envío recibido en buen estado'
                     ELSE COALESCE(ic.ITEM_CONDITION_NM, '')
                 END AS CONDITION_TXT,
-                CONCAT('PaÃƒÂ­s Origen: ', COALESCE(co.COUNTRY_NM, nee.PLACE_OF_ORIGIN_OFFICE_CD, '')) AS DETAIL_TXT,
+                CONCAT(N'País Origen: ', COALESCE(co.COUNTRY_NM, nee.PLACE_OF_ORIGIN_OFFICE_CD, N'')) AS DETAIL_TXT,
                 'IPS5Db-EDI' AS SOURCE_DB
             FROM dbo.N_EDI_MAILITM_EVENTS nee
             INNER JOIN dbo.N_EDI_MAILITMS ne ON ne.MAILITM_PID = nee.MAILITM_PID
