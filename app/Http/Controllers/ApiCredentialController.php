@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
@@ -34,9 +35,7 @@ class ApiCredentialController extends Controller
             ->flatMap(function (User $owner) {
                 return $owner->tokens->map(function ($token) use ($owner) {
                     $token->owner_name = $owner->name;
-                    $token->plain_text_token = $token->secret_encrypted
-                        ? Crypt::decryptString($token->secret_encrypted)
-                        : null;
+                    $token->plain_text_token = $this->decryptTokenSecret($token->secret_encrypted);
 
                     return $token;
                 });
@@ -319,6 +318,19 @@ class ApiCredentialController extends Controller
                 'ability' => 'ips.deliver',
             ],
         ];
+    }
+
+    private function decryptTokenSecret(?string $encryptedSecret): ?string
+    {
+        if (! $encryptedSecret) {
+            return null;
+        }
+
+        try {
+            return Crypt::decryptString($encryptedSecret);
+        } catch (DecryptException) {
+            return null;
+        }
     }
 
     private function findAdminToken(int $token): PersonalAccessToken

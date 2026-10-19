@@ -37,6 +37,19 @@ class ApiCredentialManagementTest extends TestCase
             ->assertDontSee($issued);
     }
 
+    public function test_api_credential_page_stays_available_when_a_saved_secret_cannot_be_decrypted(): void
+    {
+        $user = $this->admin();
+        $token = $user->createToken('legacy-credential', ['cds.read'])->accessToken;
+        $token->forceFill(['secret_encrypted' => 'invalid-ciphertext'])->save();
+
+        $this->actingAs($user)
+            ->get('/api-credentials')
+            ->assertOk()
+            ->assertSeeText('legacy-credential')
+            ->assertSeeText('Token anterior no recuperable. Para obtener uno nuevo, usa Rotar.');
+    }
+
     public function test_admin_can_create_and_retrieve_a_limited_token_saved_encrypted(): void
     {
         $user = $this->admin();
