@@ -56,7 +56,7 @@ final class CustomsPrealertService
                     'origin_ctci' => substr($code, 0, 6),
                     'destination_ctci' => substr($code, 6, 6),
                     'summary' => $summaries[(string) $dispatch->DESPTCH_PID] ?? $this->emptySummary(),
-                    'detail_path' => '/v1/aduana/prealertas/'.$code,
+                    'detail_path' => '/v1/postal/prealertas/'.$code,
                 ];
             })->all(),
         ];

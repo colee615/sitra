@@ -25,7 +25,7 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->render(function (AuthenticationException $exception, Request $request) {
-            if ($request->is('api/v1/aduana', 'api/v1/aduana/*')) {
+            if ($request->is('api/v1/postal', 'api/v1/postal/*')) {
                 return CustomsApiError::response(401, 'No autenticado. Envía un token Bearer válido.');
             }
 
@@ -34,7 +34,7 @@ return Application::configure(basePath: dirname(__DIR__))
             }
         });
         $exceptions->render(function (Throwable $exception, Request $request) {
-            if (!$request->is('api/v1/aduana', 'api/v1/aduana/*')) {
+            if (!$request->is('api/v1/postal', 'api/v1/postal/*')) {
                 return null;
             }
 

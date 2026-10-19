@@ -9,8 +9,8 @@ Documento de transferencia para el Área de Sistemas de Aduana. Describe el cont
 | Sistema proveedor | SITRA — Gestión postal y aduanera |
 | Sistema consumidor | Aduana — nombre del sistema consumidor pendiente de confirmar |
 | Responsable técnico proveedor | Equipo de Sistemas SITRA — contacto operativo pendiente de completar |
-| Versión del documento | 2.0 |
-| Fecha | 18/10/2026 |
+| Versión del documento | 2.1 |
+| Fecha | 19/10/2026 |
 | Estado | Contrato funcional definido para validación conjunta; conectividad desde Aduana pendiente de validar |
 | Interfaz | API REST, JSON, solo lectura |
 | Clasificación | Documento técnico de integración |
@@ -44,7 +44,7 @@ Las dos operaciones principales responden a dos necesidades distintas: el índic
 
 ### Flujo recomendado para Aduana
 
-1. Sondear `GET {{baseUrl}}/v1/aduana/prealertas` usando un periodo acotado.
+1. Sondear `GET {{baseUrl}}/v1/postal/prealertas` usando un periodo acotado.
 2. Recorrer todas las páginas mediante `pagination.next_cursor`, repitiendo exactamente las fechas efectivas devueltas en `filters`.
 3. Registrar cada `dispatches[].identifier` de forma idempotente en el sistema consumidor y solicitar su `detail_path`.
 4. Procesar juntos el despacho, sus sacas, paquetes y datos CDS. Mantener separados el preaviso PREDES y la recepción física IPS.
@@ -93,7 +93,7 @@ Definir la dirección por ambiente en la configuración del consumidor, por ejem
 | `SITRA_API_BASE_URL` / `{{baseUrl}}` | `https://<host-de-integracion>/api` | Base común de todos los endpoints, incluido el prefijo `/api` |
 | `SITRA_API_TOKEN` | Secreto administrado | Token Bearer; no guardar en código fuente |
 
-Si cambia el host, el puerto o el prefijo común, actualizar solo esta variable en el ambiente de consumo; los paths `/v1/aduana/...` permanecen iguales. El host compartido es un dato pendiente de coordinación y no se debe inferir a partir del ejemplo local.
+Si cambia el host, el puerto o el prefijo común, actualizar solo esta variable en el ambiente de consumo; los paths `/v1/postal/...` permanecen iguales. El host compartido es un dato pendiente de coordinación y no se debe inferir a partir del ejemplo local.
 
 El segmento `/v1` identifica la versión principal del contrato. SITRA y Aduana deben acordar y comunicar cambios antes del despliegue; un cambio incompatible de ruta, nombre, tipo o significado de campo requiere una transición coordinada a una nueva versión principal.
 
@@ -109,7 +109,7 @@ Accept: application/json
 | Elemento | Requisito | Notas |
 |---|---|---|
 | Método | `GET` | Todas las operaciones son de consulta |
-| URL | `{{baseUrl}}/v1/aduana/...` | `{{baseUrl}}` ya incluye `/api` y no termina en `/` |
+| URL | `{{baseUrl}}/v1/postal/...` | `{{baseUrl}}` ya incluye `/api` y no termina en `/` |
 | `Authorization` | `Bearer <TOKEN>` | Token personal SITRA vigente |
 | `Accept` | `application/json` | Solicita respuestas JSON, incluidos errores de autenticación |
 | `Body` | Vacío | No enviar JSON ni formulario |
@@ -137,13 +137,13 @@ Las dos primeras rutas son el flujo principal para carga entrante. Las siguiente
 
 | Rol | Operación | URL completa | Identificador de entrada | Capacidad recomendada | Información devuelta |
 |---|---|---|---|---|
-| Principal · sondeo | Índice de prealertas | `GET {{baseUrl}}/v1/aduana/prealertas` | Fechas, límite y cursor opcionales | `customs.prealerts.read` | S8 PREDES con destino BO, conteos, pesos de sacas y ruta `/v1/...` al detalle |
-| Principal · expediente | Detalle de prealerta | `GET {{baseUrl}}/v1/aduana/prealertas/{codigo}` | Identificador S8 entrante a BO | `customs.prealerts.read` | Árbol S8 → S9 → S10, CDS enlazado y recepción física IPS si fue registrada |
-| Puntual | Resumen de despacho operativo | `GET {{baseUrl}}/v1/aduana/despachos/{codigo}` | Código S8 | `customs.read` | Datos logísticos del despacho local registrado en IPS; consulta el registro operativo |
-| Puntual | Resumen de saca | `GET {{baseUrl}}/v1/aduana/sacas/{codigo}` | S9, número de registro o seguro que resuelva a una sola saca | `customs.read` | Peso IPS, conteos, despacho relacionado y referencias a paquetes |
-| Puntual | Resumen de paquete | `GET {{baseUrl}}/v1/aduana/paquetes/{codigo}` | Código S10 o código local | `customs.read` | Datos del paquete, conteos, último movimiento IPS y referencias relacionadas |
-| Puntual | Declaraciones CDS | `GET {{baseUrl}}/v1/aduana/declaraciones/{codigo}` | Código postal o local que resuelva a un paquete | `customs.read` | Declaraciones, respuestas CDS, datos de contenido y eventos asociados |
-| Auxiliar | Consulta general por código | `GET {{baseUrl}}/v1/aduana/consulta/{codigo}` | S8, S9, S10 o código local | `customs.read` | Detecta el tipo y devuelve su ficha completa; las rutas específicas y el flujo PREDES ofrecen contratos más claros para una integración automatizada |
+| Principal · sondeo | Índice de prealertas | `GET {{baseUrl}}/v1/postal/prealertas` | Fechas, límite y cursor opcionales | `customs.prealerts.read` | S8 PREDES con destino BO, conteos, pesos de sacas y ruta `/v1/...` al detalle |
+| Principal · expediente | Detalle de prealerta | `GET {{baseUrl}}/v1/postal/prealertas/{codigo}` | Identificador S8 entrante a BO | `customs.prealerts.read` | Árbol S8 → S9 → S10, CDS enlazado y recepción física IPS si fue registrada |
+| Puntual | Resumen de despacho operativo | `GET {{baseUrl}}/v1/postal/despachos/{codigo}` | Código S8 | `customs.read` | Datos logísticos del despacho local registrado en IPS; consulta el registro operativo |
+| Puntual | Resumen de saca | `GET {{baseUrl}}/v1/postal/sacas/{codigo}` | S9, número de registro o seguro que resuelva a una sola saca | `customs.read` | Peso IPS, conteos, despacho relacionado y referencias a paquetes |
+| Puntual | Resumen de paquete | `GET {{baseUrl}}/v1/postal/paquetes/{codigo}` | Código S10 o código local | `customs.read` | Datos del paquete, conteos, último movimiento IPS y referencias relacionadas |
+| Puntual | Declaraciones CDS | `GET {{baseUrl}}/v1/postal/declaraciones/{codigo}` | Código postal o local que resuelva a un paquete | `customs.read` | Declaraciones, respuestas CDS, datos de contenido y eventos asociados |
+| Auxiliar | Consulta general por código | `GET {{baseUrl}}/v1/postal/consulta/{codigo}` | S8, S9, S10 o código local | `customs.read` | Detecta el tipo y devuelve su ficha completa; las rutas específicas y el flujo PREDES ofrecen contratos más claros para una integración automatizada |
 
 **Para la primera integración de carga entrante, Aduana debe consumir las dos operaciones principales y recibir una credencial `customs.prealerts.read`.** Las cinco rutas restantes son consultas puntuales de registros operativos IPS/CDS. Una entidad anunciada en PREDES puede no tener todavía registro operativo; por eso una respuesta `404` en esas consultas no debe borrar ni reemplazar el dato PREDES. `/consulta/{codigo}` es auxiliar y devuelve una ficha variable según el tipo de identificador. `customs.read` conserva acceso a las siete rutas por compatibilidad y para integraciones que justifiquen ese alcance.
 
@@ -449,7 +449,7 @@ Este ejemplo se enfoca en la estructura y en los campos principales; los arreglo
 ### 5.1 Resumen del despacho S8
 
 ```http
-GET {{baseUrl}}/v1/aduana/despachos/BOLPBCITMXPAACN60004
+GET {{baseUrl}}/v1/postal/despachos/BOLPBCITMXPAACN60004
 ```
 
 Respuesta:
@@ -492,7 +492,7 @@ Los campos de fecha, peso, transporte y conteos pueden ser `null` si la fuente n
 ### 5.2 Resumen de saca S9
 
 ```http
-GET {{baseUrl}}/v1/aduana/sacas/BOLPBBCAYTOAAEN60031001100007
+GET {{baseUrl}}/v1/postal/sacas/BOLPBBCAYTOAAEN60031001100007
 ```
 
 Respuesta representativa:
@@ -551,7 +551,7 @@ Contrato de la respuesta compacta:
 ### 5.3 Resumen de paquete S10
 
 ```http
-GET {{baseUrl}}/v1/aduana/paquetes/EE000738405BO
+GET {{baseUrl}}/v1/postal/paquetes/EE000738405BO
 ```
 
 `data` incluye `identifier`, `sources`, `summary`, `package`, `movements[]`, `related_identifiers` y `truncated`.
@@ -618,7 +618,7 @@ Los valores de este ejemplo son demostrativos. Consultar la fuente en el ambient
 ### 5.4 Declaraciones y respuestas CDS
 
 ```http
-GET {{baseUrl}}/v1/aduana/declaraciones/EE000738405BO
+GET {{baseUrl}}/v1/postal/declaraciones/EE000738405BO
 ```
 
 La respuesta raíz es `data` con:
@@ -731,7 +731,7 @@ Un paquete encontrado en IPS puede no tener declaración. En ese caso la consult
 ### 5.5 Índice de prealertas PREDES entrantes
 
 ```http
-GET {{baseUrl}}/v1/aduana/prealertas?desde=2026-10-10&hasta=2026-10-16&limite=20
+GET {{baseUrl}}/v1/postal/prealertas?desde=2026-10-10&hasta=2026-10-16&limite=20
 ```
 
 Esta consulta lista despachos del repositorio EDI de IPS cuyo CTCI de destino (posiciones 7–12 del S8) comienza con `BO`. Usa la fecha de cierre del despacho PREDES para seleccionar el periodo. Solo devuelve un índice acotado; para enviar el contenido aduanero de un despacho se solicita su detalle en `detail_path`.
@@ -747,7 +747,7 @@ El rango máximo es de 31 días. Los resultados se ordenan por fecha de cierre P
 
 En cada página, repetir los valores efectivos `predes_closing_date_from` y `predes_closing_date_to` de `filters` como `desde` y `hasta`. Esto también aplica cuando la primera solicitud omitió fechas y SITRA usó los valores predeterminados; el rango predeterminado cambia con el día. El tamaño `limite` puede mantenerse igual durante la paginación para facilitar el procesamiento.
 
-`detail_path` contiene la ruta desde `/v1` y comienza con `/`; para formar la URL, concatenar literalmente `{{baseUrl}}{{detail_path}}` (por ejemplo, `https://host/api` + `/v1/aduana/prealertas/...`). No resolverlo como una URI absoluta contra `baseUrl`, porque eso puede quitar el prefijo `/api`. Una respuesta vacía es `200` con `dispatches: []`, no `404`. Para sondeo continuo, Aduana debe consultar una ventana móvil reciente, guardar el S8 de forma idempotente y volver a leer detalles de despachos en tránsito. El índice filtra por fecha de cierre PREDES; no notifica cambios posteriores ni ofrece una instantánea transaccional entre páginas. SITRA no envía webhooks ni inicia conexiones hacia Aduana.
+`detail_path` contiene la ruta desde `/v1` y comienza con `/`; para formar la URL, concatenar literalmente `{{baseUrl}}{{detail_path}}` (por ejemplo, `https://host/api` + `/v1/postal/prealertas/...`). No resolverlo como una URI absoluta contra `baseUrl`, porque eso puede quitar el prefijo `/api`. Una respuesta vacía es `200` con `dispatches: []`, no `404`. Para sondeo continuo, Aduana debe consultar una ventana móvil reciente, guardar el S8 de forma idempotente y volver a leer detalles de despachos en tránsito. El índice filtra por fecha de cierre PREDES; no notifica cambios posteriores ni ofrece una instantánea transaccional entre páginas. SITRA no envía webhooks ni inicia conexiones hacia Aduana.
 
 | Campo de `data` | Tipo | Significado |
 |---|---|---|
@@ -797,7 +797,7 @@ Ejemplo de índice (valores ilustrativos, no garantizan que el despacho siga en 
           "sacks_weight_complete": true,
           "sacks_with_count_mismatch": 0
         },
-        "detail_path": "/v1/aduana/prealertas/ESMADCBOLPBCBCN60214"
+        "detail_path": "/v1/postal/prealertas/ESMADCBOLPBCBCN60214"
       }
     ]
   }
@@ -807,7 +807,7 @@ Ejemplo de índice (valores ilustrativos, no garantizan que el despacho siga en 
 ### 5.6 Detalle de prealerta S8 con sacas, paquetes y CDS
 
 ```http
-GET {{baseUrl}}/v1/aduana/prealertas/ESMADCBOLPBCBCN60214
+GET {{baseUrl}}/v1/postal/prealertas/ESMADCBOLPBCBCN60214
 ```
 
 La ruta acepta solo un S8 con destino `BO`. `data.dispatch` presenta el anuncio PREDES y sus tramos de transporte; `data.sacks[]` conserva cada S9; dentro de cada saca `packages[]` contiene los S10 y el resultado de enlazarlos por identificador con CDS. No se eliminan paquetes PREDES cuando CDS no encuentra coincidencia: se informa explícitamente el estado de la consulta.
@@ -1062,7 +1062,7 @@ Primero solicitar el índice de prealertas. El ejemplo fija ambas fechas para qu
 
 ```bash
 curl --request GET \
-  --url "${SITRA_API_BASE_URL}/v1/aduana/prealertas?desde=2026-10-10&hasta=2026-10-16&limite=20" \
+  --url "${SITRA_API_BASE_URL}/v1/postal/prealertas?desde=2026-10-10&hasta=2026-10-16&limite=20" \
   --header 'Accept: application/json' \
   --header "Authorization: Bearer ${SITRA_API_TOKEN}"
 ```
@@ -1070,7 +1070,7 @@ curl --request GET \
 Para la página siguiente, conservar el rango efectivo y codificar el cursor como parámetro de URL:
 
 ```bash
-curl --get "${SITRA_API_BASE_URL}/v1/aduana/prealertas" \
+curl --get "${SITRA_API_BASE_URL}/v1/postal/prealertas" \
   --data-urlencode 'desde=2026-10-10' \
   --data-urlencode 'hasta=2026-10-16' \
   --data-urlencode 'limite=20' \
@@ -1083,24 +1083,24 @@ Para cada `dispatches[].identifier`, solicitar el detalle. También se puede usa
 
 ```bash
 curl --request GET \
-  --url "${SITRA_API_BASE_URL}/v1/aduana/prealertas/ESMADCBOLPBCBCN60214" \
+  --url "${SITRA_API_BASE_URL}/v1/postal/prealertas/ESMADCBOLPBCBCN60214" \
   --header 'Accept: application/json' \
   --header "Authorization: Bearer ${SITRA_API_TOKEN}"
 ```
 
 Si `pagination.has_more` es `true`, repetir `desde` y `hasta` con el mismo rango y agregar `cursor` con el valor exacto de `pagination.next_cursor`. Persistir el S8 procesado con una clave única para que repetir una ventana no duplique expedientes.
 
-Una consulta puntual de paquete, cuando se requiera, usa `GET ${SITRA_API_BASE_URL}/v1/aduana/paquetes/{S10}`. Para el detalle CDS del mismo paquete se usa `GET ${SITRA_API_BASE_URL}/v1/aduana/declaraciones/{S10}`. Estas consultas no son necesarias para reconstruir el expediente obtenido mediante `/prealertas/{S8}`.
+Una consulta puntual de paquete, cuando se requiera, usa `GET ${SITRA_API_BASE_URL}/v1/postal/paquetes/{S10}`. Para el detalle CDS del mismo paquete se usa `GET ${SITRA_API_BASE_URL}/v1/postal/declaraciones/{S10}`. Estas consultas no son necesarias para reconstruir el expediente obtenido mediante `/prealertas/{S8}`.
 
 ### 8.2 Postman
 
 1. Crear variables de ambiente `baseUrl` y `token`; configurar `baseUrl` incluyendo `/api`, sin barra final, y cargar el token como valor secreto.
-2. Crear una solicitud `GET` a `{{baseUrl}}/v1/aduana/prealertas?desde={{desde}}&hasta={{hasta}}&limite=20`.
+2. Crear una solicitud `GET` a `{{baseUrl}}/v1/postal/prealertas?desde={{desde}}&hasta={{hasta}}&limite=20`.
 3. En **Authorization**, seleccionar **Bearer Token** y asignar `{{token}}`.
 4. En **Headers**, incluir `Accept: application/json`.
 5. Dejar **Body** vacío.
 6. Guardar `filters.predes_closing_date_from` y `filters.predes_closing_date_to`; reutilizarlos sin cambios al continuar con `pagination.next_cursor`.
-7. Para ver el expediente de un despacho, crear otra solicitud `GET` a `{{baseUrl}}/v1/aduana/prealertas/{{s8}}`.
+7. Para ver el expediente de un despacho, crear otra solicitud `GET` a `{{baseUrl}}/v1/postal/prealertas/{{s8}}`.
 8. Revisar el código HTTP, `source_status`, `completeness` y los campos de truncamiento antes de consumir el resultado.
 
 No guardar tokens reales en colecciones compartidas sin protección. Si Aduana necesita compartir la colección, usar variables secretas/privadas del ambiente y exportar una colección sin credenciales.
@@ -1169,7 +1169,7 @@ Los ejemplos de este documento ilustran el contrato y no son garantía de que lo
 
 ### 9.3 Control de cambios
 
-Este documento describe las rutas bajo `/api/v1/aduana`. Registrar cualquier cambio de contrato acordado, fecha, versión del documento y responsables SITRA/Aduana. Si una modificación afecta nombres, tipos o significado de campos existentes, acordar el despliegue con ambos equipos antes de actualizar el consumidor.
+Este documento describe las rutas bajo `/api/v1/postal`. Registrar cualquier cambio de contrato acordado, fecha, versión del documento y responsables SITRA/Aduana. Si una modificación afecta nombres, tipos o significado de campos existentes, acordar el despliegue con ambos equipos antes de actualizar el consumidor.
 
 **Cambios de esta revisión 1.5:** flujo principal definido en torno al índice y detalle PREDES; rutas por entidad clasificadas como consultas puntuales y la consulta general como auxiliar; paginación aclarada para reutilizar el rango efectivo; separación explícita entre los totales del encabezado PREDES, los conteos S9/S10 y la recepción IPS; ejemplos principales actualizados al recorrido de Aduana; y mensajes documentados alineados con el backend.
 
@@ -1182,6 +1182,8 @@ Este documento describe las rutas bajo `/api/v1/aduana`. Registrar cualquier cam
 **Cambios de esta revisión 1.9:** se separó la capacidad mínima `customs.prealerts.read` del acceso completo `customs.read`; se documentó la cuota por credencial; se normalizó el formato de errores con código estable, identificador de solicitud y criterio de reintento; y se distinguieron fallos internos `500` de indisponibilidad de fuentes `503`.
 
 **Cambios de esta revisión 2.0:** las respuestas S10 de `/paquetes/{codigo}` y `/consulta/{codigo}` presentan únicamente el evento postal IPS más reciente; `summary.movement_count` mantiene el total de eventos encontrados. Los eventos CDS de declaraciones y los registros de entrega conservan sus colecciones independientes.
+
+**Cambios de esta revisión 2.1:** se agruparon las rutas públicas bajo `/api/v1/postal` para nombrar el dominio postal de la API, manteniendo las mismas operaciones, permisos y estructuras de respuesta.
 
 ### Referencias técnicas
 

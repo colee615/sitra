@@ -127,7 +127,7 @@ class CustomsOperationsApiTest extends TestCase
         ));
 
         $this->withToken($this->token(['customs.read']))
-            ->getJson('/api/v1/aduana/despachos/S8TEST01')
+            ->getJson('/api/v1/postal/despachos/S8TEST01')
             ->assertOk()->assertJsonPath('data.identifier', 'S8TEST01')
             ->assertJsonPath('data.dispatch_number', null)
             ->assertJsonPath('data.dispatches.0.origin', 'BOLPBC')
@@ -141,7 +141,7 @@ class CustomsOperationsApiTest extends TestCase
             ->assertJsonMissingPath('data.summary')
             ->assertJsonMissingPath('data.detail')
             ->assertJsonMissingPath('data.receptacles');
-        $this->getJson('/api/v1/aduana/sacas/S9TEST01')
+        $this->getJson('/api/v1/postal/sacas/S9TEST01')
             ->assertOk()->assertJsonPath('data.identifier', 'S9TEST01')
             ->assertJsonPath('data.sack.identifier', 'S9TEST01')
             ->assertJsonPath('data.sack.number', '001')
@@ -152,11 +152,11 @@ class CustomsOperationsApiTest extends TestCase
             ->assertJsonPath('data.related_identifiers.packages.0', 'LX123456789US')
             ->assertJsonMissingPath('data.code_analysis')
             ->assertJsonMissingPath('data.manifests');
-        $this->getJson('/api/v1/aduana/sacas/REG001')
+        $this->getJson('/api/v1/postal/sacas/REG001')
             ->assertOk()->assertJsonPath('data.identifier', 'REG001')
             ->assertJsonPath('data.sack.identifier', 'S9TEST01');
 
-        $this->getJson('/api/v1/aduana/consulta/'.$fullS8)
+        $this->getJson('/api/v1/postal/consulta/'.$fullS8)
             ->assertOk()
             ->assertJsonPath('data.type', 'S8')
             ->assertJsonPath('data.identifier', $fullS8)
@@ -166,7 +166,7 @@ class CustomsOperationsApiTest extends TestCase
             ->assertJsonPath('data.details.dispatches.0.sacks.0.identifier', $fullS9Bag->RECPTCL_FID)
             ->assertJsonPath('data.details.dispatches.0.sacks.0.packages_declared', 1);
 
-        $this->getJson('/api/v1/aduana/consulta/BOLPBCITMXPAACN60004001100091')
+        $this->getJson('/api/v1/postal/consulta/BOLPBCITMXPAACN60004001100091')
             ->assertOk()
             ->assertJsonPath('data.type', 'S9')
             ->assertJsonPath('data.identifier', 'BOLPBCITMXPAACN60004001100091')
@@ -175,21 +175,21 @@ class CustomsOperationsApiTest extends TestCase
             ->assertJsonPath('data.identifier_analysis.receptacle_sequence', '001')
             ->assertJsonPath('data.details.packages.0.identifier', 'LX123456789US');
 
-        $this->getJson('/api/v1/aduana/despachos/BOLPBCITMXPAACN60005')->assertNotFound();
-        $this->getJson('/api/v1/aduana/consulta/BOLPBCITMXPAACN60005')->assertNotFound();
-        $this->getJson('/api/v1/aduana/sacas/BOLPBCITMXPAACN60005001100007')->assertNotFound();
+        $this->getJson('/api/v1/postal/despachos/BOLPBCITMXPAACN60005')->assertNotFound();
+        $this->getJson('/api/v1/postal/consulta/BOLPBCITMXPAACN60005')->assertNotFound();
+        $this->getJson('/api/v1/postal/sacas/BOLPBCITMXPAACN60005001100007')->assertNotFound();
     }
 
     public function test_customs_api_requires_both_sitra_permission_and_token_ability(): void
     {
-        $this->getJson('/api/v1/aduana/despachos/S8TEST01')->assertUnauthorized();
+        $this->getJson('/api/v1/postal/despachos/S8TEST01')->assertUnauthorized();
 
         $this->withToken($this->token(['customs.read'], admin:false))
-            ->getJson('/api/v1/aduana/despachos/S8TEST01')->assertForbidden();
+            ->getJson('/api/v1/postal/despachos/S8TEST01')->assertForbidden();
 
         $this->app['auth']->forgetGuards();
         $this->withToken($this->token(['sqlserver.read'], admin:false, permissions:['customs.read']))
-            ->getJson('/api/v1/aduana/despachos/S8TEST01')
+            ->getJson('/api/v1/postal/despachos/S8TEST01')
             ->assertForbidden();
     }
 
@@ -252,7 +252,7 @@ class CustomsOperationsApiTest extends TestCase
         $this->app->instance(PostalWorkspace::class, $workspace);
 
         $packageResponse = $this->withToken($this->token(['customs.read']))
-            ->getJson('/api/v1/aduana/paquetes/EE000738405BO')
+            ->getJson('/api/v1/postal/paquetes/EE000738405BO')
             ->assertOk()
             ->assertJsonPath('data.identifier', 'EE000738405BO')
             ->assertJsonPath('data.related_identifiers.declarations.0', 'CN23-0001')
@@ -267,7 +267,7 @@ class CustomsOperationsApiTest extends TestCase
         $packageResponse->assertJsonCount(1, 'data.movements');
         $this->assertStringContainsString('no-store', (string) $packageResponse->headers->get('Cache-Control'));
 
-        $declarationsResponse = $this->getJson('/api/v1/aduana/declaraciones/EE000738405BO')
+        $declarationsResponse = $this->getJson('/api/v1/postal/declaraciones/EE000738405BO')
             ->assertOk()
             ->assertJsonPath('data.identifier', 'EE000738405BO')
             ->assertJsonPath('data.packages.0.declarations.0.number', 'CN23-0001')
@@ -275,7 +275,7 @@ class CustomsOperationsApiTest extends TestCase
             ->assertJsonMissingPath('data.detail');
         $this->assertStringContainsString('no-store', (string) $declarationsResponse->headers->get('Cache-Control'));
 
-        $generalResponse = $this->getJson('/api/v1/aduana/consulta/EE000738405BO')
+        $generalResponse = $this->getJson('/api/v1/postal/consulta/EE000738405BO')
             ->assertOk()
             ->assertJsonPath('data.type', 'S10')
             ->assertJsonPath('data.identifier', 'EE000738405BO')
@@ -288,22 +288,22 @@ class CustomsOperationsApiTest extends TestCase
             ->assertJsonPath('data.details.events.0.code', 30);
         $generalResponse->assertJsonCount(1, 'data.details.events');
 
-        $this->getJson('/api/v1/aduana/paquetes/UNKNOWN001')->assertNotFound();
-        $this->getJson('/api/v1/aduana/declaraciones/UNKNOWN001')->assertNotFound();
+        $this->getJson('/api/v1/postal/paquetes/UNKNOWN001')->assertNotFound();
+        $this->getJson('/api/v1/postal/declaraciones/UNKNOWN001')->assertNotFound();
     }
 
     public function test_s10_aduana_lookups_reject_tokens_without_customs_read(): void
     {
-        $this->getJson('/api/v1/aduana/paquetes/EE000738405BO')->assertUnauthorized();
+        $this->getJson('/api/v1/postal/paquetes/EE000738405BO')->assertUnauthorized();
 
         $this->withToken($this->token(['sqlserver.read']))
-            ->getJson('/api/v1/aduana/paquetes/EE000738405BO')
+            ->getJson('/api/v1/postal/paquetes/EE000738405BO')
             ->assertForbidden();
 
         $this->app['auth']->forgetGuards();
 
         $this->withToken($this->token(['sqlserver.read']))
-            ->getJson('/api/v1/aduana/declaraciones/EE000738405BO')
+            ->getJson('/api/v1/postal/declaraciones/EE000738405BO')
             ->assertForbidden();
     }
 }

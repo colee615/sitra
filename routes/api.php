@@ -31,7 +31,7 @@ Route::prefix('v1/ips')->middleware(['auth:sanctum', 'throttle:60,1'])->group(fu
     Route::post('paquetes/{codigo}/entrega', [IpsController::class, 'write'])->where('codigo', '[A-Za-z0-9-]{1,35}')->defaults('ips_event', 'EMI')->middleware(AuthorizeIps::class.':ips.deliver');
 });
 
-Route::prefix('v1/aduana')->middleware(['auth:sanctum', 'throttle:customs-api'])->group(function () {
+Route::prefix('v1/postal')->middleware(['auth:sanctum', 'throttle:customs-api'])->group(function () {
     Route::get('consulta/{codigo}', [CustomsOperationsController::class, 'lookup'])
         ->where('codigo', '[A-Za-z0-9-]{1,35}')->middleware(AuthorizeCustoms::class.':customs.read');
     Route::get('paquetes/{codigo}', [CustomsOperationsController::class, 'package'])
