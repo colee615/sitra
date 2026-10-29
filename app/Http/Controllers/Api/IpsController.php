@@ -72,6 +72,51 @@ class IpsController extends Controller
         return $this->respond(fn () => ['data' => $ips->receptacleDetail(strtoupper($codigo), (int) $filters['office_cd'])]);
     }
 
+    public function pendingReceptacleOpenings(Request $request, IpsRepository $ips)
+    {
+        $filters = $request->validate([
+            'office_cd' => ['required', 'integer', 'min:1', 'max:32767'],
+            'page' => ['nullable', 'integer', 'min:1', 'max:100000'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+
+        return $this->respond(fn () => $ips->pendingReceptacleOpenings(
+            (int) $filters['office_cd'],
+            (int) ($filters['page'] ?? 1),
+            (int) ($filters['per_page'] ?? 25),
+        ));
+    }
+
+    public function expectedInboundReceptacles(Request $request, IpsRepository $ips)
+    {
+        $filters = $request->validate([
+            'office_cd' => ['required', 'integer', 'min:1', 'max:32767'],
+            'page' => ['nullable', 'integer', 'min:1', 'max:100000'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+
+        return $this->respond(fn () => $ips->expectedInboundReceptacles(
+            (int) $filters['office_cd'],
+            (int) ($filters['page'] ?? 1),
+            (int) ($filters['per_page'] ?? 25),
+        ));
+    }
+
+    public function openedReceptaclesForPackageRegistration(Request $request, IpsRepository $ips)
+    {
+        $filters = $request->validate([
+            'office_cd' => ['required', 'integer', 'min:1', 'max:32767'],
+            'page' => ['nullable', 'integer', 'min:1', 'max:100000'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+
+        return $this->respond(fn () => $ips->openedReceptaclesForPackageRegistration(
+            (int) $filters['office_cd'],
+            (int) ($filters['page'] ?? 1),
+            (int) ($filters['per_page'] ?? 25),
+        ));
+    }
+
     public function catalog(Request $request, IpsRepository $ips)
     {
         $filters = $request->validate(['office_cd' => ['nullable', 'integer', 'min:0', 'max:32767']]);

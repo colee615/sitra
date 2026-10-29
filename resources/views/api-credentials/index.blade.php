@@ -18,7 +18,6 @@
         </div>
     </div>
 @stop
-
 @section('css')
     <style>
         .api-credentials-card { border: 0; border-radius: 12px; box-shadow: 0 3px 14px rgba(25, 45, 70, .07); margin-bottom: 22px; }
@@ -52,7 +51,8 @@
                 <section class="card api-credentials-card">
                     <div class="card-header bg-white border-0 pt-4 px-4">
                         <h2 class="card-title h5 mb-1">APIs disponibles</h2>
-                        <p class="text-muted mb-0">Rutas incluidas en SITRA y el permiso requerido por cada una. Una credencial nueva autoriza un permiso; varias rutas pueden compartir ese permiso.</p>
+                        <p class="text-muted mb-1">Abre la vista de una API para preparar su solicitud y revisar exactamente la información que devuelve. Las colecciones permiten ver los siguientes resultados cuando hay más datos.</p>
+                        <small class="text-muted">La URL corresponde al ambiente abierto. Si empieza con 127.0.0.1 o localhost, solo funciona en esta computadora; Aduana necesitará la dirección del ambiente de integración.</small>
                     </div>
                     <div class="card-body pt-3">
                         <div class="table-responsive">
@@ -61,14 +61,15 @@
                                     <tr>
                                         <th>Método</th>
                                         <th>URL para probar</th>
-                                        <th>Descripción</th>
+                                        <th>Qué recibe Aduana</th>
                                         <th>Permiso</th>
+                                        <th>Vista</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     @foreach ($apis as $api)
                                         @if ($loop->first || $apis[$loop->index - 1]['group'] !== $api['group'])
-                                            <tr class="api-group-heading"><td colspan="4">{{ $api['group'] }}</td></tr>
+                                            <tr class="api-group-heading"><td colspan="5">{{ $api['group'] }}</td></tr>
                                         @endif
                                         <tr>
                                             <td>
@@ -84,6 +85,11 @@
                                             </td>
                                             <td>{{ $api['description'] }}</td>
                                             <td><span class="api-credential-badge">{{ $api['ability'] }}</span></td>
+                                            <td class="text-nowrap">
+                                                <a class="btn btn-sm btn-primary" href="{{ route('api-credentials.endpoint-consumer-demo', ['method' => $api['method'], 'path' => $api['path']]) }}">
+                                                    <i class="fas fa-desktop mr-1"></i> Vista de consumidor
+                                                </a>
+                                            </td>
                                         </tr>
                                     @endforeach
                                 </tbody>

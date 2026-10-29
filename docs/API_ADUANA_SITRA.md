@@ -9,8 +9,8 @@ Documento de transferencia para el Área de Sistemas de Aduana. Describe el cont
 | Sistema proveedor | SITRA — Gestión postal y aduanera |
 | Sistema consumidor | Aduana — nombre del sistema consumidor pendiente de confirmar |
 | Responsable técnico proveedor | Equipo de Sistemas SITRA — contacto operativo pendiente de completar |
-| Versión del documento | 2.1 |
-| Fecha | 19/10/2026 |
+| Versión del documento | 2.5 |
+| Fecha | 28/10/2026 |
 | Estado | Contrato funcional definido para validación conjunta; conectividad desde Aduana pendiente de validar |
 | Interfaz | API REST, JSON, solo lectura |
 | Clasificación | Documento técnico de integración |
@@ -19,7 +19,7 @@ Documento de transferencia para el Área de Sistemas de Aduana. Describe el cont
 
 ## Resumen ejecutivo
 
-SITRA expone siete rutas `GET` autenticadas. El flujo de carga entrante usa dos operaciones: consultar el índice de prealertas PREDES dirigidas a Bolivia y recuperar el expediente de cada despacho S8. El detalle reúne el árbol S8 → S9 → S10, las declaraciones CDS encontradas y, por separado, la recepción física que IPS haya registrado.
+SITRA expone siete rutas `GET` autenticadas. El flujo de carga entrante usa dos operaciones: consultar el índice de prealertas PREDES dirigidas a Bolivia que aún tienen sacas sin recepción registrada en IPS y recuperar el expediente de cada despacho S8. El detalle reúne el árbol S8 → S9 → S10, las declaraciones CDS encontradas y, por separado, la recepción física que IPS haya registrado.
 
 Las rutas de despacho, saca, paquete y declaraciones sirven para consultas puntuales. La ruta general por código es una facilidad auxiliar; no es el flujo recomendado para recibir prealertas. Todas las respuestas de éxito se normalizan en JSON y los campos de contrato usan nombres estables en inglés.
 
@@ -27,7 +27,7 @@ La API no registra actuaciones ni modifica información. Para limitar el acceso 
 
 ### Qué información recibe Aduana y para qué sirve
 
-La entrega principal es un **expediente postal de prealerta por despacho S8**. SITRA toma el mensaje PREDES recibido en IPS y reúne, bajo el mismo S8, las sacas S9, los paquetes S10 identificados y las declaraciones/respuestas CDS que se puedan enlazar. Cuando IPS registra la recepción física de una saca, el expediente también informa ese dato en un bloque separado.
+La entrega principal es un **expediente postal de prealerta por despacho S8**. El índice excluye los despachos cuyas sacas PREDES tienen todas un evento de recepción IPS 130 registrado. Si al menos una saca no tiene ese evento, el despacho permanece como pendiente de recepción registrada; esto no prueba por sí solo que la carga siga físicamente en tránsito. El detalle reúne, bajo el mismo S8, las sacas S9, los paquetes S10 identificados y las declaraciones/respuestas CDS que se puedan enlazar. Cuando IPS registra la recepción física de una saca, el expediente también informa ese dato en un bloque separado.
 
 | Bloque | Fuente | Información entregada | Uso operativo recomendado y límite |
 |---|---|---|---|
@@ -44,8 +44,8 @@ Las dos operaciones principales responden a dos necesidades distintas: el índic
 
 ### Flujo recomendado para Aduana
 
-1. Sondear `GET {{baseUrl}}/v1/postal/prealertas` usando un periodo acotado.
-2. Recorrer todas las páginas mediante `pagination.next_cursor`, repitiendo exactamente las fechas efectivas devueltas en `filters`.
+1. Sondear `GET {{baseUrl}}/v1/postal/prealertas` usando un periodo acotado; el índice muestra despachos con al menos una saca sin evento de recepción IPS 130.
+2. Recorrer todas las páginas siguiendo el enlace `rel="next"` del encabezado HTTP `Link`; la URL conserva las fechas y el límite de la consulta.
 3. Registrar cada `dispatches[].identifier` de forma idempotente en el sistema consumidor y solicitar su `detail_path`.
 4. Procesar juntos el despacho, sus sacas, paquetes y datos CDS. Mantener separados el preaviso PREDES y la recepción física IPS.
 5. Volver a consultar los detalles de despachos aún en tránsito según la frecuencia acordada. La API no envía notificaciones ni incluye un cursor de cambios; la fecha del índice es la fecha de cierre PREDES.
@@ -137,13 +137,13 @@ Las dos primeras rutas son el flujo principal para carga entrante. Las siguiente
 
 | Rol | Operación | URL completa | Identificador de entrada | Capacidad recomendada | Información devuelta |
 |---|---|---|---|---|
-| Principal · sondeo | Índice de prealertas | `GET {{baseUrl}}/v1/postal/prealertas` | Fechas, límite y cursor opcionales | `customs.prealerts.read` | S8 PREDES con destino BO, conteos, pesos de sacas y ruta `/v1/...` al detalle |
-| Principal · expediente | Detalle de prealerta | `GET {{baseUrl}}/v1/postal/prealertas/{codigo}` | Identificador S8 entrante a BO | `customs.prealerts.read` | Árbol S8 → S9 → S10, CDS enlazado y recepción física IPS si fue registrada |
-| Puntual | Resumen de despacho operativo | `GET {{baseUrl}}/v1/postal/despachos/{codigo}` | Código S8 | `customs.read` | Datos logísticos del despacho local registrado en IPS; consulta el registro operativo |
-| Puntual | Resumen de saca | `GET {{baseUrl}}/v1/postal/sacas/{codigo}` | S9, número de registro o seguro que resuelva a una sola saca | `customs.read` | Peso IPS, conteos, despacho relacionado y referencias a paquetes |
-| Puntual | Resumen de paquete | `GET {{baseUrl}}/v1/postal/paquetes/{codigo}` | Código S10 o código local | `customs.read` | Datos del paquete, conteos, último movimiento IPS y referencias relacionadas |
-| Puntual | Declaraciones CDS | `GET {{baseUrl}}/v1/postal/declaraciones/{codigo}` | Código postal o local que resuelva a un paquete | `customs.read` | Declaraciones, respuestas CDS, datos de contenido y eventos asociados |
-| Auxiliar | Consulta general por código | `GET {{baseUrl}}/v1/postal/consulta/{codigo}` | S8, S9, S10 o código local | `customs.read` | Detecta el tipo y devuelve su ficha completa; las rutas específicas y el flujo PREDES ofrecen contratos más claros para una integración automatizada |
+| Principal · sondeo | Índice de prealertas pendientes | `GET {{baseUrl}}/v1/postal/prealertas` | Fechas y límite opcionales; continuación por encabezado `Link` | `customs.prealerts.read` | Lista S8 PREDES con destino Bolivia que tienen al menos una saca sin recepción IPS 130 registrada. Excluye los despachos con todas las sacas recibidas; conserva los parcialmente recibidos. |
+| Principal · expediente | Detalle de prealerta | `GET {{baseUrl}}/v1/postal/prealertas/{codigo}` | Identificador S8 entrante a BO | `customs.prealerts.read` | Estructura PREDES S8 → S9 → S10, datos CDS que se puedan enlazar y registro de recepción física IPS por saca si existe. La respuesta indica si CDS está incompleto o no disponible. |
+| Puntual | Despacho operativo | `GET {{baseUrl}}/v1/postal/despachos/{codigo}` | Código S8 | `customs.read` | Registro operativo IPS: origen, destino, salida, peso y cantidades de sacas declaradas/vinculadas. No consulta el preaviso PREDES. |
+| Puntual | Resumen de saca | `GET {{baseUrl}}/v1/postal/sacas/{codigo}` | S9, número de registro o seguro que resuelva a una sola saca | `customs.read` | Identificación y peso, conteos declarados/vinculados, despacho asociado, códigos S10, cantidad de movimientos y resumen CDS. No incluye las fichas completas de los paquetes. |
+| Puntual | Ficha de paquete | `GET {{baseUrl}}/v1/postal/paquetes/{codigo}` | Código S10 o código local | `customs.read` | Datos postales, último movimiento IPS, conteos y códigos relacionados de sacas, despachos y declaraciones CDS. No incluye el historial completo ni el contenido de las declaraciones. |
+| Puntual | Declaraciones CDS | `GET {{baseUrl}}/v1/postal/declaraciones/{codigo}` | Código postal o local que resuelva a un paquete | `customs.read` | Datos del paquete, declaraciones y respuestas disponibles, campos, artículos, documentos y eventos CDS asociados. |
+| Auxiliar | Consulta por código | `GET {{baseUrl}}/v1/postal/consulta/{codigo}` | S8, S9, S10 o código local | `customs.read` | Arma una ficha según el tipo: S8 busca el despacho operativo IPS; S9, la saca y paquetes; S10/local, el paquete y CDS. No consulta la bandeja PREDES. |
 
 **Para la primera integración de carga entrante, Aduana debe consumir las dos operaciones principales y recibir una credencial `customs.prealerts.read`.** Las cinco rutas restantes son consultas puntuales de registros operativos IPS/CDS. Una entidad anunciada en PREDES puede no tener todavía registro operativo; por eso una respuesta `404` en esas consultas no debe borrar ni reemplazar el dato PREDES. `/consulta/{codigo}` es auxiliar y devuelve una ficha variable según el tipo de identificador. `customs.read` conserva acceso a las siete rutas por compatibilidad y para integraciones que justifiquen ese alcance.
 
@@ -731,32 +731,26 @@ Un paquete encontrado en IPS puede no tener declaración. En ese caso la consult
 ### 5.5 Índice de prealertas PREDES entrantes
 
 ```http
-GET {{baseUrl}}/v1/postal/prealertas?desde=2026-10-10&hasta=2026-10-16&limite=20
+GET {{baseUrl}}/v1/postal/prealertas?desde=2026-10-22&hasta=2026-10-28&limite=10
 ```
 
-Esta consulta lista despachos del repositorio EDI de IPS cuyo CTCI de destino (posiciones 7–12 del S8) comienza con `BO`. Usa la fecha de cierre del despacho PREDES para seleccionar el periodo. Solo devuelve un índice acotado; para enviar el contenido aduanero de un despacho se solicita su detalle en `detail_path`.
+Esta consulta lista despachos del repositorio EDI de IPS cuyo CTCI de destino (posiciones 7–12 del S8) comienza con `BO`, dentro del periodo de cierre PREDES indicado, y que tienen al menos una saca S9 sin un evento de recepción física IPS 130 asociado al código S9. Si todas las sacas del despacho tienen ese evento, el despacho se excluye del índice. Si algunas lo tienen y otras no, el despacho permanece como pendiente y los conteos de recepción se informan en `summary`. La falta de un evento IPS no demuestra por sí sola que la carga no haya llegado físicamente. Para consultar el expediente completo de un despacho, usar `detail_path`.
 
 | Parámetro | Tipo | Obligatorio | Regla |
 |---|---|---:|---|
 | `desde` | fecha `YYYY-MM-DD` | No | Inicio inclusivo de `DESPTCH_CLOSING_DATE`. Por defecto, hoy menos 6 días en `America/La_Paz`. |
 | `hasta` | fecha `YYYY-MM-DD` | No | Fin inclusivo del periodo. Por defecto, hoy en `America/La_Paz`. |
 | `limite` | entero | No | Resultados por página; por defecto `20`, rango permitido `1–100`. |
-| `cursor` | string opaco firmado | No | Continuación exacta devuelta como `pagination.next_cursor`; debe conservar el mismo rango de fechas y no editarse. |
+| `cursor` | string opaco firmado | No | Continuación incluida en la URL del encabezado HTTP `Link` con `rel="next"`; no editarlo. Normalmente el consumidor no necesita construirlo manualmente. |
 
-El rango máximo es de 31 días. Los resultados se ordenan por fecha de cierre PREDES ascendente y, en caso de empate, por identificador interno de despacho. `has_more=true` indica que hay otra página; enviar `next_cursor` sin modificarlo. SITRA firma el cursor para detectar alteraciones y vincularlo al rango de fechas. El cursor no es una marca de cambios ni una credencial de acceso; cada página sigue requiriendo el Bearer Token.
+El rango máximo es de 31 días. Los resultados se ordenan por fecha de cierre PREDES ascendente y, en caso de empate, por identificador interno de despacho. Si hay otra página, SITRA devuelve el encabezado HTTP `Link: <URL>; rel="next"`. El enlace incluye el cursor firmado y conserva las fechas y el límite efectivos. Sígalo sin modificar la URL y envíe nuevamente el Bearer Token. El cursor no es una marca de cambios ni una credencial de acceso.
 
-En cada página, repetir los valores efectivos `predes_closing_date_from` y `predes_closing_date_to` de `filters` como `desde` y `hasta`. Esto también aplica cuando la primera solicitud omitió fechas y SITRA usó los valores predeterminados; el rango predeterminado cambia con el día. El tamaño `limite` puede mantenerse igual durante la paginación para facilitar el procesamiento.
+El cuerpo de respuesta contiene únicamente `data.dispatches`: los filtros, el estado de IPS y la información del cursor no se agregan al JSON. La URL del encabezado `Link` es la referencia para continuar la consulta, también cuando SITRA aplicó fechas predeterminadas.
 
-`detail_path` contiene la ruta desde `/v1` y comienza con `/`; para formar la URL, concatenar literalmente `{{baseUrl}}{{detail_path}}` (por ejemplo, `https://host/api` + `/v1/postal/prealertas/...`). No resolverlo como una URI absoluta contra `baseUrl`, porque eso puede quitar el prefijo `/api`. Una respuesta vacía es `200` con `dispatches: []`, no `404`. Para sondeo continuo, Aduana debe consultar una ventana móvil reciente, guardar el S8 de forma idempotente y volver a leer detalles de despachos en tránsito. El índice filtra por fecha de cierre PREDES; no notifica cambios posteriores ni ofrece una instantánea transaccional entre páginas. SITRA no envía webhooks ni inicia conexiones hacia Aduana.
+`detail_path` contiene la ruta desde `/v1` y comienza con `/`; para formar la URL, concatenar literalmente `{{baseUrl}}{{detail_path}}` (por ejemplo, `https://host/api` + `/v1/postal/prealertas/...`). No resolverlo como una URI absoluta contra `baseUrl`, porque eso puede quitar el prefijo `/api`. Una respuesta vacía es `200` con `dispatches: []`: puede significar que no hubo manifiestos en el periodo o que todos tienen recepción IPS registrada. Para sondeo continuo, Aduana debe consultar una ventana móvil reciente, guardar el S8 de forma idempotente y volver a leer detalles de despachos pendientes. El índice filtra por fecha de cierre PREDES y por recepción registrada al momento de cada página; no notifica cambios posteriores ni ofrece una instantánea transaccional entre páginas. SITRA no envía webhooks ni inicia conexiones hacia Aduana.
 
 | Campo de `data` | Tipo | Significado |
 |---|---|---|
-| `filters.destination_country_code` | string | Siempre `BO` en esta operación. |
-| `filters.predes_closing_date_from`, `..._to` | fecha | Rango efectivo aplicado. |
-| `source_status.ips` | string | `ok` si IPS respondió. |
-| `pagination.limit` | entero | Tamaño efectivo de página. |
-| `pagination.has_more` | boolean | Existe al menos un despacho más en el rango. |
-| `pagination.next_cursor` | string o `null` | Cursor para la página siguiente; `null` si terminó. |
 | `dispatches[]` | array | Resumen de cada S8 PREDES entrante encontrado. |
 | `dispatches[].identifier` | string | Código S8. |
 | `dispatches[].predes_closing_at` | fecha/hora o `null` | `DESPTCH_CLOSING_DATE` de IPS; no es una confirmación de llegada física. |
@@ -765,39 +759,36 @@ En cada página, repetir los valores efectivos `predes_closing_date_from` y `pre
 | `dispatches[].summary.packages_declared` | entero | Suma de cantidades declaradas en los registros S9. |
 | `dispatches[].summary.packages_declared_complete` | boolean | `false` si alguna saca no tiene cantidad declarada. |
 | `dispatches[].summary.packages_identified` | entero | Registros S10 con identificador no vacío en las sacas PREDES. |
+| `dispatches[].summary.sacks_physically_received` | entero | Sacas del S8 con evento IPS 130 registrado. |
+| `dispatches[].summary.sacks_without_receipt_event` | entero | Sacas sin evento IPS 130 asociado. Su ausencia no confirma que la saca no haya llegado físicamente. |
 | `dispatches[].summary.sacks_weight_total_kg` | número | Suma del peso anunciado de las sacas S9. |
 | `dispatches[].summary.sacks_weight_complete` | boolean | `false` si alguna saca no tiene peso informado. |
 | `dispatches[].summary.sacks_with_count_mismatch` | entero | Sacas donde el número declarado no coincide con los S10 identificados. |
 | `dispatches[].detail_path` | string | Sufijo de ruta desde `/v1`, con barra inicial; concatenar literalmente con `{{baseUrl}}`. |
 
-Ejemplo de índice (valores ilustrativos, no garantizan que el despacho siga en tránsito):
+Ejemplo real del índice local, consultado el 28/10/2026. El estado puede cambiar cuando IPS registre la recepción:
 
 ```json
 {
   "data": {
-    "filters": {
-      "destination_country_code": "BO",
-      "predes_closing_date_from": "2026-10-10",
-      "predes_closing_date_to": "2026-10-16"
-    },
-    "source_status": {"ips": "ok"},
-    "pagination": {"limit": 20, "has_more": false, "next_cursor": null},
     "dispatches": [
       {
-        "identifier": "ESMADCBOLPBCBCN60214",
-        "predes_closing_at": "2026-10-16 16:29:00",
-        "origin_ctci": "ESMADC",
-        "destination_ctci": "BOLPBC",
+        "identifier": "DEFRAABOLPBAAUX60098",
+        "predes_closing_at": "2026-10-22 02:10:00",
+        "origin_ctci": "DEFRAA",
+        "destination_ctci": "BOLPBA",
         "summary": {
-          "sacks_count": 4,
-          "packages_declared": 8,
+          "sacks_count": 1,
+          "packages_declared": 5,
           "packages_declared_complete": true,
-          "packages_identified": 8,
-          "sacks_weight_total_kg": 33.3,
+          "packages_identified": 5,
+          "sacks_physically_received": 0,
+          "sacks_without_receipt_event": 1,
+          "sacks_weight_total_kg": 1.9,
           "sacks_weight_complete": true,
           "sacks_with_count_mismatch": 0
         },
-        "detail_path": "/v1/postal/prealertas/ESMADCBOLPBCBCN60214"
+        "detail_path": "/v1/postal/prealertas/DEFRAABOLPBAAUX60098"
       }
     ]
   }
@@ -807,7 +798,7 @@ Ejemplo de índice (valores ilustrativos, no garantizan que el despacho siga en 
 ### 5.6 Detalle de prealerta S8 con sacas, paquetes y CDS
 
 ```http
-GET {{baseUrl}}/v1/postal/prealertas/ESMADCBOLPBCBCN60214
+GET {{baseUrl}}/v1/postal/prealertas/DEFRAABOLPBAAUX60098
 ```
 
 La ruta acepta solo un S8 con destino `BO`. `data.dispatch` presenta el anuncio PREDES y sus tramos de transporte; `data.sacks[]` conserva cada S9; dentro de cada saca `packages[]` contiene los S10 y el resultado de enlazarlos por identificador con CDS. No se eliminan paquetes PREDES cuando CDS no encuentra coincidencia: se informa explícitamente el estado de la consulta.
@@ -868,55 +859,90 @@ Las declaraciones incluyen atributos de contenido declarado y pueden contener in
 
 La fuente PREDES es un **preaviso del operador postal**. Las fechas de vuelo, pesos y contenidos describen lo anunciado y pueden cambiar. La recepción física se cruza por el identificador S9 contra la saca local IPS; los identificadores internos de PREDES e IPS no se presuponen iguales. La confirmación se entrega aparte mediante el evento 130; tampoco debe confundirse la falta de ese evento con una confirmación de que la carga no llegó.
 
-Fragmento ilustrativo del objeto `data`, verificado contra IPS el 16/10/2026 y abreviado a una saca y un paquete. La respuesta HTTP completa incluye el envoltorio `{ "data": ... }` y todos los campos definidos por el contrato:
+Fragmento real del objeto `data`, contrastado con IPS el 28/10/2026. El despacho también aparece en el índice de pendientes: tiene una saca sin evento IPS 130 registrado. Se muestran una saca y un paquete; la respuesta completa conserva todos los campos del contrato:
 
 ```json
 {
   "data": {
-    "identifier": "ESMADCBOLPBCBCN60214",
+    "identifier": "DEFRAABOLPBAAUX60098",
+    "type": "S8",
     "status": "prealert_available",
     "source_status": {"ips_predes": "ok", "cds": "ok"},
     "dispatch": {
-      "origin_ctci": "ESMADC",
-      "destination_ctci": "BOLPBC",
-      "predes_closing_at": "2026-10-16 16:29:00",
+      "identifier": "DEFRAABOLPBAAUX60098",
+      "origin_ctci": "DEFRAA",
+      "destination_ctci": "BOLPBA",
+      "destination_country_code": "BO",
+      "dispatch_sequence": "0098",
+      "predes_closing_at": "2026-10-22 02:10:00",
+      "inward_parcels_weight_kg": null,
+      "inward_parcels_count": null,
       "transport_legs": [
         {
-          "dispatch_date": "2026-10-19 23:35:00",
-          "arrival_date": "2026-10-20 07:49:00",
-          "flight": "UX 0025",
-          "origin_airport_code": "MAD",
-          "destination_airport_code": "VVI",
-          "carrier_code": "UX",
-          "carrier_number": "0025",
+          "dispatch_event_at": "2026-10-22 10:00:00",
+          "dispatch_date": "2026-10-22 10:00:00",
+          "arrival_date": "2026-10-23 23:59:00",
+          "estimated_indicator": "0",
+          "flight": "TGM 191",
+          "origin_airport_code": "FRA",
+          "destination_airport_code": "LTN",
+          "scheduled_departure_at": "2026-10-22 10:00:00",
+          "scheduled_arrival_at": "2026-10-22 23:00:00",
+          "carrier_code": "TGM",
+          "carrier_number": "191",
+          "transport_type_code": "TK"
+        },
+        {
+          "dispatch_event_at": "2026-10-22 10:00:00",
+          "dispatch_date": "2026-10-22 10:00:00",
+          "arrival_date": "2026-10-23 23:59:00",
+          "estimated_indicator": "0",
+          "flight": "GM 0000",
+          "origin_airport_code": "LTN",
+          "destination_airport_code": "LPB",
+          "scheduled_departure_at": "2026-10-23 00:01:00",
+          "scheduled_arrival_at": "2026-10-23 23:59:00",
+          "carrier_code": "GM",
+          "carrier_number": "0000",
           "transport_type_code": "PL"
         }
       ]
     },
     "summary": {
-      "sacks_count": 4,
-      "packages_declared": 8,
-      "packages_identified": 8,
+      "sacks_count": 1,
+      "packages_declared": 5,
+      "packages_declared_complete": true,
+      "packages_identified": 5,
+      "sacks_weight_total_kg": 1.9,
+      "sacks_weight_complete": true,
       "sacks_with_count_mismatch": 0,
       "packages_with_cds_declaration": 0,
+      "declarations_count": 0,
       "declaration_coverage": "none_found",
       "sacks_physically_received": 0,
       "arrival_status": "not_recorded_in_ips"
     },
+    "completeness": {
+      "predes_sacks_complete": true,
+      "predes_items_complete": true,
+      "cds_lookup_complete": true,
+      "cds_truncated": false
+    },
     "sacks": [
       {
-        "identifier": "ESMADCBOLPBCBCN60214001010109",
-        "number_of_items_declared": 1,
-        "items_identified": 1,
+        "identifier": "DEFRAABOLPBAAUX60098001100019",
+        "number_of_items_declared": 5,
+        "items_identified": 5,
         "count_matches": true,
-        "weight_kg": 10.9,
+        "weight_kg": 1.9,
+        "content_format_code": "E",
         "physical_receipt": {"status": "not_recorded_in_ips"},
         "packages": [
           {
-            "identifier": "CC024103305ES",
-            "origin_country_code": "ES",
+            "identifier": "LF877211158DE",
+            "origin_country_code": "DE",
             "destination_country_code": "BO",
-            "weight_kg": 10.65,
+            "weight_kg": 0.035,
             "cds": {"lookup_status": "not_found", "declarations": [], "responses": []}
           }
         ]
@@ -926,7 +952,7 @@ Fragmento ilustrativo del objeto `data`, verificado contra IPS el 16/10/2026 y a
 }
 ```
 
-En esa consulta concreta, IPS anunció cuatro sacas y ocho códigos S10, con los conteos de las cuatro sacas coincidentes. La búsqueda CDS estuvo disponible, pero no halló declaraciones por coincidencia exacta para esos ocho códigos. Esto evidencia por qué el contrato conserva todos los S10 de PREDES y marca por separado la cobertura CDS en lugar de descartar el despacho.
+En la consulta del ejemplo, el encabezado PREDES anuncia cinco paquetes en una saca de `1.9 kg`; se identificaron los cinco S10 y el conteo coincide. IPS no registra el evento 130 para esa saca, mientras que la búsqueda CDS no halló declaraciones por los identificadores consultados. La fecha de llegada anunciada pertenece a PREDES y no reemplaza la confirmación de recepción registrada en IPS.
 
 ## 6. Convenciones y calidad de datos
 
@@ -998,7 +1024,7 @@ El header `X-Request-ID` repite el identificador incluido en `error.request_id`.
 | `404` | Código no encontrado o URL que no coincide con el formato de ruta; prealerta S8 sin PREDES en IPS; para S9 significa cero coincidencias. Más de una coincidencia S9 produce `422`. | `error.code`: `NOT_FOUND`; mensaje de dominio según la ruta. Una ruta inexistente usa `No se encontró la ruta solicitada.` Un paquete sin declaración CDS no implica por sí solo un `404`. | Confirmar identificador, ruta y ambiente; distinguir inexistencia de CDS vacío. |
 | `405` | Se llamó una ruta existente con método distinto de `GET` | `error.code`: `METHOD_NOT_ALLOWED`; `message`: `El método HTTP no está permitido para esta ruta.` | Cambiar a `GET`; no enviar cuerpo. |
 | `409` | IPS detectó truncamiento al resolver el S9 | `error.code`: `CONFLICT`; `message`: `La consulta de la saca está incompleta. No se puede confirmar el resultado.`; `error.retryable`: `false`. | Tratar el resultado como no disponible/incompleto y coordinar consulta con SITRA. No reintentar en bucle. |
-| `422` | Código no es S8 para `/prealertas/{codigo}`, tipo incorrecto en rutas específicas, rango de fechas inválido/mayor a 31 días o cursor inválido | `error.code`: `VALIDATION_ERROR`; errores de parámetros incluyen `{ "errors": { ... } }`; `error.retryable`: `false`. | Corregir código, fechas o cursor; conservar el rango original al continuar páginas. |
+| `422` | Código no es S8 para `/prealertas/{codigo}`, tipo incorrecto en rutas específicas, rango de fechas inválido/mayor a 31 días o cursor inválido | `error.code`: `VALIDATION_ERROR`; errores de parámetros incluyen `{ "errors": { ... } }`; `error.retryable`: `false`. | Corregir código o fechas; para continuar páginas, seguir la URL recibida en `Link rel="next"` sin modificarla. |
 | `429` | Se excedieron 30 solicitudes por minuto para la credencial | `error.code`: `RATE_LIMITED`; `message`: `Se superó el límite de solicitudes.`; el header `Retry-After` indica cuándo reintentar; `error.retryable` es `true`. | Esperar el tiempo indicado, usar backoff y reducir concurrencia. |
 | `500` | Fallo interno no clasificado como indisponibilidad de una fuente | `error.code`: `INTERNAL_ERROR`; `message`: `No se pudo completar la consulta aduanera.`; `error.retryable`: `false`. | No reintentar automáticamente. Informar `error.request_id` al soporte de SITRA. |
 | `503` | IPS/CDS no disponible según el resultado de consulta o se detectó una falla de conexión/tiempo de espera con una fuente | `error.code`: `DEPENDENCY_UNAVAILABLE`; `message`: `Una fuente de datos necesaria no está disponible temporalmente.` cuando el controlador detecta la falla; `error.retryable`: `true`. | Reintentar con espera progresiva y límite de intentos; registrar status, ruta y `error.request_id`. |
@@ -1062,19 +1088,18 @@ Primero solicitar el índice de prealertas. El ejemplo fija ambas fechas para qu
 
 ```bash
 curl --request GET \
-  --url "${SITRA_API_BASE_URL}/v1/postal/prealertas?desde=2026-10-10&hasta=2026-10-16&limite=20" \
+  --url "${SITRA_API_BASE_URL}/v1/postal/prealertas?desde=2026-10-22&hasta=2026-10-28&limite=10" \
+  --include \
   --header 'Accept: application/json' \
   --header "Authorization: Bearer ${SITRA_API_TOKEN}"
 ```
 
-Para la página siguiente, conservar el rango efectivo y codificar el cursor como parámetro de URL:
+Si existe otra página, la respuesta incluye el encabezado `Link` con `rel="next"`. Copiar esa URL completa y usarla directamente; no extraer ni reconstruir el cursor:
 
 ```bash
-curl --get "${SITRA_API_BASE_URL}/v1/postal/prealertas" \
-  --data-urlencode 'desde=2026-10-10' \
-  --data-urlencode 'hasta=2026-10-16' \
-  --data-urlencode 'limite=20' \
-  --data-urlencode 'cursor=<NEXT_CURSOR>' \
+NEXT_URL='<URL completa indicada en Link rel="next">'
+curl --request GET \
+  --url "$NEXT_URL" \
   --header 'Accept: application/json' \
   --header "Authorization: Bearer ${SITRA_API_TOKEN}"
 ```
@@ -1083,12 +1108,12 @@ Para cada `dispatches[].identifier`, solicitar el detalle. También se puede usa
 
 ```bash
 curl --request GET \
-  --url "${SITRA_API_BASE_URL}/v1/postal/prealertas/ESMADCBOLPBCBCN60214" \
+  --url "${SITRA_API_BASE_URL}/v1/postal/prealertas/DEFRAABOLPBAAUX60098" \
   --header 'Accept: application/json' \
   --header "Authorization: Bearer ${SITRA_API_TOKEN}"
 ```
 
-Si `pagination.has_more` es `true`, repetir `desde` y `hasta` con el mismo rango y agregar `cursor` con el valor exacto de `pagination.next_cursor`. Persistir el S8 procesado con una clave única para que repetir una ventana no duplique expedientes.
+Si la respuesta incluye `Link` con `rel="next"`, hacer una solicitud GET a esa URL completa y conservar el Bearer Token. Persistir el S8 procesado con una clave única para que repetir una ventana no duplique expedientes.
 
 Una consulta puntual de paquete, cuando se requiera, usa `GET ${SITRA_API_BASE_URL}/v1/postal/paquetes/{S10}`. Para el detalle CDS del mismo paquete se usa `GET ${SITRA_API_BASE_URL}/v1/postal/declaraciones/{S10}`. Estas consultas no son necesarias para reconstruir el expediente obtenido mediante `/prealertas/{S8}`.
 
@@ -1099,9 +1124,9 @@ Una consulta puntual de paquete, cuando se requiera, usa `GET ${SITRA_API_BASE_U
 3. En **Authorization**, seleccionar **Bearer Token** y asignar `{{token}}`.
 4. En **Headers**, incluir `Accept: application/json`.
 5. Dejar **Body** vacío.
-6. Guardar `filters.predes_closing_date_from` y `filters.predes_closing_date_to`; reutilizarlos sin cambios al continuar con `pagination.next_cursor`.
+6. Si la respuesta trae el encabezado `Link` con `rel="next"`, abrir esa URL para continuar la consulta; no se requiere extraer ni reconstruir el cursor.
 7. Para ver el expediente de un despacho, crear otra solicitud `GET` a `{{baseUrl}}/v1/postal/prealertas/{{s8}}`.
-8. Revisar el código HTTP, `source_status`, `completeness` y los campos de truncamiento antes de consumir el resultado.
+8. Revisar el código HTTP y los campos de cobertura que cada respuesta incluya antes de consumir el resultado.
 
 No guardar tokens reales en colecciones compartidas sin protección. Si Aduana necesita compartir la colección, usar variables secretas/privadas del ambiente y exportar una colección sin credenciales.
 
@@ -1128,8 +1153,10 @@ También se verificó por HTTP el alcance mínimo `customs.prealerts.read`: el �
 
 La suite aún no incluye pruebas automatizadas específicas de PREDES. El 18/10/2026 se ejercitaron las siete rutas HTTP contra una instancia temporal de este checkout, con un token de lectura de cinco minutos que fue revocado al terminar y consultas reales a IPS/CDS. Las siete respondieron `200` para los identificadores disponibles. La instancia que ya escuchaba en `127.0.0.1:8000` devolvió un `404` HTML genérico para estas rutas; antes de probar desde Postman en ese puerto, se debe confirmar que esté ejecutando esta versión de SITRA. También se verificó el `404` esperado al buscar algunos códigos PREDES todavía ausentes del registro operativo:
 
-- El índice respondió `200` y devolvió 20 despachos para la ventana consultada; la paginación con cursor devolvió páginas sucesivas sin repetir S8.
-- `ESMADCBOLPBCBCN60214` respondió `200`: 4 sacas, 8 S10 identificados, 0 diferencias entre conteos S9 y S10, `33.3 kg` de peso total S9, consulta CDS completa sin declaraciones enlazadas y sin evento IPS 130 registrado.
+El 28/10/2026 se verificó el criterio actualizado sobre la ventana `2026-10-22` a `2026-10-28`: el índice devolvió 125 despachos en dos páginas, con 197 sacas sin evento IPS 130 y ninguna saca con recepción registrada en esas respuestas. El controlador respondió `200`, con `data.dispatches` como único campo del cuerpo y el encabezado `Link` cuando había otra página.
+
+- En la ejecución histórica del 18/10, el índice respondió `200` y devolvió 20 despachos; la paginación con cursor devolvió páginas sucesivas sin repetir S8.
+- En la ejecución histórica del 18/10, `ESMADCBOLPBCBCN60214` respondió `200` con 4 sacas, 8 S10 identificados, `33.3 kg` y sin eventos IPS 130. En la consulta del 28/10, IPS ya registraba las 4 recepciones; por eso este despacho quedó excluido del índice de pendientes.
 - `/despachos/BOLPBCITMXPAACN60004` respondió `200` con un despacho operativo; `/sacas/BOLPBBCAYTOAAEN60031001100007` respondió `200` con 4 eventos IPS y 4 declaraciones CDS asociadas.
 - `CAYTOABOLPBAAUR60012` respondió `200`: una saca declara 2 paquetes y no contiene S10 identificados; la API informa `count_matches: false` y una saca con diferencia.
 - Para `ESMADBBOLPBBAEN60204`, el detalle PREDES respondió `200`, mientras que `/despachos/{S8}` y `/sacas/{S9}` respondieron `404` porque no había registro operativo local para esos códigos. IPS tenía 4 movimientos; la respuesta S10 presenta el más reciente y mantiene el conteo en `summary.movement_count`, aunque no hubiera atributos maestros de paquete ni vínculo local a saca. `/declaraciones/{S10}` respondió `200` sin grupos CDS. Esta diferencia confirma que el índice y detalle PREDES son necesarios para carga entrante.
@@ -1184,6 +1211,14 @@ Este documento describe las rutas bajo `/api/v1/postal`. Registrar cualquier cam
 **Cambios de esta revisión 2.0:** las respuestas S10 de `/paquetes/{codigo}` y `/consulta/{codigo}` presentan únicamente el evento postal IPS más reciente; `summary.movement_count` mantiene el total de eventos encontrados. Los eventos CDS de declaraciones y los registros de entrega conservan sus colecciones independientes.
 
 **Cambios de esta revisión 2.1:** se agruparon las rutas públicas bajo `/api/v1/postal` para nombrar el dominio postal de la API, manteniendo las mismas operaciones, permisos y estructuras de respuesta.
+
+**Cambios de esta revisión 2.2:** se aclaró en el catálogo qué devuelve cada consulta y la diferencia entre el despacho operativo IPS y el manifiesto PREDES; se precisó que las rutas de saca y paquete entregan resúmenes y referencias, mientras que el detalle PREDES reúne S8, S9, S10, CDS y la recepción física registrada.
+
+**Cambios de esta revisión 2.3:** el índice de prealertas ahora devuelve en el cuerpo JSON únicamente `data.dispatches`. La continuación, cuando existe, se entrega mediante el encabezado HTTP `Link` con `rel="next"`, sin exponer filtros, estados de fuente ni datos de paginación en el JSON.
+
+**Cambios de esta revisión 2.4:** el índice de prealertas excluye despachos cuyas sacas tienen todas un evento de recepción física IPS 130 registrado. Los despachos parcialmente recibidos continúan listándose e informan cuántas sacas tienen y no tienen evento registrado; la falta del evento no se presenta como prueba de ausencia física.
+
+**Cambios de esta revisión 2.5:** se actualizaron los ejemplos del índice, del detalle y de cURL con `DEFRAABOLPBAAUX60098`, un despacho presente en el índice local con cinco S10 y una saca sin evento IPS 130. El ejemplo histórico `ESMADCBOLPBCBCN60214` se identifica como ya recibido y excluido del índice actual.
 
 ### Referencias técnicas
 

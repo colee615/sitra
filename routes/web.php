@@ -64,6 +64,7 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware('can:admin-only')->group(function () {
         Route::get('/api-credentials', [\App\Http\Controllers\ApiCredentialController::class, 'index'])->name('api-credentials.index');
+        Route::get('/api-credentials/endpoint', [\App\Http\Controllers\ApiCredentialController::class, 'endpointConsumerDemo'])->name('api-credentials.endpoint-consumer-demo');
         Route::post('/api-credentials', [\App\Http\Controllers\ApiCredentialController::class, 'store'])->name('api-credentials.store');
         Route::get('/api-credentials/manual', [\App\Http\Controllers\ApiCredentialController::class, 'manual'])->name('api-credentials.manual');
         Route::post('/api-credentials/{token}/grant-cds-read', [\App\Http\Controllers\ApiCredentialController::class, 'grantCdsRead'])->whereNumber('token')->name('api-credentials.grant-cds-read');

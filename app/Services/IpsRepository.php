@@ -534,6 +534,255 @@ class IpsRepository
             ->get(['r.RECPTCL_PID', 'r.RECPTCL_FID', 'r.RECPTCL_WEIGHT', 'r.RECPTCL_MAILITMS_NO']);
     }
 
+    /** PREDES receptacles addressed to this exchange office that have no receipt event here yet. */
+    public function expectedInboundReceptacles(int $office, int $page = 1, int $perPage = 25): array
+    {
+        $perPage = min(100, max(1, $perPage));
+        $page = max(1, $page);
+        if (! in_array($office, $this->exchangeOfficeCds(), true)) {
+            return ['data' => [], 'meta' => ['page' => $page, 'per_page' => $perPage, 'total' => 0, 'has_more' => false]];
+        }
+
+        $db = $this->connection();
+        $officeFcd = strtoupper(trim((string) $db->table('dbo.N_OWN_OFFICES')
+            ->where('OWN_OFFICE_CD', $office)->value('OFFICE_FCD')));
+        if (! in_array($officeFcd, config('ips.exchange_office_fcds', []), true)) {
+            return ['data' => [], 'meta' => ['page' => $page, 'per_page' => $perPage, 'total' => 0, 'has_more' => false]];
+        }
+        $receivableStates = $db->table('dbo.C_STATEINDS_EVTTYPES')->where('EVENT_TYPE_CD', 130)
+            ->whereIn('STATE_IND_CD', [21, 23, 27])->pluck('STATE_IND_CD')->map(fn ($state) => (int) $state)->all();
+        if (! $receivableStates) {
+            return ['data' => [], 'meta' => ['page' => $page, 'per_page' => $perPage, 'total' => 0, 'has_more' => false]];
+        }
+
+        $identifiedItems = $db->table('dbo.N_EDI_MAILITMS as edi_item')
+            ->selectRaw("COUNT(DISTINCT CASE WHEN NULLIF(RTRIM(LTRIM(edi_item.MAILITM_FID)), '') IS NOT NULL THEN UPPER(RTRIM(LTRIM(edi_item.MAILITM_FID))) END)")
+            ->whereColumn('edi_item.RECPTCL_PID', 'edi.RECPTCL_PID');
+        $query = $db->table('dbo.N_EDI_RECPTCLS as edi')
+            ->join('dbo.N_EDI_DESPTCHS as d', 'd.DESPTCH_PID', '=', 'edi.DESPTCH_PID')
+            ->join('dbo.L_RECPTCLS as local_sack', function ($join) {
+                $join->whereRaw('UPPER(RTRIM(LTRIM(local_sack.RECPTCL_FID))) = UPPER(RTRIM(LTRIM(edi.RECPTCL_FID)))');
+            })
+            ->whereNotNull('d.DESPTCH_CLOSING_DATE')
+            ->whereNotNull('edi.RECPTCL_FID')
+            ->whereRaw('UPPER(SUBSTRING(RTRIM(LTRIM(edi.RECPTCL_FID)), 7, 6)) = ?', [$officeFcd])
+            ->whereIn('local_sack.STATE_IND_CD', $receivableStates)
+            ->where('local_sack.EVT_TYPE_CD', '<>', 130)
+            ->whereNotExists(function ($received) use ($office) {
+                $received->selectRaw('1')->from('dbo.L_RECPTCLS as local_sack')
+                    ->join('dbo.L_RECPTCL_EVENTS as receipt_event', 'receipt_event.RECPTCL_PID', '=', 'local_sack.RECPTCL_PID')
+                    ->whereRaw('UPPER(RTRIM(LTRIM(local_sack.RECPTCL_FID))) = UPPER(RTRIM(LTRIM(edi.RECPTCL_FID)))')
+                    ->where('receipt_event.EVENT_TYPE_CD', 130)
+                    ->where('receipt_event.EVENT_OFFICE_CD', $office);
+            })
+            ->select([
+                'local_sack.RECPTCL_PID', 'edi.RECPTCL_FID', 'local_sack.RECPTCL_WEIGHT',
+                'edi.RECPTCL_MAILITMS_NO', 'd.DESPTCH_FID', 'd.DESPTCH_CLOSING_DATE',
+            ])
+            ->selectSub($identifiedItems, 'EDI_IDENTIFIED_MAILITMS_NO');
+
+        $total = (clone $query)->count('edi.RECPTCL_PID');
+        $rows = $query->orderBy('d.DESPTCH_CLOSING_DATE')->orderBy('edi.RECPTCL_FID')
+            ->offset(($page - 1) * $perPage)->limit($perPage + 1)->get();
+
+        return [
+            'data' => $rows->take($perPage)->map(function ($row) use ($office) {
+                $declared = is_numeric($row->RECPTCL_MAILITMS_NO) ? (int) $row->RECPTCL_MAILITMS_NO : null;
+                $identified = (int) ($row->EDI_IDENTIFIED_MAILITMS_NO ?? 0);
+                $count = $declared ?? ($identified > 0 ? $identified : null);
+
+                return [
+                    'id' => (string) $row->RECPTCL_PID,
+                    'codigo' => trim((string) $row->RECPTCL_FID),
+                    'despacho' => trim((string) ($row->DESPTCH_FID ?? '')),
+                    'origin_ctci' => substr(trim((string) $row->RECPTCL_FID), 0, 6),
+                    'dispatch_closed_at' => $row->DESPTCH_CLOSING_DATE
+                        ? Carbon::parse($row->DESPTCH_CLOSING_DATE, 'UTC')->format('Y-m-d\\TH:i:s.vP') : null,
+                    'office_cd' => $office,
+                    'weight_kg' => is_numeric($row->RECPTCL_WEIGHT) ? (float) $row->RECPTCL_WEIGHT : null,
+                    'items_count' => $count,
+                    'items_count_source' => $declared !== null ? 'Cantidad declarada PREDES'
+                        : ($identified > 0 ? 'Paquetes identificados en PREDES' : null),
+                    'allowed_actions' => ['RECEPTACLE_RECEIVE'],
+                ];
+            })->values()->all(),
+            'meta' => [
+                'page' => $page,
+                'per_page' => $perPage,
+                'total' => $total,
+                'has_more' => $rows->count() > $perPage,
+            ],
+        ];
+    }
+
+    /** Open sacks at this office with the declared and already-linked package totals. */
+    public function openedReceptaclesForPackageRegistration(int $office, int $page = 1, int $perPage = 25): array
+    {
+        $perPage = min(100, max(1, $perPage));
+        $page = max(1, $page);
+        if (! in_array($office, $this->exchangeOfficeCds(), true)) {
+            return ['data' => [], 'meta' => ['page' => $page, 'per_page' => $perPage, 'total' => 0, 'has_more' => false]];
+        }
+
+        $db = $this->connection();
+        $registeredItems = $db->table('dbo.L_MAILITM_EVENTS as package_event')
+            ->selectRaw('COUNT(DISTINCT package_event.MAILITM_PID)')
+            ->whereColumn('package_event.RECPTCL_PID', 'r.RECPTCL_PID')
+            ->whereNotNull('package_event.MAILITM_PID');
+        $ediReceptaclePid = $db->table('dbo.N_EDI_RECPTCLS as edi')
+            ->select('edi.RECPTCL_PID')
+            ->whereRaw('UPPER(RTRIM(LTRIM(edi.RECPTCL_FID))) = UPPER(RTRIM(LTRIM(r.RECPTCL_FID)))')
+            ->orderByDesc('edi.RECPTCL_PID')->limit(1);
+        $ediDeclaredCount = $db->table('dbo.N_EDI_RECPTCLS as edi')
+            ->select('edi.RECPTCL_MAILITMS_NO')
+            ->whereRaw('UPPER(RTRIM(LTRIM(edi.RECPTCL_FID))) = UPPER(RTRIM(LTRIM(r.RECPTCL_FID)))')
+            ->orderByDesc('edi.RECPTCL_PID')->limit(1);
+        $ediIdentifiedCount = $db->table('dbo.N_EDI_MAILITMS as edi_item')
+            ->selectRaw("COUNT(DISTINCT CASE WHEN NULLIF(RTRIM(LTRIM(edi_item.MAILITM_FID)), '') IS NOT NULL THEN UPPER(RTRIM(LTRIM(edi_item.MAILITM_FID))) END)")
+            ->whereIn('edi_item.RECPTCL_PID', $ediReceptaclePid);
+
+        $query = $db->table('dbo.L_RECPTCLS as r')
+            ->where('r.STATE_IND_CD', 20)->where('r.EVT_TYPE_CD', 131)
+            ->whereExists(function ($events) use ($office) {
+                $events->selectRaw('1')->from('dbo.L_RECPTCL_EVENTS as e')
+                    ->whereColumn('e.RECPTCL_PID', 'r.RECPTCL_PID')
+                    ->whereColumn('e.EVENT_TYPE_CD', 'r.EVT_TYPE_CD')
+                    ->whereColumn('e.EVENT_GMT_DT', 'r.EVT_GMT_DT')
+                    ->where('e.EVENT_OFFICE_CD', $office);
+            })
+            ->select([
+                'r.RECPTCL_PID', 'r.RECPTCL_FID', 'r.RECPTCL_WEIGHT',
+                'r.RECPTCL_MAILITMS_NO', 'r.EVT_GMT_DT',
+            ])
+            ->selectSub($registeredItems, 'REGISTERED_MAILITMS_NO')
+            ->selectSub($ediDeclaredCount, 'EDI_DECLARED_MAILITMS_NO')
+            ->selectSub($ediIdentifiedCount, 'EDI_IDENTIFIED_MAILITMS_NO');
+
+        $total = (clone $query)->count('r.RECPTCL_PID');
+        $rows = $query->orderBy('r.EVT_GMT_DT')->orderBy('r.RECPTCL_FID')
+            ->offset(($page - 1) * $perPage)->limit($perPage + 1)->get();
+
+        return [
+            'data' => $rows->take($perPage)->map(function ($row) use ($office) {
+                $ipsDeclared = is_numeric($row->RECPTCL_MAILITMS_NO) ? (int) $row->RECPTCL_MAILITMS_NO : null;
+                $ediDeclared = is_numeric($row->EDI_DECLARED_MAILITMS_NO) ? (int) $row->EDI_DECLARED_MAILITMS_NO : null;
+                $ediIdentified = (int) ($row->EDI_IDENTIFIED_MAILITMS_NO ?? 0);
+                $declared = $ipsDeclared ?? $ediDeclared ?? ($ediIdentified > 0 ? $ediIdentified : null);
+                $registered = (int) ($row->REGISTERED_MAILITMS_NO ?? 0);
+                $status = $declared === null ? 'Cantidad objetivo no informada'
+                    : ($registered > $declared ? 'Revisar diferencia'
+                        : ($registered === $declared ? 'Conteo alcanzado' : 'Pendiente de registrar'));
+
+                return [
+                    'id' => (string) $row->RECPTCL_PID,
+                    'codigo' => trim((string) $row->RECPTCL_FID),
+                    'event_cd' => 131,
+                    'state_cd' => 20,
+                    'event_at' => Carbon::parse($row->EVT_GMT_DT, 'UTC')->format('Y-m-d\\TH:i:s.vP'),
+                    'office_cd' => $office,
+                    'weight_kg' => is_numeric($row->RECPTCL_WEIGHT) ? (float) $row->RECPTCL_WEIGHT : null,
+                    'declared_items_count' => $declared,
+                    'registered_items_count' => $registered,
+                    'remaining_items_count' => $declared === null ? null : max(0, $declared - $registered),
+                    'items_count_source' => $ipsDeclared !== null ? 'Declarados en IPS'
+                        : ($ediDeclared !== null ? 'Declarados en PREDES'
+                            : ($ediIdentified > 0 ? 'Paquetes identificados en PREDES' : null)),
+                    'registration_status' => $status,
+                    'allowed_actions' => [],
+                ];
+            })->values()->all(),
+            'meta' => [
+                'page' => $page,
+                'per_page' => $perPage,
+                'total' => $total,
+                'has_more' => $rows->count() > $perPage,
+            ],
+        ];
+    }
+
+    public function pendingReceptacleOpenings(int $office, int $page = 1, int $perPage = 25): array
+    {
+        $perPage = min(100, max(1, $perPage));
+        $page = max(1, $page);
+        $compatible = in_array($office, $this->exchangeOfficeCds(), true)
+            && $this->compatible(22, 131);
+
+        if (! $compatible) {
+            return [
+                'data' => [],
+                'meta' => ['page' => $page, 'per_page' => $perPage, 'total' => 0, 'has_more' => false],
+            ];
+        }
+
+        $db = $this->connection();
+        // La tabla operativa puede tener la cantidad sin informar antes de abrir la saca.
+        // La prealerta PREDES conserva la cantidad declarada y se relaciona por marbete.
+        $ediReceptaclePid = $db->table('dbo.N_EDI_RECPTCLS as edi')
+            ->select('edi.RECPTCL_PID')
+            ->whereRaw('UPPER(RTRIM(LTRIM(edi.RECPTCL_FID))) = UPPER(RTRIM(LTRIM(r.RECPTCL_FID)))')
+            ->orderByDesc('edi.RECPTCL_PID')->limit(1);
+        $ediDeclaredCount = $db->table('dbo.N_EDI_RECPTCLS as edi')
+            ->select('edi.RECPTCL_MAILITMS_NO')
+            ->whereRaw('UPPER(RTRIM(LTRIM(edi.RECPTCL_FID))) = UPPER(RTRIM(LTRIM(r.RECPTCL_FID)))')
+            ->orderByDesc('edi.RECPTCL_PID')->limit(1);
+        $ediIdentifiedCount = $db->table('dbo.N_EDI_MAILITMS as edi_item')
+            ->selectRaw("COUNT(DISTINCT CASE WHEN NULLIF(RTRIM(LTRIM(edi_item.MAILITM_FID)), '') IS NOT NULL THEN UPPER(RTRIM(LTRIM(edi_item.MAILITM_FID))) END)")
+            ->whereIn('edi_item.RECPTCL_PID', $ediReceptaclePid);
+
+        $query = $db->table('dbo.L_RECPTCLS as r')
+            ->where('r.STATE_IND_CD', 22)
+            ->where('r.EVT_TYPE_CD', 130)
+            ->whereExists(function ($events) use ($office) {
+                $events->selectRaw('1')->from('dbo.L_RECPTCL_EVENTS as e')
+                    ->whereColumn('e.RECPTCL_PID', 'r.RECPTCL_PID')
+                    ->whereColumn('e.EVENT_TYPE_CD', 'r.EVT_TYPE_CD')
+                    ->whereColumn('e.EVENT_GMT_DT', 'r.EVT_GMT_DT')
+                    ->where('e.EVENT_OFFICE_CD', $office);
+            })
+            ->select([
+                'r.RECPTCL_PID', 'r.RECPTCL_FID', 'r.RECPTCL_WEIGHT',
+                'r.RECPTCL_MAILITMS_NO', 'r.EVT_GMT_DT',
+            ])
+            ->selectSub($ediDeclaredCount, 'EDI_DECLARED_MAILITMS_NO')
+            ->selectSub($ediIdentifiedCount, 'EDI_IDENTIFIED_MAILITMS_NO');
+
+        $total = (clone $query)->count('r.RECPTCL_PID');
+        $rows = $query->orderBy('r.EVT_GMT_DT')->orderBy('r.RECPTCL_FID')
+            ->offset(($page - 1) * $perPage)->limit($perPage + 1)
+            ->get();
+
+        return [
+            'data' => $rows->take($perPage)->map(function ($row) use ($office) {
+                $ipsCount = is_numeric($row->RECPTCL_MAILITMS_NO) ? (int) $row->RECPTCL_MAILITMS_NO : null;
+                $ediDeclaredCount = is_numeric($row->EDI_DECLARED_MAILITMS_NO) ? (int) $row->EDI_DECLARED_MAILITMS_NO : null;
+                $ediIdentifiedCount = (int) ($row->EDI_IDENTIFIED_MAILITMS_NO ?? 0);
+                $itemsCount = $ipsCount ?? $ediDeclaredCount ?? ($ediIdentifiedCount > 0 ? $ediIdentifiedCount : null);
+                $itemsCountSource = $ipsCount !== null ? 'IPS'
+                    : ($ediDeclaredCount !== null ? 'PREDES'
+                        : ($ediIdentifiedCount > 0 ? 'Paquetes PREDES identificados' : null));
+
+                return [
+                    'id' => (string) $row->RECPTCL_PID,
+                    'codigo' => trim((string) $row->RECPTCL_FID),
+                    'event_cd' => 130,
+                    'state_cd' => 22,
+                    'event_at' => Carbon::parse($row->EVT_GMT_DT, 'UTC')->format('Y-m-d\\TH:i:s.vP'),
+                    'office_cd' => $office,
+                    'weight_kg' => isset($row->RECPTCL_WEIGHT) ? (float) $row->RECPTCL_WEIGHT : null,
+                    'items_count' => $itemsCount,
+                    'items_count_source' => $itemsCountSource,
+                    'allowed_actions' => ['RECEPTACLE_OPEN'],
+                ];
+            })->values()->all(),
+            'meta' => [
+                'page' => $page,
+                'per_page' => $perPage,
+                'total' => $total,
+                'has_more' => $rows->count() > $perPage,
+            ],
+        ];
+    }
+
     public function assertOpenInboundReceptacle(string $pid, int $office): object
     {
         if (! in_array($office, $this->exchangeOfficeCds(), true)) {

@@ -127,7 +127,8 @@ final class CustomsOperationsController extends Controller
         $fromDate = Carbon::createFromFormat('Y-m-d', $from, $timezone)->startOfDay();
         $toDate = Carbon::createFromFormat('Y-m-d', $to, $timezone)->startOfDay();
 
-        return $this->respond(function () use ($prealerts, $from, $to, $fromDate, $toDate, $input) {
+        $nextUrl = null;
+        $response = $this->respond(function () use ($request, $prealerts, $from, $to, $fromDate, $toDate, $input, &$nextUrl) {
             if ($fromDate->greaterThan($toDate)) {
                 throw new IpsOperationException('La fecha desde no puede ser posterior a la fecha hasta.', 422);
             }
@@ -135,8 +136,26 @@ final class CustomsOperationsController extends Controller
                 throw new IpsOperationException('El rango de consulta no puede superar 31 días.', 422);
             }
 
-            return ['data' => $prealerts->index($from, $to, (int) ($input['limite'] ?? 20), $input['cursor'] ?? null)];
+            $page = $prealerts->index($from, $to, (int) ($input['limite'] ?? 20), $input['cursor'] ?? null);
+            $nextCursor = $page['continuation_cursor'] ?? null;
+            if (is_string($nextCursor) && $nextCursor !== '') {
+                $query = http_build_query([
+                    'desde' => $from,
+                    'hasta' => $to,
+                    'limite' => (int) ($input['limite'] ?? 20),
+                    'cursor' => $nextCursor,
+                ], '', '&', PHP_QUERY_RFC3986);
+                $nextUrl = $request->url().'?'.$query;
+            }
+
+            return ['data' => ['dispatches' => $page['dispatches'] ?? []]];
         });
+
+        if ($response->isSuccessful() && $nextUrl !== null) {
+            $response->headers->set('Link', '<'.$nextUrl.'>; rel="next"');
+        }
+
+        return $response;
     }
 
     public function prealert(string $codigo, CustomsPrealertService $prealerts): JsonResponse

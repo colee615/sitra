@@ -10,10 +10,10 @@ final class CustomsPrealertService
 {
     public function __construct(private readonly CdsRepository $cds) {}
 
-    /** List a bounded page of inbound PREDES dispatches, ordered by PREDES closing date. */
+    /** List inbound PREDES dispatches with at least one sack lacking an IPS receipt event. */
     public function index(string $from, string $to, int $limit = 20, ?string $cursor = null): array
     {
-        $query = $this->dispatchQuery()
+        $query = $this->pendingArrivalQuery()
             ->whereBetween('d.DESPTCH_CLOSING_DATE', [$from.' 00:00:00', $to.' 23:59:59'])
             ->orderBy('d.DESPTCH_CLOSING_DATE')->orderBy('d.DESPTCH_PID');
 
@@ -35,19 +35,9 @@ final class CustomsPrealertService
         $last = $page->last();
 
         return [
-            'filters' => [
-                'destination_country_code' => 'BO',
-                'predes_closing_date_from' => $from,
-                'predes_closing_date_to' => $to,
-            ],
-            'source_status' => ['ips' => 'ok'],
-            'pagination' => [
-                'limit' => $limit,
-                'has_more' => $hasMore,
-                'next_cursor' => $hasMore && $last
-                    ? $this->encodeCursor((string) $last->DESPTCH_CLOSING_DATE, (string) $last->DESPTCH_PID, $from, $to)
-                    : null,
-            ],
+            'continuation_cursor' => $hasMore && $last
+                ? $this->encodeCursor((string) $last->DESPTCH_CLOSING_DATE, (string) $last->DESPTCH_PID, $from, $to)
+                : null,
             'dispatches' => $page->map(function ($dispatch) use ($summaries) {
                 $code = ShipmentCode::normalize((string) $dispatch->DESPTCH_FID);
                 return [
@@ -92,6 +82,20 @@ final class CustomsPrealertService
             ->whereRaw("UPPER(SUBSTRING(RTRIM(LTRIM(d.DESPTCH_FID)), 7, 2)) = 'BO'");
     }
 
+    private function pendingArrivalQuery()
+    {
+        return $this->dispatchQuery()->whereExists(function ($pendingSack) {
+            $pendingSack->selectRaw('1')->from('dbo.N_EDI_RECPTCLS as prealert_sack')
+                ->whereColumn('prealert_sack.DESPTCH_PID', 'd.DESPTCH_PID')
+                ->whereNotExists(function ($receipt) {
+                    $receipt->selectRaw('1')->from('dbo.L_RECPTCLS as local_sack')
+                        ->join('dbo.L_RECPTCL_EVENTS as receipt_event', 'receipt_event.RECPTCL_PID', '=', 'local_sack.RECPTCL_PID')
+                        ->whereRaw('UPPER(RTRIM(LTRIM(local_sack.RECPTCL_FID))) = UPPER(RTRIM(LTRIM(prealert_sack.RECPTCL_FID)))')
+                        ->where('receipt_event.EVENT_TYPE_CD', 130);
+                });
+        });
+    }
+
     private function dispatchColumns(): array
     {
         return [
@@ -108,7 +112,8 @@ final class CustomsPrealertService
         $dispatchIds = $dispatches->pluck('DESPTCH_PID')->map(fn ($id) => (string) $id)->all();
         $sacks = $db->table('dbo.N_EDI_RECPTCLS')
             ->whereIn('DESPTCH_PID', $dispatchIds)
-            ->get(['DESPTCH_PID', 'RECPTCL_PID', 'RECPTCL_MAILITMS_NO', 'RECPTCL_WEIGHT']);
+            ->get(['DESPTCH_PID', 'RECPTCL_PID', 'RECPTCL_FID', 'RECPTCL_MAILITMS_NO', 'RECPTCL_WEIGHT']);
+        $receiptBySack = $this->arrivalData($sacks);
         $receptacleIds = $sacks->pluck('RECPTCL_PID')->map(fn ($id) => (string) $id)->all();
         $items = $this->queryInChunks($receptacleIds, fn ($chunk) => $db->table('dbo.N_EDI_MAILITMS')
             ->whereIn('RECPTCL_PID', $chunk)->get(['RECPTCL_PID', 'MAILITM_FID']));
@@ -126,6 +131,11 @@ final class CustomsPrealertService
             $summary['packages_identified'] += $identified;
             if (is_numeric($sack->RECPTCL_WEIGHT)) $summary['sacks_weight_total_kg'] += (float) $sack->RECPTCL_WEIGHT;
             else $summary['sacks_weight_complete'] = false;
+            if (!empty($receiptBySack[ShipmentCode::normalize((string) $sack->RECPTCL_FID)]['event'])) {
+                $summary['sacks_physically_received']++;
+            } else {
+                $summary['sacks_without_receipt_event']++;
+            }
             if ($declared === null) {
                 $summary['packages_declared_complete'] = false;
             } else {
@@ -150,6 +160,8 @@ final class CustomsPrealertService
             'packages_declared' => 0,
             'packages_declared_complete' => true,
             'packages_identified' => 0,
+            'sacks_physically_received' => 0,
+            'sacks_without_receipt_event' => 0,
             'sacks_weight_total_kg' => 0.0,
             'sacks_weight_complete' => true,
             'sacks_with_count_mismatch' => 0,
