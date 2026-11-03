@@ -10,6 +10,131 @@ class SqlServerSearchService
 {
     private ?string $connectionOverride = null;
 
+    /**
+     * Search IPS packages by the registered sender and/or recipient names.
+     * Each supplied party name must match the same package.
+     *
+     * @return array{rows: Collection, total: int}
+     */
+    public function searchPackagesByParties(?string $senderName, ?string $recipientName, int $page = 1, int $perPage = 25): array
+    {
+        $filters = [];
+        $bindings = [];
+
+        foreach ([
+            ['alias' => 'sender_filter', 'role' => 'S', 'name' => $senderName],
+            ['alias' => 'recipient_filter', 'role' => null, 'name' => $recipientName],
+        ] as $party) {
+            $tokens = $this->partyNameTokens((string) ($party['name'] ?? ''));
+            if ($tokens === []) {
+                continue;
+            }
+
+            $alias = $party['alias'];
+            $conditions = ["{$alias}.MAILITM_PID = mi.MAILITM_PID"];
+            if ($party['role'] === 'S') {
+                $conditions[] = "{$alias}.SENDER_PAYEE_IND = 'S'";
+            } else {
+                $conditions[] = "{$alias}.SENDER_PAYEE_IND <> 'S'";
+            }
+
+            foreach ($tokens as $token) {
+                $conditions[] = "UPPER(CONCAT(COALESCE({$alias}.CUSTOMER_FORENAME, ''), ' ', COALESCE({$alias}.CUSTOMER_NAME, ''))) LIKE ? ESCAPE '!'";
+                $bindings[] = '%'.$this->escapeLikeToken(mb_strtoupper($token, 'UTF-8')).'%';
+            }
+
+            $filters[] = 'EXISTS (SELECT 1 FROM dbo.L_MAILITM_CUSTOMERS '.$alias.' WHERE '.implode(' AND ', $conditions).')';
+        }
+
+        if ($filters === []) {
+            return ['rows' => collect(), 'total' => 0];
+        }
+
+        $connection = $this->connectionName();
+        $whereSql = implode(' AND ', $filters);
+        $totalRow = DB::connection($connection)->selectOne(
+            "SELECT COUNT_BIG(1) AS total FROM dbo.L_MAILITMS mi WHERE {$whereSql}",
+            $bindings
+        );
+        $total = (int) ($totalRow->total ?? 0);
+
+        if ($total === 0) {
+            return ['rows' => collect(), 'total' => 0];
+        }
+
+        $page = max(1, $page);
+        $perPage = min(100, max(1, $perPage));
+        $offset = ($page - 1) * $perPage;
+        $rows = DB::connection($connection)->select(
+            "
+            SELECT
+                mi.MAILITM_PID,
+                RTRIM(LTRIM(mi.MAILITM_FID)) AS MAILITM_FID,
+                RTRIM(LTRIM(mi.MAILITM_LOCAL_ID)) AS MAILITM_LOCAL_ID,
+                mi.MAILITM_WEIGHT,
+                mi.MAIL_CLASS_CD,
+                mail_class.MAIL_CLASS_NM,
+                mi.POSTAL_STATUS_CD,
+                postal_status.POSTAL_STATUS_NM,
+                mi.ORIG_COUNTRY_CD,
+                origin_country.COUNTRY_NM AS ORIG_COUNTRY_NM,
+                mi.DEST_COUNTRY_CD,
+                destination_country.COUNTRY_NM AS DEST_COUNTRY_NM,
+                admission_event.EVENT_GMT_DT AS ADMISSION_GMT_DT,
+                admission_event.EVENT_LOCAL_OFFSET AS ADMISSION_LOCAL_OFFSET,
+                sender.CUSTOMER_FULL_NAME AS SENDER_NAME,
+                recipient.CUSTOMER_FULL_NAME AS RECIPIENT_NAME
+            FROM dbo.L_MAILITMS mi
+            LEFT JOIN dbo.C_MAIL_CLASSES mail_class ON mail_class.MAIL_CLASS_CD = mi.MAIL_CLASS_CD
+            LEFT JOIN dbo.C_POSTAL_STATUSES postal_status ON postal_status.POSTAL_STATUS_CD = mi.POSTAL_STATUS_CD
+            LEFT JOIN dbo.C_COUNTRIES origin_country ON origin_country.COUNTRY_CD = mi.ORIG_COUNTRY_CD
+            LEFT JOIN dbo.C_COUNTRIES destination_country ON destination_country.COUNTRY_CD = mi.DEST_COUNTRY_CD
+            OUTER APPLY (
+                SELECT TOP 1
+                    first_event.EVENT_GMT_DT,
+                    first_event.EVENT_LOCAL_OFFSET
+                FROM dbo.L_MAILITM_EVENTS first_event
+                WHERE first_event.MAILITM_PID = mi.MAILITM_PID
+                ORDER BY first_event.EVENT_GMT_DT ASC, first_event.EVENT_TYPE_CD ASC
+            ) admission_event
+            OUTER APPLY (
+                SELECT TOP 1
+                    LTRIM(RTRIM(CONCAT(COALESCE(sender_customer.CUSTOMER_FORENAME, ''), ' ', COALESCE(sender_customer.CUSTOMER_NAME, '')))) AS CUSTOMER_FULL_NAME
+                FROM dbo.L_MAILITM_CUSTOMERS sender_customer
+                WHERE sender_customer.MAILITM_PID = mi.MAILITM_PID
+                  AND sender_customer.SENDER_PAYEE_IND = 'S'
+                ORDER BY sender_customer.CUSTOMER_NAME, sender_customer.CUSTOMER_FORENAME
+            ) sender
+            OUTER APPLY (
+                SELECT TOP 1
+                    LTRIM(RTRIM(CONCAT(COALESCE(recipient_customer.CUSTOMER_FORENAME, ''), ' ', COALESCE(recipient_customer.CUSTOMER_NAME, '')))) AS CUSTOMER_FULL_NAME
+                FROM dbo.L_MAILITM_CUSTOMERS recipient_customer
+                WHERE recipient_customer.MAILITM_PID = mi.MAILITM_PID
+                  AND recipient_customer.SENDER_PAYEE_IND <> 'S'
+                ORDER BY recipient_customer.CUSTOMER_NAME, recipient_customer.CUSTOMER_FORENAME
+            ) recipient
+            WHERE {$whereSql}
+            ORDER BY admission_event.EVENT_GMT_DT DESC, mi.MAILITM_PID DESC
+            OFFSET {$offset} ROWS FETCH NEXT {$perPage} ROWS ONLY
+            ",
+            $bindings
+        );
+
+        return ['rows' => collect($rows), 'total' => $total];
+    }
+
+    /** @return list<string> */
+    private function partyNameTokens(string $name): array
+    {
+        $tokens = preg_split('/\s+/u', trim($name), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        return array_values(array_filter($tokens, static fn (string $token): bool => $token !== ''));
+    }
+
+    private function escapeLikeToken(string $token): string
+    {
+        return strtr($token, ['!' => '!!', '%' => '!%', '_' => '!_', '[' => '![']);
+    }
+
     public function onConnection(string $connection): self
     {
         $service = clone $this;

@@ -61,7 +61,8 @@ return [
         'HANDOVER_AGENT' => ['events' => [32, 36, 38], 'states' => [0]],
         'EDG' => ['events' => [39], 'states' => [0]],
         'EMH' => ['events' => [74], 'states' => [0, 8]],
-        'EMI' => ['events' => [32, 38, 74, 75], 'states' => [0, 8]],
+        'EMI' => ['events' => [32, 38, 74, 75], 'states' => [0, 8], 'pairs' => [[31, 1], [34, 1]]],
+        'CUSTOMS_RETURN' => ['events' => [31, 34], 'states' => [1]],
     ],
     'exchange_receipt_candidate_events' => [1, 2, 3, 8, 14, 15],
     // Confirmación compuesta desde Almacén: devolución física de Aduana seguida de entrega.

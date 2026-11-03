@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\PermissionController;
+use App\Http\Controllers\PartyPackageSearchController;
 use App\Http\Controllers\PostalIntelligenceController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RoleController;
@@ -50,6 +51,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/despachos/{codigo}/sacas', [PostalIntelligenceController::class, 'dispatchSacks'])->middleware('can:postal.ips')->name('postal.dispatches.sacks');
     Route::get('/marbetes', [PostalIntelligenceController::class, 'receptacles'])->middleware('can:postal.ips')->name('postal.receptacles');
     Route::get('/marbetes/{codigo}/paquetes', [PostalIntelligenceController::class, 'receptaclePackagesModal'])->middleware('can:postal.ips')->name('postal.receptacles.packages');
+    Route::get('/paquetes-por-persona', PartyPackageSearchController::class)->middleware('can:postal.ips')->name('postal.party-packages');
     Route::get('/marbetes/documento/{type}', [PostalIntelligenceController::class, 'receptacleDocument'])->middleware('can:postal.ips')->name('postal.receptacles.document');
     Route::get('/consultas/documentos/{kind}', [PostalIntelligenceController::class, 'document'])->middleware('can:postal.access')->name('postal.document');
     Route::get('/sqlserver/datos', [SqlServerDataController::class, 'index'])->middleware('can:ips.read')->name('sqlserver.datos');

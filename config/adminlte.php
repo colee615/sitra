@@ -325,6 +325,7 @@ return [
             'submenu' => [
                 ['text'=>'Despachos (S8)','url'=>'/despachos','icon'=>'fas fa-plane-departure','can'=>'postal.ips'],
                 ['text'=>'Sacas y marbetes (S9)','url'=>'/marbetes','icon'=>'fas fa-barcode','can'=>'postal.ips'],
+                ['text'=>'Paquetes por persona','url'=>'/paquetes-por-persona','active'=>['paquetes-por-persona'],'icon'=>'fas fa-users','can'=>'postal.ips'],
                 ['text'=>'Paquete (S10)','url'=>'/conjunto','active'=>['conjunto','consultas'],'icon'=>'fas fa-barcode','can'=>'postal.access'],
             ],
         ],

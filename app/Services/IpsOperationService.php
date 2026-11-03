@@ -79,7 +79,7 @@ class IpsOperationService
                     : 'Apertura del envase registrada en IPS.';
             }
             $status = $action === 'create' ? 201 : 200;
-            $this->finish($id, 'succeeded', $body, $status);
+            $this->finish($id, 'succeeded', $body, $status, $result['customs_return_event_at'] ?? null);
         } catch (IpsOperationException $e) {
             $body = ['operation_id' => $id, 'status' => 'rejected', 'message' => $e->getMessage()];
             $status = $e->status;
@@ -174,12 +174,16 @@ class IpsOperationService
         }
     }
 
-    private function finish(string $id, string $state, array $body, int $status): void
+    private function finish(string $id, string $state, array $body, int $status, ?string $customsReturnEventAt = null): void
     {
-        DB::table('ips_operations')->where('id', $id)->update([
+        $changes = [
             'status' => $state, 'result' => json_encode($body, JSON_THROW_ON_ERROR),
             'http_status' => $status, 'updated_at' => now(),
-        ]);
+        ];
+        if ($customsReturnEventAt !== null) {
+            $changes['customs_return_event_at_utc'] = Carbon::parse($customsReturnEventAt)->utc()->toIso8601String();
+        }
+        DB::table('ips_operations')->where('id', $id)->update($changes);
     }
 
     private function canonicalize(array $value): array

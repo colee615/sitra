@@ -56,10 +56,11 @@ class IpsStagePolicy
                 return ['EDN', 'CUSTOMS_PRESENT'];
             }
             if ($event === 31 && $state === 1 && $currentOffice === $office) {
-                return ['CUSTOMS_INFO', 'CUSTOMS_RETURN'];
+                // EMI is a confirmed composite operation: physical return (38), then delivery (37).
+                return ['CUSTOMS_INFO', 'CUSTOMS_RETURN', 'EMI'];
             }
             if ($event === 34 && $state === 1 && $currentOffice === $office) {
-                return ['CUSTOMS_RETURN'];
+                return ['CUSTOMS_RETURN', 'EMI'];
             }
             if ($event === 38 && $state === 0 && $currentOffice === $office) {
                 // Customs return is already a physical receipt at this office. From here the

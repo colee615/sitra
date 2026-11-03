@@ -1,0 +1,18 @@
+.postal-party-search-form{padding:20px}
+.postal-party-filter-grid{display:grid;grid-template-columns:repeat(3,minmax(180px,1fr));gap:14px}
+.postal-party-filter-grid label{display:block;margin-bottom:6px;color:#18334e;font-size:12px;font-weight:700}
+.postal-party-search-actions{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:16px;color:#62758a;font-size:12px}
+.postal-party-search-actions>div{display:flex;gap:8px}
+.postal-party-summary{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:18px 22px;color:#62758a;font-size:12px}
+.postal-party-summary>div{display:flex;align-items:center;gap:12px}
+.postal-party-summary>div strong{color:#18334e;font-size:18px}
+.postal-party-summary .postal-task-icon{flex:0 0 42px;width:42px;height:42px}
+.postal-party-table{min-width:900px}
+.postal-party-table td{font-size:12px!important;line-height:1.45;vertical-align:middle}
+.postal-party-pagination{padding:0 18px 12px}
+.postal-party-empty{display:flex;align-items:center;gap:16px;padding:24px}
+.postal-party-empty .postal-task-icon{flex:0 0 48px;width:48px;height:48px}
+.postal-party-empty h2{margin:0 0 5px;color:#18334e;font-size:17px}
+.postal-party-empty p{margin:0;color:#62758a}
+@media(max-width:767px){.postal-party-filter-grid{grid-template-columns:1fr 1fr}.postal-party-search-actions,.postal-party-summary{align-items:flex-start;flex-direction:column}.postal-party-search-actions>div{width:100%}.postal-party-search-actions>div .btn{flex:1}.postal-party-empty{align-items:flex-start}}
+@media(max-width:575px){.postal-party-filter-grid{grid-template-columns:1fr}.postal-party-search-actions>div{flex-direction:column}}

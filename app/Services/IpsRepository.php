@@ -185,16 +185,34 @@ class IpsRepository
             $eventColumn = DB::raw('COALESCE(op.EVENT_TYPE_CD, m.EVT_TYPE_CD)');
             $candidateMap = config('ips.delivery_action_candidates', []);
             $action = $filters['action_cd'] ?? null;
-            if ($action !== null) {
-                $candidates = $candidateMap[$action] ?? ['events' => [], 'states' => []];
-            } else {
-                $candidates = [
-                    'events' => array_values(array_unique(array_merge(...array_column($candidateMap, 'events')))),
-                    'states' => array_values(array_unique(array_merge(...array_column($candidateMap, 'states')))),
-                ];
-            }
-            $query->whereIn($eventColumn, $candidates['events'])
-                ->whereIn('m.STATE_IND_CD', $candidates['states'])
+            $candidateActions = $action !== null ? [$action] : array_keys($candidateMap);
+            $query->where(function ($candidates) use ($candidateActions, $candidateMap, $eventColumn) {
+                $hasCandidate = false;
+                foreach ($candidateActions as $candidateAction) {
+                    $events = array_values(array_map('intval', $candidateMap[$candidateAction]['events'] ?? []));
+                    $states = array_values(array_map('intval', $candidateMap[$candidateAction]['states'] ?? []));
+                    if ($events !== [] && $states !== []) {
+                        $hasCandidate = true;
+                        $candidates->orWhere(function ($candidate) use ($eventColumn, $events, $states) {
+                            $candidate->whereIn($eventColumn, $events)->whereIn('m.STATE_IND_CD', $states);
+                        });
+                    }
+
+                    foreach ($candidateMap[$candidateAction]['pairs'] ?? [] as $pair) {
+                        if (count($pair) !== 2) {
+                            continue;
+                        }
+                        [$event, $state] = array_map('intval', $pair);
+                        $hasCandidate = true;
+                        $candidates->orWhere(function ($candidate) use ($eventColumn, $event, $state) {
+                            $candidate->where($eventColumn, $event)->where('m.STATE_IND_CD', $state);
+                        });
+                    }
+                }
+                if (! $hasCandidate) {
+                    $candidates->whereRaw('1 = 0');
+                }
+            })
                 ->whereNotExists(function ($q) {
                 $q->selectRaw('1')->from('dbo.L_MAILITM_EVENTS as terminal')
                     ->whereColumn('terminal.MAILITM_PID', 'm.MAILITM_PID')->whereIn('terminal.EVENT_TYPE_CD', [37, 76]);

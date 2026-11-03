@@ -49,6 +49,11 @@ class IpsWriteRequest extends FormRequest
         $delivery = ! $creating && $this->input('event') === 'EMI';
         $inboundReceipt = in_array($this->input('event'), ['EMR', 'EMD'], true);
         $receptacleEvent = $receptacleAction ? array_keys(config('ips.receptacle_events', [])) : [];
+        $customsReturnConfirmation = match ($this->input('event')) {
+            'CUSTOMS_RETURN' => ['required', 'boolean', 'accepted'],
+            'EMI' => ['sometimes', 'boolean', 'accepted'],
+            default => [Rule::prohibited()],
+        };
 
         return [
             'idempotency_key' => ['required', 'string', 'min:8', 'max:128', 'regex:/^[A-Za-z0-9_.:-]+$/'],
@@ -67,7 +72,7 @@ class IpsWriteRequest extends FormRequest
             'customs_office_cd' => [Rule::requiredIf($this->input('event') === 'CUSTOMS_PRESENT'), 'nullable', 'integer', 'min:1', 'max:32767'],
             'customs_office_type_cd' => [Rule::requiredIf($this->input('event') === 'CUSTOMS_PRESENT'), 'nullable', 'string', 'max:3', 'regex:/^[A-Za-z0-9]+$/'],
             'customs_release_status_cd' => [Rule::requiredIf($this->input('event') === 'CUSTOMS_INFO'), 'nullable', 'string', 'max:3', 'regex:/^[A-Za-z0-9]+$/'],
-            'customs_return_confirmed' => [Rule::excludeIf($this->input('event') !== 'CUSTOMS_RETURN'), 'required', 'boolean', 'accepted'],
+            'customs_return_confirmed' => $customsReturnConfirmation,
             'time_reason' => ['nullable', 'string', 'max:255'],
             'actor_user_pid' => ['sometimes', 'integer', 'min:1', 'max:32767'],
             'external_actor_id' => ['sometimes', 'string', 'max:80'],
