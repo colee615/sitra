@@ -268,8 +268,16 @@ class IpsWorkflowService
         }
         $customsEvents = ['CUSTOMS_PRESENT', 'CUSTOMS_INFO', 'CUSTOMS_RETURN'];
         $destinationCountry = trim((string) ($item->DEST_COUNTRY_CD ?? ''));
+        $currentPackage = $this->ips->present($item);
+        if ($destinationCountry === '' && ! empty($currentPackage['destination_country_inferred'])) {
+            $destinationCountry = (string) $currentPackage['destination_country'];
+        }
         if ((in_array($input['event'], $customsEvents, true) || $customsReturnDelivery) && $destinationCountry === '') {
             $destinationCountry = app(CustomsDestinationResolver::class)->forIpsItem($item);
+        }
+        if ($destinationCountry === config('ips.destination_country') && trim((string) ($item->DEST_COUNTRY_CD ?? '')) === '') {
+            // A verified import-to-domestic history (or CDS declaration) repairs the blank field with the next valid IPS event.
+            $item->DEST_COUNTRY_CD = $destinationCountry;
         }
         if ($definition['direction'] === 'I' && $destinationCountry !== config('ips.destination_country')) {
             throw new IpsOperationException('Este flujo de entrega solo opera envíos con destino Bolivia.');

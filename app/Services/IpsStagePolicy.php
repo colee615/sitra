@@ -6,6 +6,7 @@ namespace App\Services;
 class IpsStagePolicy
 {
     public const TECHNICAL_EVENTS = [41, 60, 61, 62, 63, 64, 65, 66, 67, 79];
+    public const BOLIVIAN_INBOUND_PROGRESS_EVENTS = [13, 32, 35, 36, 38, 39, 74, 75];
 
     public function describe(int $event, ?int $state, bool $terminal = false): array
     {

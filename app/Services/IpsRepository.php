@@ -163,7 +163,35 @@ class IpsRepository
         // may still open an outbound item for history; its policy actions remain empty.
         $exactHistorySearch = $status === 'all' && ! empty($filters['q']);
         if (! $exactHistorySearch) {
-            $query->where('m.DEST_COUNTRY_CD', config('ips.destination_country'));
+            $destinationCountry = config('ips.destination_country');
+            $query->where(function ($destination) use ($destinationCountry) {
+                $destination->where('m.DEST_COUNTRY_CD', $destinationCountry)
+                    ->orWhere(function ($inferred) use ($destinationCountry) {
+                        $inferred->whereRaw("LTRIM(RTRIM(ISNULL(m.DEST_COUNTRY_CD, ''))) = ''")
+                            ->whereRaw("UPPER(LTRIM(RTRIM(ISNULL(m.ORIG_COUNTRY_CD, '')))) NOT IN ('', ?)", [$destinationCountry])
+                            ->whereExists(function ($inbound) {
+                                $inbound->selectRaw('1')->from('dbo.L_MAILITM_EVENTS as inbound')
+                                    ->join('dbo.N_OWN_OFFICES as inbound_office', 'inbound_office.OWN_OFFICE_CD', '=', 'inbound.EVENT_OFFICE_CD')
+                                    ->whereColumn('inbound.MAILITM_PID', 'm.MAILITM_PID')
+                                    ->where('inbound.EVENT_TYPE_CD', 30)
+                                    ->whereRaw("UPPER(LTRIM(RTRIM(inbound_office.OFFICE_FCD))) LIKE 'BO%'")
+                                    ->whereExists(function ($progress) {
+                                        $progress->selectRaw('1')->from('dbo.L_MAILITM_EVENTS as progress')
+                                            ->join('dbo.N_OWN_OFFICES as progress_office', 'progress_office.OWN_OFFICE_CD', '=', 'progress.EVENT_OFFICE_CD')
+                                            ->whereColumn('progress.MAILITM_PID', 'inbound.MAILITM_PID')
+                                            ->whereIn('progress.EVENT_TYPE_CD', IpsStagePolicy::BOLIVIAN_INBOUND_PROGRESS_EVENTS)
+                                            ->whereRaw("UPPER(LTRIM(RTRIM(progress_office.OFFICE_FCD))) LIKE 'BO%'")
+                                            ->where(function ($later) {
+                                                $later->whereColumn('progress.EVENT_GMT_DT', '>', 'inbound.EVENT_GMT_DT')
+                                                    ->orWhere(function ($sameTime) {
+                                                        $sameTime->whereColumn('progress.EVENT_GMT_DT', '=', 'inbound.EVENT_GMT_DT')
+                                                            ->whereColumn('progress.EVENT_TYPE_CD', '>', 'inbound.EVENT_TYPE_CD');
+                                                    });
+                                            });
+                                    });
+                            });
+                    });
+            });
         }
         if (in_array($status, ['pending', 'reception'], true)) {
             $eventColumn = DB::raw('COALESCE(op.EVENT_TYPE_CD, m.EVT_TYPE_CD)');
@@ -1019,6 +1047,26 @@ class IpsRepository
             $row->RECIPIENT_CITY = $customer?->CUSTOMER_CITY;
             $row->RECIPIENT_ADDRESS = $customer?->CUSTOMER_ADDRESS;
             $history = $events->get($row->MAILITM_PID, collect());
+            $originCountry = strtoupper(trim((string) ($row->ORIG_COUNTRY_CD ?? '')));
+            $inboundExchangeEvents = $history->filter(fn ($event) => (int) $event->EVENT_TYPE_CD === 30
+                && str_starts_with(strtoupper(trim((string) ($offices->get($event->EVENT_OFFICE_CD)?->OFFICE_FCD ?? ''))), 'BO'));
+            $hasBolivianInboundProgress = $inboundExchangeEvents->isNotEmpty() && $history->contains(function ($event) use ($inboundExchangeEvents, $offices) {
+                if (! in_array((int) $event->EVENT_TYPE_CD, IpsStagePolicy::BOLIVIAN_INBOUND_PROGRESS_EVENTS, true)
+                    || ! str_starts_with(strtoupper(trim((string) ($offices->get($event->EVENT_OFFICE_CD)?->OFFICE_FCD ?? ''))), 'BO')) {
+                    return false;
+                }
+                $eventAt = Carbon::parse($event->EVENT_GMT_DT, 'UTC');
+
+                return $inboundExchangeEvents->contains(function ($inbound) use ($event, $eventAt) {
+                    $inboundAt = Carbon::parse($inbound->EVENT_GMT_DT, 'UTC');
+
+                    return $eventAt->greaterThan($inboundAt)
+                        || ($eventAt->equalTo($inboundAt) && (int) $event->EVENT_TYPE_CD > (int) $inbound->EVENT_TYPE_CD);
+                });
+            });
+            $row->DESTINATION_COUNTRY_INFERRED = trim((string) ($row->DEST_COUNTRY_CD ?? '')) === ''
+                && $originCountry !== '' && $originCountry !== config('ips.destination_country')
+                && $hasBolivianInboundProgress;
             $latestAssignment = $deliveryAssignments->get($row->MAILITM_PID, collect())->first();
             $op = $history->first(fn ($e) => ! in_array((int) $e->EVENT_TYPE_CD, IpsStagePolicy::TECHNICAL_EVENTS, true));
             $currentEvent = $history->first(fn ($e) => (int) $e->EVENT_TYPE_CD === (int) $row->EVT_TYPE_CD
@@ -1054,6 +1102,8 @@ class IpsRepository
     public function present(object $item): array
     {
         $stage = app(IpsStagePolicy::class)->describe((int) ($item->OP_EVENT_CD ?? $item->EVT_TYPE_CD), isset($item->STATE_IND_CD) ? (int) $item->STATE_IND_CD : null, (bool) ($item->TERMINAL ?? false));
+        $storedDestinationCountry = strtoupper(trim((string) ($item->DEST_COUNTRY_CD ?? '')));
+        $inferredDestinationCountry = $storedDestinationCountry === '' && (bool) ($item->DESTINATION_COUNTRY_INFERRED ?? false);
         if (in_array((int) ($item->POSTAL_STATUS_CD ?? 0), [22, 23], true)) {
             $stage = ['key' => 'returned', 'label' => 'Devuelto al remitente', 'tone' => 'secondary'];
         } elseif (in_array((int) ($item->POSTAL_STATUS_CD ?? 0), [6, 7], true)) {
@@ -1080,7 +1130,8 @@ class IpsRepository
             'local_id' => trim($item->MAILITM_LOCAL_ID ?? ''),
             'weight_kg' => isset($item->MAILITM_WEIGHT) ? (float) $item->MAILITM_WEIGHT : null,
             'origin_country' => trim($item->ORIG_COUNTRY_CD ?? ''),
-            'destination_country' => trim($item->DEST_COUNTRY_CD ?? ''),
+            'destination_country' => $inferredDestinationCountry ? config('ips.destination_country') : $storedDestinationCountry,
+            'destination_country_inferred' => $inferredDestinationCountry,
             'state_cd' => isset($item->STATE_IND_CD) ? (int) $item->STATE_IND_CD : null,
             'event_cd' => isset($item->EVT_TYPE_CD) ? (int) $item->EVT_TYPE_CD : null,
             'event_at' => Carbon::parse($item->EVT_GMT_DT, 'UTC')->format('Y-m-d\TH:i:s.vP'),
