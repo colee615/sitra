@@ -48,9 +48,9 @@ class IpsWriteRequest extends FormRequest
         $receptacleAction = ($this->route()->defaults['ips_action'] ?? '') === 'receptacle';
         $delivery = ! $creating && $this->input('event') === 'EMI';
         $inboundReceipt = in_array($this->input('event'), ['EMR', 'EMD'], true);
+        $requiresReceptacle = $inboundReceipt || $this->input('event') === 'CUSTOMS_RETURN';
         $receptacleEvent = $receptacleAction ? array_keys(config('ips.receptacle_events', [])) : [];
         $customsReturnConfirmation = match ($this->input('event')) {
-            'CUSTOMS_RETURN' => ['required', 'boolean', 'accepted'],
             'EMI' => ['sometimes', 'boolean', 'accepted'],
             default => [Rule::prohibited()],
         };
@@ -65,7 +65,7 @@ class IpsWriteRequest extends FormRequest
             'expected_event_at' => [$creating ? 'prohibited' : ($delivery ? 'sometimes' : 'required'), 'date_format:Y-m-d\TH:i:sP,Y-m-d\TH:i:s.vP'],
             'next_office_cd' => [Rule::requiredIf($this->input('event') === 'EDN'), 'nullable', 'integer', 'min:0', 'max:32767'],
             'domestic_receptacle_pid' => [Rule::requiredIf($this->input('event') === 'EIB'), 'nullable', 'uuid'],
-            'receptacle_pid' => [Rule::requiredIf($inboundReceipt), 'nullable', Rule::prohibitedIf(! $creating && $this->input('event') !== 'EMR'), 'uuid'],
+            'receptacle_pid' => [Rule::requiredIf($requiresReceptacle), 'nullable', Rule::prohibitedIf(! $creating && ! in_array($this->input('event'), ['EMR', 'CUSTOMS_RETURN'], true)), 'uuid'],
             'signatory' => ['nullable', 'string', 'max:64'],
             'delivery_mode' => [$delivery ? 'sometimes' : Rule::requiredIf($this->input('event') === 'EMI'), 'nullable', Rule::in(['DOMICILIARIA', 'NO_DOMICILIARIA'])],
             'delivery_agent_cd' => [Rule::requiredIf($this->input('event') === 'HANDOVER_AGENT'), 'nullable', 'string', 'size:2', 'regex:/^[A-Za-z0-9]{2}$/'],
@@ -77,6 +77,7 @@ class IpsWriteRequest extends FormRequest
             'actor_user_pid' => ['sometimes', 'integer', 'min:1', 'max:32767'],
             'external_actor_id' => ['sometimes', 'string', 'max:80'],
             'physical_receipt_confirmed' => [Rule::excludeIf(! in_array($this->input('event'), ['EMG', 'EMR', 'EMD', 'CUSTOMS_RETURN', 'RECEPTACLE_RECEIVE'], true)), 'required', 'boolean', 'accepted'],
+            'route_mismatch_confirmed' => [Rule::prohibitedIf($this->input('event') !== 'EMG'), 'sometimes', 'boolean', 'accepted'],
             'physical_return_confirmed' => [Rule::excludeIf($this->input('event') !== 'HANDOVER_AGENT'), 'sometimes', 'boolean', 'accepted'],
             'delivery_location' => ['nullable', 'string', 'max:25'],
             'non_delivery_reason' => [Rule::requiredIf($this->input('event') === 'EMH'), 'nullable', 'integer', 'min:1'],

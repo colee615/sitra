@@ -271,7 +271,10 @@ class IpsRepository
             if ($status === 'reception') {
                 $query->where(function ($q) use ($office) {
                     $q->whereNotIn(DB::raw('COALESCE(op.EVENT_TYPE_CD, m.EVT_TYPE_CD)'), [13, 35, 72])
-                        ->orWhere('op.NEXT_OFFICE_CD', $office);
+                        ->orWhere(function ($inbound) use ($office) {
+                            $inbound->where('op.NEXT_OFFICE_CD', $office)
+                                ->whereRaw('COALESCE(op.EVENT_OFFICE_CD, m.EVT_OFFICE_CD) <> ?', [$office]);
+                        });
                 });
             }
         }
@@ -1134,6 +1137,7 @@ class IpsRepository
             'destination_country_inferred' => $inferredDestinationCountry,
             'state_cd' => isset($item->STATE_IND_CD) ? (int) $item->STATE_IND_CD : null,
             'event_cd' => isset($item->EVT_TYPE_CD) ? (int) $item->EVT_TYPE_CD : null,
+            'receptacle_pid' => isset($item->EVT_RECPTCL_PID) ? trim((string) $item->EVT_RECPTCL_PID) : null,
             'event_at' => Carbon::parse($item->EVT_GMT_DT, 'UTC')->format('Y-m-d\TH:i:s.vP'),
             ...IpsEventTime::present($item->EVT_GMT_DT, $item->EVT_LOCAL_OFFSET ?? null),
             'office_cd' => isset($item->EVT_OFFICE_CD) ? (int) $item->EVT_OFFICE_CD : null,

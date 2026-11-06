@@ -39,7 +39,24 @@ class IpsStagePolicy
         return compact('key', 'label', 'tone');
     }
 
-    public function actions(array $package, int $office): array
+    public function isRouteMismatchReceiptCandidate(array $package, int $office): bool
+    {
+        $event = (int) ($package['operational_event_cd'] ?? $package['event_cd'] ?? 0);
+        $state = isset($package['state_cd']) ? (int) $package['state_cd'] : null;
+        $currentOffice = (int) ($package['operational_office_cd'] ?? $package['office_cd'] ?? 0);
+        $nextOffice = isset($package['next_office_cd']) ? (int) $package['next_office_cd'] : null;
+
+        return ($package['destination_country'] ?? '') === 'BO'
+            && empty($package['terminal'])
+            && in_array($event, [13, 35, 72], true)
+            && (($event === 13 && $state === 6) || (in_array($event, [35, 72], true) && in_array($state, [0, 2, 3, 6], true)))
+            && $currentOffice > 0
+            && $currentOffice !== $office
+            && $nextOffice !== null
+            && $nextOffice !== $office;
+    }
+
+    public function actions(array $package, int $office, bool $routeMismatchConfirmed = false): array
     {
         $event = (int) ($package['operational_event_cd'] ?? $package['event_cd']);
         $state = $package['state_cd'];
@@ -55,6 +72,10 @@ class IpsStagePolicy
             if ($event === 30 && $state === 0 && $currentOffice === $office
                 && in_array($office, $package['exchange_office_cds'] ?? [], true)) {
                 return ['EDN', 'CUSTOMS_PRESENT'];
+            }
+            if ($event === 1251 && $state === 1 && $currentOffice === $office) {
+                // An item observed by Customs may return only from the open sack/office that holds it.
+                return ['CUSTOMS_RETURN'];
             }
             if ($event === 31 && $state === 1 && $currentOffice === $office) {
                 // EMI is a confirmed composite operation: physical return (38), then delivery (37).
@@ -72,6 +93,7 @@ class IpsStagePolicy
                 return ['EIB'];
             }
             if ($event === 13 && $state === 6
+                && $currentOffice !== $office
                 && in_array($office, $package['receipt_office_cds'] ?? [], true)) {
                 return ['EMG'];
             }
@@ -82,8 +104,9 @@ class IpsStagePolicy
         // A dispatch belongs to its destination for receipt, never to its sending office.
         $receiptOffice = in_array($event, [35, 72], true) ? $next : $currentOffice;
         $actions = [];
-        if (in_array($event, [30, 33, 35, 38, 42, 43, 44, 71, 72], true)
+        if (in_array($event, [33, 35, 38, 42, 43, 44, 71, 72], true)
             && $receiptOffice !== null && (int) $receiptOffice === $office
+            && (! in_array($event, [35, 72], true) || $currentOffice !== $office)
             && in_array($state, [0, 2, 3, 6], true)) {
             $actions[] = 'EMG';
         }
@@ -106,6 +129,10 @@ class IpsStagePolicy
         }
         if ($currentOffice === $office && in_array($state, [0, 8], true) && $event === 74) {
             $actions[] = 'EMH';
+        }
+
+        if ($routeMismatchConfirmed && $this->isRouteMismatchReceiptCandidate($package, $office)) {
+            $actions[] = 'EMG';
         }
 
         return $actions;

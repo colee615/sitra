@@ -60,13 +60,16 @@ class IpsWorkflowService
             $expectedNextOffice = in_array($input['event'], ['EDN', 'EIB'], true)
                 ? (int) ($input['next_office_cd'] ?? $item?->NEXT_OFFICE_CD)
                 : null;
+            $expectedReceptaclePid = in_array($input['event'], ['EMR', 'EMD', 'CUSTOMS_RETURN'], true)
+                ? (string) $input['receptacle_pid']
+                : null;
             $this->ips->verifyWrite(
                 $parameters['PId'],
                 (int) $event->EVENT_TYPE_CD,
                 $date->copy()->utc()->toDateTimeString(),
                 $input['signatory'] ?? null,
                 $expectedNextOffice,
-                in_array($input['event'], ['EMR', 'EMD'], true) ? (string) $input['receptacle_pid'] : null,
+                $expectedReceptaclePid,
                 in_array($input['event'], ['EMR', 'EMD'], true) ? (int) $input['condition_cd'] : null
             );
             if ($domesticReceptacle && ! $this->ips->domesticReceptacleLinkExists((string) $domesticReceptacle->DOM_REC_PID, (string) $item->MAILITM_PID)) {
@@ -294,8 +297,24 @@ class IpsWorkflowService
                 $package['destination_country'] = $destinationCountry;
             }
             $requiredAction = $customsReturnDelivery ? 'CUSTOMS_RETURN' : $input['event'];
-            if (! in_array($requiredAction, app(IpsStagePolicy::class)->actions($package, (int) $input['office_cd']), true)) {
+            $stagePolicy = app(IpsStagePolicy::class);
+            $routeMismatchConfirmed = $input['event'] === 'EMG' && ! empty($input['route_mismatch_confirmed']);
+            if ($routeMismatchConfirmed && ! $stagePolicy->isRouteMismatchReceiptCandidate($package, (int) $input['office_cd'])) {
+                throw new IpsOperationException('La confirmación de ruta distinta no corresponde a este paquete y oficina.', 409);
+            }
+            $allowedActions = $input['event'] === 'EMG'
+                ? $stagePolicy->actions($package, (int) $input['office_cd'], $routeMismatchConfirmed)
+                : $stagePolicy->actions($package, (int) $input['office_cd']);
+            if (! in_array($requiredAction, $allowedActions, true)) {
                 throw new IpsOperationException('La etapa u oficina actual no está habilitada para esta operación.');
+            }
+            if ($input['event'] === 'CUSTOMS_RETURN') {
+                $currentReceptaclePid = strtolower(trim((string) ($item->EVT_RECPTCL_PID ?? '')));
+                $selectedReceptaclePid = strtolower(trim((string) ($input['receptacle_pid'] ?? '')));
+                if ($currentReceptaclePid === '' || $selectedReceptaclePid === ''
+                    || ! hash_equals($currentReceptaclePid, $selectedReceptaclePid)) {
+                    throw new IpsOperationException('El paquete no está registrado en la saca abierta seleccionada. Escanéalo desde la saca que realmente lo contiene.', 409);
+                }
             }
             if ($input['event'] === 'HANDOVER_AGENT'
                 && (int) ($package['operational_event_cd'] ?? $package['event_cd']) === 36
@@ -370,7 +389,7 @@ class IpsWorkflowService
             && ! $this->ips->isDeliveryAgentAllowedAtOffice((int) $input['delivery_agent_cd'], (int) $input['office_cd'])) {
             throw new IpsOperationException('El cartero no está vigente o no pertenece a la regional de esta oficina.', 422);
         }
-        if (in_array($input['event'], ['EMR', 'EMD'], true) && ! empty($input['receptacle_pid'])) {
+        if (in_array($input['event'], ['EMR', 'EMD', 'CUSTOMS_RETURN'], true) && ! empty($input['receptacle_pid'])) {
             $this->ips->assertOpenInboundReceptacle((string) $input['receptacle_pid'], (int) $input['office_cd']);
         }
     }
