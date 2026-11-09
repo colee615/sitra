@@ -52,7 +52,7 @@ class IpsWriteRequest extends FormRequest
         $receptacleEvent = $receptacleAction ? array_keys(config('ips.receptacle_events', [])) : [];
         $customsReturnConfirmation = match ($this->input('event')) {
             'EMI' => ['sometimes', 'boolean', 'accepted'],
-            default => [Rule::prohibited()],
+            default => ['prohibited'],
         };
 
         return [

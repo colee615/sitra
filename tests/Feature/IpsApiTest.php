@@ -71,6 +71,39 @@ class IpsApiTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_office_receipt_with_route_mismatch_reaches_the_workflow_and_replays_without_a_second_write(): void
+    {
+        $workflow = Mockery::mock(IpsWorkflowService::class);
+        $workflow->shouldReceive('execute')->once()->with('event', Mockery::on(fn ($input) => $input['event'] === 'EMG'
+            && $input['office_cd'] === 18 && $input['actor_user_pid'] === 73
+            && $input['physical_receipt_confirmed'] === true && $input['route_mismatch_confirmed'] === true))
+            ->andReturn(['codigo' => 'TEST01', 'event' => 'EMG', 'event_cd' => 32]);
+        $this->app->instance(IpsWorkflowService::class, $workflow);
+        $payload = array_replace($this->delivery(), [
+            'event' => 'EMG', 'office_cd' => 18, 'expected_event_cd' => 13, 'actor_user_pid' => 73,
+            'physical_receipt_confirmed' => true, 'route_mismatch_confirmed' => true,
+        ]);
+        $this->withToken($this->token(['ips.events']))->withHeader('Idempotency-Key', 'receipt-route-test-01');
+
+        $first = $this->postJson('/api/v1/ips/paquetes/TEST01/eventos', $payload)
+            ->assertOk()->assertJsonPath('status', 'succeeded')->assertJsonPath('data.event_cd', 32);
+        $this->postJson('/api/v1/ips/paquetes/TEST01/eventos', $payload)
+            ->assertOk()->assertHeader('Idempotency-Replayed', 'true')
+            ->assertJsonPath('operation_id', $first->json('operation_id'));
+    }
+
+    public function test_office_receipt_rejects_customs_return_confirmation_without_server_error(): void
+    {
+        $workflow = Mockery::mock(IpsWorkflowService::class);
+        $workflow->shouldNotReceive('execute');
+        $this->app->instance(IpsWorkflowService::class, $workflow);
+        $this->withToken($this->token(['ips.events']))->withHeader('Idempotency-Key', 'receipt-invalid-test-01')
+            ->postJson('/api/v1/ips/paquetes/TEST01/eventos', array_replace($this->delivery(), [
+                'event' => 'EMG', 'physical_receipt_confirmed' => true, 'customs_return_confirmed' => true,
+            ]))->assertUnprocessable()->assertJsonValidationErrors('customs_return_confirmed');
+        $this->assertDatabaseCount('ips_operations', 0);
+    }
+
     public function test_delivery_requires_only_idempotency_before_autofill(): void
     {
         $this->withToken($this->token(['ips.deliver']))->postJson('/api/v1/ips/paquetes/TEST01/entrega', [])
