@@ -359,8 +359,19 @@ class IpsRepository
                 'u.RESTRICT_USER_OFFICES', 'u.E_MAIL_ADDRESS',
             ]);
 
+        $pageRows = $rows->take($perPage);
+        $officesByUser = $pageRows->isEmpty()
+            ? collect()
+            : $this->connection()->table('dbo.L_USERS_OFFICES as assigned')
+                ->join('dbo.N_OWN_OFFICES as office', 'office.OWN_OFFICE_CD', '=', 'assigned.OWN_OFFICE_CD')
+                ->whereIn('assigned.USER_PID', $pageRows->pluck('USER_PID')->all())
+                ->whereIn('office.VALID_IND', ['1', '3'])
+                ->orderBy('office.OFFICE_NM')
+                ->get(['assigned.USER_PID', 'office.OWN_OFFICE_CD', 'office.OFFICE_FCD', 'office.OFFICE_NM'])
+                ->groupBy('USER_PID');
+
         return [
-            'data' => $rows->take($perPage)->map(fn ($row) => $this->presentUser($row))->values()->all(),
+            'data' => $pageRows->map(fn ($row) => $this->presentUser($row, $officesByUser->get($row->USER_PID, collect())->all()))->values()->all(),
             'meta' => ['page' => $page, 'per_page' => $perPage, 'has_more' => $rows->count() > $perPage],
         ];
     }
@@ -436,8 +447,17 @@ class IpsRepository
         return $this->user($pid);
     }
 
-    private function presentUser(object $row): array
+    private function presentUser(object $row, array $assignedOffices = []): array
     {
+        $offices = collect($assignedOffices);
+        if (isset($row->OWN_OFFICE_CD)) {
+            $offices->prepend((object) [
+                'OWN_OFFICE_CD' => $row->OWN_OFFICE_CD,
+                'OFFICE_FCD' => $row->OFFICE_FCD ?? '',
+                'OFFICE_NM' => $row->OFFICE_NM ?? '',
+            ]);
+        }
+
         return [
             'user_pid' => (int) $row->USER_PID,
             'user_fid' => trim((string) $row->USER_FID),
@@ -447,6 +467,11 @@ class IpsRepository
             'office_cd' => isset($row->OWN_OFFICE_CD) ? (int) $row->OWN_OFFICE_CD : null,
             'office_fcd' => trim((string) ($row->OFFICE_FCD ?? '')),
             'office_name' => trim((string) ($row->OFFICE_NM ?? '')),
+            'offices' => $offices->unique('OWN_OFFICE_CD')->map(fn ($office): array => [
+                'office_cd' => (int) $office->OWN_OFFICE_CD,
+                'office_fcd' => trim((string) $office->OFFICE_FCD),
+                'office_name' => trim((string) $office->OFFICE_NM),
+            ])->values()->all(),
             'valid_ind' => trim((string) $row->VALID_IND),
             'ipsweb' => trim((string) $row->IPSWEB) === 'Y',
             'restrict_user_offices' => (bool) $row->RESTRICT_USER_OFFICES,

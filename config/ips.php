@@ -2,7 +2,7 @@
 
 return [
     'connection' => 'ips_catalog',
-    'expected_database' => 'IPS5Db',
+    'expected_database' => env('IPS_EXPECTED_DATABASE', 'IPS5Db'),
     'totals_cache_seconds' => (int) env('IPS_TOTALS_CACHE_SECONDS', 30),
     'totals_cache_store' => env('IPS_TOTALS_CACHE_STORE'),
     // Validate stored procedures in an IPS test database before enabling production writes.
