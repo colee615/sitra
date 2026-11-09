@@ -8,10 +8,62 @@ use App\Services\IpsWorkflowService;
 use Illuminate\Database\Connection;
 use Illuminate\Support\Carbon;
 use Mockery;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class IpsWorkflowTest extends TestCase
 {
+    public static function assignedOfficeCases(): array
+    {
+        return [
+            ['EMG', ['office_cd' => 1]],
+            ['EMG', ['office_cd' => 2, 'offices' => [['office_cd' => 1]]]],
+            ['EMG', ['office_cd' => null, 'offices' => [['office_cd' => 1]]]],
+            ['EMI', ['office_cd' => 1]],
+            ['EMI', ['office_cd' => 2, 'offices' => [['office_cd' => '1']]]],
+        ];
+    }
+
+    #[DataProvider('assignedOfficeCases')]
+    public function test_receipt_and_delivery_accept_any_office_assigned_to_the_actor(string $event, array $actor): void
+    {
+        $previous = $event === 'EMG' ? 35 : 75;
+        $expected = $event === 'EMG' ? 32 : 37;
+        $repo = $this->repository($this->item([
+            'EVT_TYPE_CD' => $previous, 'EVT_OFFICE_CD' => $event === 'EMG' ? 2 : 1, 'NEXT_OFFICE_CD' => 1,
+        ]), $event);
+        $repo->shouldReceive('user')->once()->with(73)->andReturn($actor);
+        $repo->shouldReceive('callProcedure')->once()->with('SP_SET_MAILITM', Mockery::on(
+            fn ($parameters) => $parameters['Office'] === 1 && $parameters['User'] === 73 && $parameters['EventType'] === $expected
+        ));
+        $repo->shouldReceive('verifyWrite')->once();
+
+        $result = (new IpsWorkflowService($repo))->execute('event', $this->input([
+            'event' => $event, 'expected_event_cd' => $previous, 'actor_user_pid' => 73, 'physical_receipt_confirmed' => true,
+        ]));
+
+        $this->assertSame(1, $result['office_cd']);
+        $this->assertSame($expected, $result['event_cd']);
+    }
+
+    public function test_unassigned_office_is_rejected_even_when_office_restrictions_are_disabled(): void
+    {
+        $repo = $this->repository($this->item(['EVT_TYPE_CD' => 35, 'EVT_OFFICE_CD' => 2, 'NEXT_OFFICE_CD' => 1]), 'EMG');
+        $repo->shouldReceive('user')->once()->with(73)->andReturn([
+            'office_cd' => 2, 'offices' => [['office_cd' => 3]], 'restrict_user_offices' => false,
+        ]);
+        $repo->shouldNotReceive('callProcedure');
+
+        try {
+            (new IpsWorkflowService($repo))->execute('event', $this->input([
+                'event' => 'EMG', 'expected_event_cd' => 35, 'actor_user_pid' => 73, 'physical_receipt_confirmed' => true,
+            ]));
+            $this->fail('La oficina debe estar asignada al actor.');
+        } catch (IpsOperationException $exception) {
+            $this->assertSame(403, $exception->status);
+        }
+    }
+
     private function repository(?object $item = null, string $code = 'EMI', bool $terminal = false, bool $compatible = true): IpsRepository
     {
         $repo = Mockery::mock(IpsRepository::class);
@@ -163,20 +215,20 @@ class IpsWorkflowTest extends TestCase
 
     public function test_receipt_requires_physical_confirmation_and_uses_linked_actor(): void
     {
-        $repo = $this->repository($this->item(['EVT_TYPE_CD'=>30]), 'EMG');
+        $repo = $this->repository($this->item(['EVT_TYPE_CD'=>35, 'EVT_OFFICE_CD'=>2, 'NEXT_OFFICE_CD'=>1]), 'EMG');
         $repo->shouldReceive('user')->with(73)->andReturn(['office_cd'=>1]);
         $repo->shouldReceive('callProcedure')->once()->with('SP_SET_MAILITM', Mockery::on(fn ($p) => $p['EventType'] === 32 && $p['User'] === 73 && $p['Office'] === 1 && $p['Signatory'] === null));
         $repo->shouldReceive('verifyWrite')->once();
-        $result = (new IpsWorkflowService($repo))->execute('event', $this->input(['event'=>'EMG','expected_event_cd'=>30,'actor_user_pid'=>73,'physical_receipt_confirmed'=>true]));
+        $result = (new IpsWorkflowService($repo))->execute('event', $this->input(['event'=>'EMG','expected_event_cd'=>35,'actor_user_pid'=>73,'physical_receipt_confirmed'=>true]));
         $this->assertSame(73, $result['actor_user_pid']);
     }
 
     public function test_receipt_without_confirmation_never_writes(): void
     {
-        $repo = $this->repository($this->item(['EVT_TYPE_CD'=>30]), 'EMG');
+        $repo = $this->repository($this->item(['EVT_TYPE_CD'=>35, 'EVT_OFFICE_CD'=>2, 'NEXT_OFFICE_CD'=>1]), 'EMG');
         $repo->shouldNotReceive('callProcedure');
         $this->expectExceptionMessage('físicamente');
-        (new IpsWorkflowService($repo))->execute('event', $this->input(['event'=>'EMG','expected_event_cd'=>30]));
+        (new IpsWorkflowService($repo))->execute('event', $this->input(['event'=>'EMG','expected_event_cd'=>35]));
     }
 
     public function test_wrong_linked_actor_office_never_writes(): void

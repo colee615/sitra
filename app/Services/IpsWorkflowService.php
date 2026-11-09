@@ -287,7 +287,12 @@ class IpsWorkflowService
         }
         if (isset($input['actor_user_pid'])) {
             $actor = $this->ips->user((int) $input['actor_user_pid']);
-            if ((int) ($actor['office_cd'] ?? 0) !== (int) $input['office_cd']) {
+            $assignedOffices = collect($actor['offices'] ?? []);
+            if (isset($actor['office_cd'])) {
+                $assignedOffices->prepend(['office_cd' => $actor['office_cd']]);
+            }
+            if (! $assignedOffices->contains(fn ($office) => isset($office['office_cd'])
+                && (int) $office['office_cd'] === (int) $input['office_cd'])) {
                 throw new IpsOperationException('La oficina no corresponde al usuario IPS vinculado.', 403);
             }
         }
