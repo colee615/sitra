@@ -44,6 +44,30 @@ class IpsApiTest extends TestCase
         $this->getJson('/api/v1/ips/paquetes')->assertUnauthorized();
     }
 
+    public function test_dispatched_package_detail_returns_reception_actions_and_open_domestic_sacks(): void
+    {
+        $item = (object) ['MAILITM_PID' => 'package-pid'];
+        $ips = Mockery::mock(IpsRepository::class)->makePartial();
+        $ips->shouldReceive('find')->once()->with('TEST01')->andReturn($item);
+        $ips->shouldReceive('enrich')->once();
+        $ips->shouldReceive('present')->once()->with($item)->andReturn([
+            'codigo' => 'TEST01', 'operational_event_cd' => 35, 'operational_office_cd' => 2,
+            'next_office_cd' => 1, 'state_cd' => 0, 'destination_country' => 'BO',
+        ]);
+        $ips->shouldReceive('openDomesticReceptaclesFor')->once()->with($item)
+            ->andReturn(collect([(object) ['DOM_REC_FID' => 'SACK01']]));
+        $connection = Mockery::mock(\Illuminate\Database\Connection::class);
+        $connection->shouldReceive('table->leftJoin->where->orderByDesc->get')->andReturn(collect());
+        $ips->shouldReceive('connection')->andReturn($connection);
+        $this->app->instance(IpsRepository::class, $ips);
+
+        $this->withToken($this->token(['ips.read']))
+            ->getJson('/api/v1/ips/paquetes/TEST01?office_cd=1')
+            ->assertOk()
+            ->assertJsonPath('data.package.allowed_actions', ['EMG'])
+            ->assertJsonPath('data.package.domestic_receptacles.0.DOM_REC_FID', 'SACK01');
+    }
+
     public function test_read_token_cannot_deliver(): void
     {
         $this->withToken($this->token(['ips.read']))

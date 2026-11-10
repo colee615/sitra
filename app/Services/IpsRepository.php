@@ -936,7 +936,7 @@ class IpsRepository
             ? $this->nextOffices((int) $package['operational_office_cd'])
             : collect();
         $package['domestic_receptacles'] = $package['operational_event_cd'] === 35
-            ? $this->openDomesticReceptacles($item)
+            ? $this->openDomesticReceptaclesFor($item)
             : collect();
 
         return [
