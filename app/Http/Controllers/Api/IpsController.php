@@ -51,11 +51,15 @@ class IpsController extends Controller
         ];
     }
 
-    public function show(Request $request, string $codigo, IpsRepository $ips)
+    public function show(Request $request, string $codigo, IpsRepository $ips, IpsOperationService $operations)
     {
         $filters = $request->validate(['office_cd' => ['nullable', 'integer', 'min:0', 'max:32767']]);
-        return $this->respond(function () use ($codigo, $ips, $filters) {
-            $detail = $ips->detail(strtoupper($codigo));
+        return $this->respond(function () use ($codigo, $ips, $operations, $filters) {
+            $code = strtoupper(trim($codigo));
+            $detail = $ips->detail($code);
+            // IPS event 37 does not distinguish home delivery from counter pickup.
+            // SITRA records that choice with each successful EMI operation.
+            $detail['package']['delivery_mode'] = $operations->deliveryModesForCodes([$code])[$code] ?? null;
             $detail['package']['allowed_actions'] = isset($filters['office_cd'])
                 ? app(\App\Services\IpsStagePolicy::class)->actions($detail['package'], (int) $filters['office_cd']) : [];
             if (in_array('EMR', $detail['package']['allowed_actions'], true) && isset($filters['office_cd'])) {
