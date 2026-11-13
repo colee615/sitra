@@ -78,16 +78,13 @@ class IpsStagePolicy
                 return ['CUSTOMS_RETURN'];
             }
             if ($event === 31 && $state === 1 && $currentOffice === $office) {
-                // EMI is a confirmed composite operation: physical return (38), then delivery (37).
-                return ['CUSTOMS_INFO', 'CUSTOMS_RETURN', 'EMI'];
+                return ['CUSTOMS_INFO', 'CUSTOMS_RETURN'];
             }
             if ($event === 34 && $state === 1 && $currentOffice === $office) {
-                return ['CUSTOMS_RETURN', 'EMI'];
+                return ['CUSTOMS_RETURN'];
             }
             if ($event === 38 && $state === 0 && $currentOffice === $office) {
-                // Customs return is already a physical receipt at this office. From here the
-                // operator can route onward, hold for pickup, hand to a carrier, or deliver.
-                return ['EDN', 'EDH', 'HANDOVER_AGENT', 'EMI'];
+                return ['EDN', 'EMG'];
             }
             if ($event === 35 && $state === 0 && $currentOffice === $office && $next !== null) {
                 return ['EIB'];
@@ -104,6 +101,11 @@ class IpsStagePolicy
         // A dispatch belongs to its destination for receipt, never to its sending office.
         $receiptOffice = in_array($event, [35, 72], true) ? $next : $currentOffice;
         $actions = [];
+        if ($currentOffice === $office && in_array($state, [0, 8], true)
+            && in_array($event, [36, 39, 74, 75], true)
+            && ! \App\Support\IpsDeliveryReceipt::confirmed($package, $office)) {
+            $actions[] = 'EMG';
+        }
         if (in_array($event, [33, 35, 38, 42, 43, 44, 71, 72], true)
             && $receiptOffice !== null && (int) $receiptOffice === $office
             && (! in_array($event, [35, 72], true) || $currentOffice !== $office)
@@ -133,6 +135,10 @@ class IpsStagePolicy
 
         if ($routeMismatchConfirmed && $this->isRouteMismatchReceiptCandidate($package, $office)) {
             $actions[] = 'EMG';
+        }
+
+        if (! \App\Support\IpsDeliveryReceipt::confirmed($package, $office)) {
+            $actions = array_values(array_diff($actions, ['EMI']));
         }
 
         return $actions;

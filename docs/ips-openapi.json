@@ -626,6 +626,7 @@
       },
       "CreatePackage": {
         "type": "object",
+        "description": "EMG permite dar de alta un envío L internacional no registrado al llegar físicamente a la oficina de entrega. Requiere código L de 13 caracteres, origen extranjero, destino BO, actor_user_pid asignado a office_cd y physical_receipt_confirmed=true. No requiere saca. La entrega posterior usa EMI.",
         "required": [
           "codigo",
           "event",
@@ -648,7 +649,8 @@
             "type": "string",
             "enum": [
               "EMA",
-              "EMD"
+              "EMD",
+              "EMG"
             ]
           },
           "occurred_at": {
@@ -784,7 +786,7 @@
           },
           "customs_return_confirmed": {
             "type": "boolean",
-            "description": "Obligatorio para EMI cuando el paquete sigue en Aduana (evento 31/34, estado 1): confirma retorno físico. SITRA registra el evento 38 antes del 37."
+            "description": "Prohibido. La devolución de Aduana, la recepción en destino (32) y la baja (37) se registran por separado. EMI exige una recepción previa en la misma oficina durante el recorrido actual."
           }
         }
       },

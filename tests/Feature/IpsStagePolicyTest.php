@@ -7,6 +7,18 @@ use Tests\TestCase;
 
 class IpsStagePolicyTest extends TestCase
 {
+    public function test_customs_return_requires_a_separate_destination_receipt_before_delivery(): void
+    {
+        $policy = new IpsStagePolicy;
+        $package = ['event_cd' => 38, 'state_cd' => 0, 'office_cd' => 1, 'destination_country' => 'BO'];
+        $this->assertContains('EMG', $policy->actions($package, 1));
+        $this->assertNotContains('EMI', $policy->actions($package, 1));
+        $package['event_cd'] = 32;
+        $this->assertContains('EMI', $policy->actions($package, 1));
+        $package['event_cd'] = 75;
+        $this->assertNotContains('EMI', $policy->actions($package, 1));
+        $this->assertContains('EMG', $policy->actions($package, 1));
+    }
     public function test_state_zero_does_not_mean_counter_and_customs_return_does_not_mean_dispatch(): void
     {
         $p = new IpsStagePolicy;
@@ -22,7 +34,7 @@ class IpsStagePolicyTest extends TestCase
     {
         $p = new IpsStagePolicy;
         $item = ['event_cd'=>30, 'state_cd'=>0, 'office_cd'=>1,'destination_country'=>'BO'];
-        $this->assertSame(['EMG'], $p->actions($item, 1));
+        $this->assertSame([], $p->actions($item, 1));
         $this->assertSame([], $p->actions($item, 2));
         $item['event_cd'] = 35;
         $this->assertSame([], $p->actions($item, 1));
@@ -68,8 +80,8 @@ class IpsStagePolicyTest extends TestCase
             'event_cd' => 32, 'operational_event_cd' => 32, 'state_cd' => 0,
             'office_cd' => 20, 'operational_office_cd' => 20,
         ]);
-        $this->assertSame(['EDH', 'HANDOVER_AGENT', 'EMI'], $policy->actions($package, 20));
-        $package = array_replace($package, ['event_cd' => 74, 'operational_event_cd' => 74]);
+        $this->assertSame(['EDH', 'CUSTOMS_PRESENT', 'HANDOVER_AGENT', 'EMI'], $policy->actions($package, 20));
+        $package = array_replace($package, ['event_cd' => 74, 'operational_event_cd' => 74, 'destination_receipt_confirmed' => true]);
         $this->assertSame(['EMI', 'EMH'], $policy->actions($package, 20));
         $package = array_replace($package, ['event_cd' => 36, 'operational_event_cd' => 36]);
         $this->assertSame(['HANDOVER_AGENT'], $policy->actions($package, 20));

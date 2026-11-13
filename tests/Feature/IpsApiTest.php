@@ -128,6 +128,17 @@ class IpsApiTest extends TestCase
         $this->assertDatabaseCount('ips_operations', 0);
     }
 
+    public function test_delivery_rejects_the_former_combined_customs_return_shortcut(): void
+    {
+        $workflow = Mockery::mock(IpsWorkflowService::class);
+        $workflow->shouldNotReceive('execute');
+        $this->app->instance(IpsWorkflowService::class, $workflow);
+        $this->withToken($this->token(['ips.deliver']))->withHeader('Idempotency-Key', 'reject-combined-delivery-01')
+            ->postJson('/api/v1/ips/paquetes/TEST01/entrega', $this->delivery() + ['customs_return_confirmed' => true])
+            ->assertUnprocessable()->assertJsonValidationErrors('customs_return_confirmed');
+        $this->assertDatabaseCount('ips_operations', 0);
+    }
+
     public function test_delivery_requires_only_idempotency_before_autofill(): void
     {
         $this->withToken($this->token(['ips.deliver']))->postJson('/api/v1/ips/paquetes/TEST01/entrega', [])
@@ -236,6 +247,28 @@ class IpsApiTest extends TestCase
         $this->withToken($this->token(['ips.create']))->withHeader('Idempotency-Key', 'create-test-01');
         $this->postJson('/api/v1/ips/paquetes', ['codigo' => 'TEST01', 'event' => 'EMA'])
             ->assertUnprocessable()->assertJsonValidationErrors(['mail_class', 'origin_country', 'weight_kg', 'sender', 'recipient']);
+    }
+
+    public function test_l_letter_arrival_can_be_created_and_replayed_without_a_second_write(): void
+    {
+        $workflow = Mockery::mock(IpsWorkflowService::class);
+        $workflow->shouldReceive('execute')->once()->with('create', Mockery::on(fn ($input) =>
+            $input['event'] === 'EMG' && $input['codigo'] === 'LW945318163DE'
+            && $input['physical_receipt_confirmed'] === true && ! isset($input['receptacle_pid'])
+        ))->andReturn(['codigo' => 'LW945318163DE', 'event' => 'EMG', 'event_cd' => 32]);
+        $this->app->instance(IpsWorkflowService::class, $workflow);
+        $customer = ['name' => 'Prueba', 'address' => 'Calle', 'city' => 'Ciudad', 'country' => 'DE'];
+        $payload = [
+            'codigo' => 'LW945318163DE', 'event' => 'EMG', 'office_cd' => 1, 'actor_user_pid' => 73,
+            'occurred_at' => now('America/La_Paz')->format('Y-m-d\TH:i:sP'),
+            'mail_class' => 'U', 'origin_country' => 'DE', 'destination_country' => 'BO',
+            'weight_kg' => 0.140, 'physical_receipt_confirmed' => true,
+            'sender' => $customer, 'recipient' => array_replace($customer, ['country' => 'BO']),
+        ];
+        $this->withToken($this->token(['ips.create']))->withHeader('Idempotency-Key', 'letter-arrival-test-01');
+        $this->postJson('/api/v1/ips/paquetes', $payload)->assertCreated()->assertJsonPath('data.event_cd', 32);
+        $this->postJson('/api/v1/ips/paquetes', $payload)->assertCreated()->assertHeader('Idempotency-Replayed', 'true');
+        $this->assertDatabaseCount('ips_operations', 1);
     }
 
     public function test_web_routes_require_admin_and_old_cds_route_is_gone(): void

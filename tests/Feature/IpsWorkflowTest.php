@@ -64,15 +64,15 @@ class IpsWorkflowTest extends TestCase
         }
     }
 
-    private function repository(?object $item = null, string $code = 'EMI', bool $terminal = false, bool $compatible = true): IpsRepository
+    private function repository(?object $item = null, string $code = 'EMI', bool $terminal = false, bool $compatible = true, string $trackingCode = 'TEST01'): IpsRepository
     {
         $repo = Mockery::mock(IpsRepository::class);
         $connection = Mockery::mock(Connection::class);
         $connection->shouldReceive('transaction')->once()->andReturnUsing(fn ($callback) => $callback());
         $repo->shouldReceive('connection')->andReturn($connection);
         $repo->shouldReceive('assertReady')->once();
-        $repo->shouldReceive('lockCode')->once()->with('TEST01');
-        $repo->shouldReceive('find')->once()->with('TEST01', true)->andReturn($item);
+        $repo->shouldReceive('lockCode')->once()->with($trackingCode);
+        $repo->shouldReceive('find')->once()->with($trackingCode, true)->andReturn($item);
         if ($item && $code === 'EMI') {
             $repo->shouldReceive('ownOffice')->once()->with((int) $item->EVT_OFFICE_CD)->andReturn((object) ['OFFICE_NM' => 'LA PAZ LC/AO']);
         }
@@ -97,6 +97,7 @@ class IpsWorkflowTest extends TestCase
             'MAILITM_LOCAL_ID' => null, 'STATE_IND_CD' => 0, 'EVT_TYPE_CD' => 75,
             'EVT_GMT_DT' => '2026-01-01 12:00:00', 'EVT_OFFICE_CD' => 1, 'DEST_COUNTRY_CD' => 'BO',
             'ORIG_COUNTRY_CD' => 'US', 'MAILITM_WEIGHT' => '1.250', 'MAIL_CLASS_CD' => 'C',
+            'DESTINATION_RECEIPT_CONFIRMED' => true,
             'EVT_INNRBAG_PID' => null, 'EVT_RECPTCL_PID' => null,
         ], $changes);
     }
@@ -167,7 +168,7 @@ class IpsWorkflowTest extends TestCase
     {
         $repo = $this->repository($this->item(['EVT_TYPE_CD' => 31]));
         $repo->shouldNotReceive('callProcedure');
-        $this->expectExceptionMessage('no está habilitada');
+        $this->expectExceptionMessage('Primero debes recibir');
         (new IpsWorkflowService($repo))->execute('event', $this->input(['expected_event_cd' => 31]));
     }
 
@@ -175,7 +176,7 @@ class IpsWorkflowTest extends TestCase
     {
         $repo = $this->repository($this->item());
         $repo->shouldNotReceive('callProcedure');
-        $this->expectExceptionMessage('oficina actual');
+        $this->expectExceptionMessage('Primero debes recibir');
         (new IpsWorkflowService($repo))->execute('event', $this->input(['office_cd' => 2]));
     }
 
@@ -211,6 +212,95 @@ class IpsWorkflowTest extends TestCase
             'weight_kg' => 1.25, 'sender' => $customer, 'recipient' => $customer,
         ]));
         $this->assertSame(1, $result['event_cd']);
+    }
+
+    private function letterInput(): array
+    {
+        $customer = ['name' => 'Prueba', 'address' => 'Calle', 'city' => 'Ciudad', 'country' => 'DE'];
+        return $this->input([
+            'codigo' => 'LW945318163DE', 'event' => 'EMG', 'mail_class' => 'U',
+            'origin_country' => 'DE', 'destination_country' => 'BO', 'weight_kg' => 0.140,
+            'actor_user_pid' => 73, 'physical_receipt_confirmed' => true,
+            'sender' => $customer, 'recipient' => array_replace($customer, ['country' => 'BO']),
+        ]);
+    }
+
+    public function test_unregistered_l_letter_can_be_created_on_physical_arrival_and_then_delivered(): void
+    {
+        $repo = $this->repository(code: 'EMG', trackingCode: 'LW945318163DE');
+        $repo->shouldReceive('user')->once()->with(73)->andReturn(['office_cd' => 2, 'offices' => [['office_cd' => 1]]]);
+        $repo->shouldReceive('callProcedure')->once()->with('SP_SET_MAILITM', Mockery::on(fn ($p) =>
+            $p['FId'] === 'LW945318163DE' && $p['EventType'] === 32 && $p['Office'] === 1
+            && $p['User'] === 73 && $p['DestCountry'] === 'BO' && $p['ReceptaclePId'] === null
+        ));
+        $repo->shouldReceive('callProcedure')->twice()->with('SP_SET_MAILITM_CUSTOMERS', Mockery::type('array'));
+        $repo->shouldReceive('verifyWrite')->once();
+        $result = (new IpsWorkflowService($repo))->execute('create', $this->letterInput());
+        $this->assertSame(32, $result['event_cd']);
+        $policy = app(\App\Services\IpsStagePolicy::class);
+        $this->assertContains('EMI', $policy->actions([
+            'event_cd' => 32, 'state_cd' => 0, 'office_cd' => 1, 'destination_country' => 'BO',
+        ], 1));
+    }
+
+    public static function invalidLetterCreations(): array
+    {
+        return [
+            [['physical_receipt_confirmed' => false], 'físicamente'],
+            [['codigo' => 'CP556326695CN'], 'envíos L'],
+            [['origin_country' => 'BO'], 'envíos L'],
+            [['destination_country' => 'US'], 'envíos L'],
+            [['actor_user_pid' => null], 'usuario IPS'],
+        ];
+    }
+
+    #[DataProvider('invalidLetterCreations')]
+    public function test_invalid_letter_creation_never_writes(array $changes, string $message): void
+    {
+        $input = array_replace($this->letterInput(), $changes);
+        $repo = $this->repository(code: 'EMG', trackingCode: $input['codigo']);
+        $repo->shouldNotReceive('callProcedure');
+        $this->expectExceptionMessage($message);
+        (new IpsWorkflowService($repo))->execute('create', $input);
+    }
+
+    public function test_letter_creation_requires_the_office_to_belong_to_the_linked_actor(): void
+    {
+        $repo = $this->repository(code: 'EMG', trackingCode: 'LW945318163DE');
+        $repo->shouldReceive('user')->once()->with(73)->andReturn(['office_cd' => 2]);
+        $repo->shouldNotReceive('callProcedure');
+        $this->expectExceptionMessage('usuario IPS vinculado');
+        (new IpsWorkflowService($repo))->execute('create', $this->letterInput());
+    }
+
+    public function test_l_letter_delivery_records_emi_and_the_recipient_in_ips(): void
+    {
+        $repo = $this->repository($this->item(['MAILITM_FID' => 'LW945318163DE', 'EVT_TYPE_CD' => 32]), trackingCode: 'LW945318163DE');
+        $repo->shouldReceive('callProcedure')->once()->with('SP_SET_MAILITM', Mockery::on(fn ($p) =>
+            $p['FId'] === 'LW945318163DE' && $p['EventType'] === 37
+            && $p['Signatory'] === 'Receptor' && (int) $p['StateInd'] === 5
+        ));
+        $repo->shouldReceive('verifyWrite')->once();
+        $result = (new IpsWorkflowService($repo))->execute('event', $this->input([
+            'codigo' => 'LW945318163DE', 'expected_event_cd' => 32, 'delivery_mode' => 'NO_DOMICILIARIA',
+        ]));
+        $this->assertSame(37, $result['event_cd']);
+    }
+
+    public static function deliveryWithoutReceipt(): array
+    {
+        return [[35, 0], [31, 1], [34, 1], [38, 0], [74, 0], [75, 0]];
+    }
+
+    #[DataProvider('deliveryWithoutReceipt')]
+    public function test_ips_never_writes_delivery_without_destination_reception(int $event, int $state): void
+    {
+        $repo = $this->repository($this->item([
+            'EVT_TYPE_CD' => $event, 'STATE_IND_CD' => $state, 'DESTINATION_RECEIPT_CONFIRMED' => false,
+        ]));
+        $repo->shouldNotReceive('callProcedure');
+        $this->expectExceptionMessage('Primero debes recibir');
+        (new IpsWorkflowService($repo))->execute('event', $this->input(['expected_event_cd' => $event]));
     }
 
     public function test_receipt_requires_physical_confirmation_and_uses_linked_actor(): void

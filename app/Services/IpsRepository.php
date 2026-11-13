@@ -1101,6 +1101,7 @@ class IpsRepository
                 && Carbon::parse($e->EVENT_GMT_DT, 'UTC')->equalTo(Carbon::parse($row->EVT_GMT_DT, 'UTC')));
             $row->OP_EVENT_CD = $op?->EVENT_TYPE_CD ?? $row->EVT_TYPE_CD;
             $row->OP_OFFICE_CD = $op?->EVENT_OFFICE_CD ?? $row->EVT_OFFICE_CD;
+            $row->DESTINATION_RECEIPT_CONFIRMED = \App\Support\IpsDeliveryReceipt::fromHistory($history, (int) $row->OP_OFFICE_CD);
             $row->EVT_LOCAL_OFFSET = $currentEvent?->EVENT_LOCAL_OFFSET;
             $row->NEXT_OFFICE_CD = $op?->NEXT_OFFICE_CD;
             $row->OFFICE_NM = $offices->get($row->OP_OFFICE_CD)?->OFFICE_NM;
@@ -1142,6 +1143,7 @@ class IpsRepository
             'stage' => $stage,
             'operational_event_cd' => (int) ($item->OP_EVENT_CD ?? $item->EVT_TYPE_CD),
             'operational_office_cd' => (int) ($item->OP_OFFICE_CD ?? $item->EVT_OFFICE_CD),
+            'destination_receipt_confirmed' => (bool) ($item->DESTINATION_RECEIPT_CONFIRMED ?? false),
             'next_office_cd' => isset($item->NEXT_OFFICE_CD) ? (int) $item->NEXT_OFFICE_CD : null,
             'next_office_name' => trim($item->NEXT_OFFICE_NM ?? ''),
             'receipt_office_cds' => array_values(array_map('intval', $item->RECEIPT_OFFICE_CDS ?? [])),

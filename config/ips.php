@@ -61,11 +61,11 @@ return [
         'HANDOVER_AGENT' => ['events' => [32, 36, 38], 'states' => [0]],
         'EDG' => ['events' => [39], 'states' => [0]],
         'EMH' => ['events' => [74], 'states' => [0, 8]],
-        'EMI' => ['events' => [32, 38, 74, 75], 'states' => [0, 8], 'pairs' => [[31, 1], [34, 1]]],
+        'EMI' => ['events' => [32, 74, 75], 'states' => [0, 8]],
         'CUSTOMS_RETURN' => ['events' => [31, 34, 1251], 'states' => [1]],
     ],
     'exchange_receipt_candidate_events' => [1, 2, 3, 8, 14, 15],
-    // Confirmación compuesta desde Almacén: devolución física de Aduana seguida de entrega.
+    // El retorno de Aduana no reemplaza la recepción en destino (32) ni la entrega (37).
     'customs_return_event' => ['id' => 38, 'direction' => 'I', 'result_state' => 0],
     // Receipt requires physical confirmation and office routing; 35 is not mandatory.
     'reception_candidate_events' => [13, 30, 33, 35, 38, 42, 43, 44, 71, 72],
