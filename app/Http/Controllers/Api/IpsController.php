@@ -23,8 +23,28 @@ class IpsController extends Controller
                 'delivery_agent_cd' => 'Filtra por oficina y por paquetes de almacén para consultar la bandeja de un cartero.',
             ]);
         }
+        if (isset($filters['recipient_address_q'])
+            && (($filters['status'] ?? null) !== 'warehouse' || ! isset($filters['office_cd']))) {
+            throw ValidationException::withMessages([
+                'recipient_address_q' => 'Busca por destinatario o dirección dentro de una oficina y de los paquetes de almacén.',
+            ]);
+        }
+        if (isset($filters['local_codes']) && ! isset($filters['recipient_address_q'])) {
+            throw ValidationException::withMessages([
+                'local_codes' => 'Los códigos locales solo pueden acompañar una búsqueda de destinatario o dirección.',
+            ]);
+        }
         if (isset($filters['delivery_agent_cd'])) {
             $filters['delivery_agent_cd'] = strtoupper($filters['delivery_agent_cd']);
+        }
+        if (isset($filters['recipient_address_q'])) {
+            $filters['recipient_address_q'] = trim($filters['recipient_address_q']);
+        }
+        if (isset($filters['local_codes'])) {
+            $filters['local_codes'] = array_values(array_unique(array_map(
+                fn ($code) => strtoupper(trim($code)),
+                $filters['local_codes']
+            )));
         }
         if ($request->route()->defaults['ips_pending'] ?? false) {
             $filters['status'] = 'pending';
@@ -38,6 +58,9 @@ class IpsController extends Controller
         return [
             'status' => ['nullable', 'in:all,pending,reception,returns,delivered,warehouse'],
             'q' => ['nullable', 'string', 'max:35'],
+            'recipient_address_q' => ['nullable', 'string', 'min:2', 'max:100'],
+            'local_codes' => ['nullable', 'array', 'max:50000'],
+            'local_codes.*' => ['string', 'max:35', 'regex:/^[A-Za-z0-9-]+$/'],
             'office_cd' => ['nullable', 'integer', 'min:0', 'max:32767'],
             'event_cd' => ['nullable'],
             'event_cd.*' => ['integer', 'min:1', 'max:32767'],

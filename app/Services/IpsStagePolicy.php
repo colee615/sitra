@@ -6,7 +6,9 @@ namespace App\Services;
 class IpsStagePolicy
 {
     public const TECHNICAL_EVENTS = [41, 60, 61, 62, 63, 64, 65, 66, 67, 79];
-    public const BOLIVIAN_INBOUND_PROGRESS_EVENTS = [13, 32, 35, 36, 38, 39, 74, 75];
+    public const BOLIVIAN_INBOUND_PROGRESS_EVENTS = [13, 32, 35, 36, 38, 39, 74, 75, 1251];
+    // IA0, IA1 and IA9 authorize import; IA1 may still require duties to be collected.
+    public const CUSTOMS_RELEASE_RETURN_STATUSES = ['IA0', 'IA1', 'IA9'];
 
     public function describe(int $event, ?int $state, bool $terminal = false): array
     {
@@ -56,12 +58,42 @@ class IpsStagePolicy
             && $nextOffice !== $office;
     }
 
-    public function actions(array $package, int $office, bool $routeMismatchConfirmed = false): array
+    /**
+     * An international item with no registered destination may be received
+     * only as a physically confirmed event 32 at an office explicitly chosen
+     * by the operator. This is not a route repair and must not infer a country.
+     */
+    public function isUnregisteredDestinationReceiptCandidate(array $package): bool
+    {
+        $event = (int) ($package['operational_event_cd'] ?? $package['event_cd'] ?? 0);
+        $state = isset($package['state_cd']) ? (int) $package['state_cd'] : null;
+        $origin = strtoupper(trim((string) ($package['origin_country'] ?? '')));
+
+        return $event === 30
+            && $state === 0
+            && trim((string) ($package['destination_country'] ?? '')) === ''
+            && empty($package['destination_country_inferred'])
+            && $origin !== ''
+            && $origin !== config('ips.destination_country')
+            && empty($package['terminal']);
+    }
+
+    public function actions(
+        array $package,
+        int $office,
+        bool $routeMismatchConfirmed = false,
+        bool $unregisteredDestinationReceiptConfirmed = false
+    ): array
     {
         $event = (int) ($package['operational_event_cd'] ?? $package['event_cd']);
         $state = $package['state_cd'];
         $currentOffice = (int) ($package['operational_office_cd'] ?? $package['office_cd']);
         $next = $package['next_office_cd'] ?? null;
+        if ($unregisteredDestinationReceiptConfirmed
+            && $office > 0
+            && $this->isUnregisteredDestinationReceiptCandidate($package)) {
+            return ['EMG'];
+        }
         if (($package['destination_country'] ?? '') === 'BO' && empty($package['terminal'])) {
             if (($package['origin_country'] ?? '') !== 'BO'
                 && in_array($event, config('ips.exchange_receipt_candidate_events', []), true)
@@ -77,10 +109,19 @@ class IpsStagePolicy
                 // An item observed by Customs may return only from the open sack/office that holds it.
                 return ['CUSTOMS_RETURN'];
             }
+            if ($event === 1251 && $state === 1 && $currentOffice !== $office && $next !== null && (int) $next === $office) {
+                // A national sack can carry a customs-observed LX item to its destination.
+                // The destination operator records the actual customs outcome (34).
+                return ['CUSTOMS_INFO'];
+            }
             if ($event === 31 && $state === 1 && $currentOffice === $office) {
                 return ['CUSTOMS_INFO', 'CUSTOMS_RETURN'];
             }
             if ($event === 34 && $state === 1 && $currentOffice === $office) {
+                if (! empty($package['destination_customs_route'])
+                    && ! in_array(strtoupper(trim((string) ($package['customs_release_status_cd'] ?? ''))), self::CUSTOMS_RELEASE_RETURN_STATUSES, true)) {
+                    return [];
+                }
                 return ['CUSTOMS_RETURN'];
             }
             if ($event === 38 && $state === 0 && $currentOffice === $office) {

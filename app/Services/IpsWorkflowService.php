@@ -119,7 +119,7 @@ class IpsWorkflowService
 
     private function validateTransition(string $action, array $input, ?object $item, object $event, array $definition): void
     {
-        $this->validatePostalExtras($input);
+        $this->validatePostalExtras($input, $item);
         if ($action === 'create') {
             // Unregistered tracked letters can first be captured at the delivery office.
             // Record the actual arrival (32), without inventing exchange or dispatch events.
@@ -206,6 +206,7 @@ class IpsWorkflowService
         $customsEvents = ['CUSTOMS_PRESENT', 'CUSTOMS_INFO', 'CUSTOMS_RETURN'];
         $destinationCountry = trim((string) ($item->DEST_COUNTRY_CD ?? ''));
         $currentPackage = $this->ips->present($item);
+        $stagePolicy = app(IpsStagePolicy::class);
         if ($destinationCountry === '' && ! empty($currentPackage['destination_country_inferred'])) {
             $destinationCountry = (string) $currentPackage['destination_country'];
         }
@@ -216,7 +217,16 @@ class IpsWorkflowService
             // A verified import-to-domestic history (or CDS declaration) repairs the blank field with the next valid IPS event.
             $item->DEST_COUNTRY_CD = $destinationCountry;
         }
-        if ($definition['direction'] === 'I' && $destinationCountry !== config('ips.destination_country')) {
+        $unregisteredDestinationReceiptConfirmed = $input['event'] === 'EMG'
+            && ! empty($input['unregistered_destination_receipt_confirmed']);
+        if ($unregisteredDestinationReceiptConfirmed
+            && (empty($input['physical_receipt_confirmed'])
+                || ! $stagePolicy->isUnregisteredDestinationReceiptCandidate($currentPackage))) {
+            throw new IpsOperationException('La recepción manual solo aplica a un envío internacional en evento 30, estado 0 y sin destino registrado; confirme además su llegada física.', 409);
+        }
+        if ($definition['direction'] === 'I'
+            && $destinationCountry !== config('ips.destination_country')
+            && ! $unregisteredDestinationReceiptConfirmed) {
             throw new IpsOperationException('Este flujo de entrega solo opera envíos con destino Bolivia.');
         }
         if (isset($input['actor_user_pid'])) {
@@ -236,13 +246,12 @@ class IpsWorkflowService
                 $package['destination_country'] = $destinationCountry;
             }
             $requiredAction = $input['event'];
-            $stagePolicy = app(IpsStagePolicy::class);
             $routeMismatchConfirmed = $input['event'] === 'EMG' && ! empty($input['route_mismatch_confirmed']);
             if ($routeMismatchConfirmed && ! $stagePolicy->isRouteMismatchReceiptCandidate($package, (int) $input['office_cd'])) {
                 throw new IpsOperationException('La confirmación de ruta distinta no corresponde a este paquete y oficina.', 409);
             }
             $allowedActions = $input['event'] === 'EMG'
-                ? $stagePolicy->actions($package, (int) $input['office_cd'], $routeMismatchConfirmed)
+                ? $stagePolicy->actions($package, (int) $input['office_cd'], $routeMismatchConfirmed, $unregisteredDestinationReceiptConfirmed)
                 : $stagePolicy->actions($package, (int) $input['office_cd']);
             if (! in_array($requiredAction, $allowedActions, true)) {
                 throw new IpsOperationException('La etapa u oficina actual no está habilitada para esta operación.');
@@ -268,6 +277,12 @@ class IpsWorkflowService
             }
             if ($input['event'] === 'CUSTOMS_RETURN' && empty($input['physical_receipt_confirmed'])) {
                 throw new IpsOperationException('Confirme que el paquete retornó físicamente desde Aduana.', 422);
+            }
+            if ($input['event'] === 'CUSTOMS_INFO'
+                && (int) ($package['operational_event_cd'] ?? 0) === 1251
+                && (int) ($package['next_office_cd'] ?? -1) === (int) $input['office_cd']
+                && empty($input['physical_receipt_confirmed'])) {
+                throw new IpsOperationException('Confirme que el envío llegó físicamente a la oficina de destino antes de registrar el resultado aduanero.', 422);
             }
         }
         if (in_array($input['event'], ['EDN', 'EIB'], true)) {
@@ -302,7 +317,7 @@ class IpsWorkflowService
         }
     }
 
-    private function validatePostalExtras(array $input): void
+    private function validatePostalExtras(array $input, ?object $item = null): void
     {
         if (in_array($input['event'], ['EMR', 'EMD'], true)) {
             if (! $this->ips->reference('C_ITEM_CONDITIONS', 'ITEM_CONDITION_CD', (int) $input['condition_cd'], false)) {
@@ -325,7 +340,13 @@ class IpsWorkflowService
             && ! $this->ips->isDeliveryAgentAllowedAtOffice((int) $input['delivery_agent_cd'], (int) $input['office_cd'])) {
             throw new IpsOperationException('El cartero no está vigente o no pertenece a la regional de esta oficina.', 422);
         }
-        if (in_array($input['event'], ['EMR', 'EMD', 'CUSTOMS_RETURN'], true) && ! empty($input['receptacle_pid'])) {
+        $destinationCustomsReturn = $input['event'] === 'CUSTOMS_RETURN'
+            && $item
+            && (bool) ($this->ips->present($item)['destination_customs_route'] ?? false);
+        if (in_array($input['event'], ['EMR', 'EMD'], true) && ! empty($input['receptacle_pid'])) {
+            $this->ips->assertOpenInboundReceptacle((string) $input['receptacle_pid'], (int) $input['office_cd']);
+        }
+        if ($input['event'] === 'CUSTOMS_RETURN' && ! $destinationCustomsReturn && ! empty($input['receptacle_pid'])) {
             $this->ips->assertOpenInboundReceptacle((string) $input['receptacle_pid'], (int) $input['office_cd']);
         }
     }

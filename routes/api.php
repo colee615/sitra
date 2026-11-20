@@ -19,6 +19,7 @@ Route::prefix('v1/ips')->middleware(['auth:sanctum', 'throttle:60,1'])->group(fu
         Route::get('usuarios', [IpsController::class, 'users']);
         Route::get('usuarios/{pid}', [IpsController::class, 'user'])->whereNumber('pid');
         Route::get('paquetes', [IpsController::class, 'index']);
+        Route::post('paquetes/buscar', [IpsController::class, 'index']);
         Route::get('paquetes/pendientes-entrega', [IpsController::class, 'index'])->defaults('ips_pending', true);
         Route::get('envases-pendientes-recepcion', [IpsController::class, 'expectedInboundReceptacles']);
         Route::get('envases-pendientes-apertura', [IpsController::class, 'pendingReceptacleOpenings']);

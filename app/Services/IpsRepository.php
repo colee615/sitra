@@ -147,7 +147,7 @@ class IpsRepository
         $latest = $db->table('dbo.L_MAILITM_EVENTS')
             ->whereNotIn('EVENT_TYPE_CD', IpsStagePolicy::TECHNICAL_EVENTS);
         $query = $db->table('dbo.L_MAILITMS as m');
-        if (($pageQuery || ! empty($filters['q'])) && $db->getDriverName() === 'sqlsrv') {
+        if (($pageQuery || ! empty($filters['q']) || ! empty($filters['recipient_address_q']) || ! empty($filters['local_codes'])) && $db->getDriverName() === 'sqlsrv') {
             // Seek each item's indexed history instead of sorting the entire event table.
             $latest->whereColumn('MAILITM_PID', 'm.MAILITM_PID')
                 ->orderByDesc('EVENT_GMT_DT')->orderByDesc('EVENT_TYPE_CD')
@@ -278,9 +278,47 @@ class IpsRepository
                 });
             }
         }
-        if (! empty($filters['q'])) {
-            $code = strtoupper(trim($filters['q']));
-            $query->where(fn ($q) => $q->where('m.MAILITM_FID', $code)->orWhere('m.MAILITM_LOCAL_ID', $code));
+        $codeSearch = strtoupper(trim((string) ($filters['q'] ?? '')));
+        $recipientAddressSearch = trim((string) ($filters['recipient_address_q'] ?? ''));
+        $localCodes = array_values(array_filter((array) ($filters['local_codes'] ?? []), fn ($code) => is_string($code) && $code !== ''));
+        if ($recipientAddressSearch !== '' || $localCodes !== []) {
+            $like = '%'.$recipientAddressSearch.'%';
+            $query->where(function ($matches) use ($db, $codeSearch, $recipientAddressSearch, $localCodes, $like) {
+                if ($codeSearch !== '') {
+                    $matches->where(fn ($exactCode) => $exactCode->where('m.MAILITM_FID', $codeSearch)
+                        ->orWhere('m.MAILITM_LOCAL_ID', $codeSearch));
+                }
+                if ($recipientAddressSearch !== '') {
+                    $customerSearch = function ($customer) use ($like) {
+                        $customer->selectRaw('1')->from('dbo.L_MAILITM_CUSTOMERS as recipient')
+                            ->whereColumn('recipient.MAILITM_PID', 'm.MAILITM_PID')
+                            ->where('recipient.SENDER_PAYEE_IND', 'A')
+                            ->where(function ($fields) use ($like) {
+                                $fields->whereRaw("CONCAT(COALESCE(recipient.CUSTOMER_FORENAME, ''), ' ', COALESCE(recipient.CUSTOMER_NAME, '')) LIKE ?", [$like])
+                                    ->orWhere('recipient.CUSTOMER_ADDRESS', 'like', $like);
+                            });
+                    };
+                    $codeSearch !== '' || $localCodes !== []
+                        ? $matches->orWhereExists($customerSearch)
+                        : $matches->whereExists($customerSearch);
+                }
+                if ($localCodes !== []) {
+                    $jsonCodes = json_encode($localCodes, JSON_THROW_ON_ERROR);
+                    if ($db->getDriverName() === 'sqlsrv') {
+                        $method = $codeSearch !== '' || $recipientAddressSearch !== '' ? 'orWhereRaw' : 'whereRaw';
+                        $matches->{$method}(
+                            'EXISTS (SELECT 1 FROM OPENJSON(?) AS local_code WHERE local_code.[value] = m.MAILITM_FID OR local_code.[value] = m.MAILITM_LOCAL_ID)',
+                            [$jsonCodes]
+                        );
+                    } else {
+                        $method = $codeSearch !== '' || $recipientAddressSearch !== '' ? 'orWhereIn' : 'whereIn';
+                        $matches->{$method}('m.MAILITM_FID', $localCodes)
+                            ->orWhereIn('m.MAILITM_LOCAL_ID', $localCodes);
+                    }
+                }
+            });
+        } elseif ($codeSearch !== '') {
+            $query->where(fn ($q) => $q->where('m.MAILITM_FID', $codeSearch)->orWhere('m.MAILITM_LOCAL_ID', $codeSearch));
         }
         if (isset($filters['event_cd'])) {
             // Workflow pages filter by the last operational milestone even
@@ -925,7 +963,7 @@ class IpsRepository
         $package = $this->present($item);
         $package['operation_office_cds'] = match ($package['operational_event_cd']) {
             30, 35 => [$package['operational_office_cd']],
-            13 => $package['next_office_cd'] ? [(int) $package['next_office_cd']] : [],
+            13, 1251 => $package['next_office_cd'] ? [(int) $package['next_office_cd']] : [],
             default => $package['origin_country'] !== 'BO'
                 && in_array($package['operational_event_cd'], config('ips.exchange_receipt_candidate_events', []), true)
                 && in_array($package['state_cd'], [0, 2, 3], true)
@@ -943,8 +981,8 @@ class IpsRepository
             'package' => $package,
             'events' => $this->connection()->table('dbo.L_MAILITM_EVENTS as e')
                 ->leftJoin('dbo.C_EVENT_TYPES as t', 't.EVENT_TYPE_CD', '=', 'e.EVENT_TYPE_CD')
-                ->where('e.MAILITM_PID', $item->MAILITM_PID)->orderByDesc('e.EVENT_GMT_DT')
-                ->get(['e.EVENT_TYPE_CD', 'e.EVENT_GMT_DT', 'e.EVENT_LOCAL_OFFSET', 'e.EVENT_OFFICE_CD', 't.EVENT_TYPE_NM'])
+                ->where('e.MAILITM_PID', $item->MAILITM_PID)->orderByDesc('e.EVENT_GMT_DT')->orderByDesc('e.EVENT_TYPE_CD')
+                ->get(['e.EVENT_TYPE_CD', 'e.EVENT_GMT_DT', 'e.EVENT_LOCAL_OFFSET', 'e.EVENT_OFFICE_CD', 'e.CUSTOMS_RELEASE_STATUS_CD', 'e.NEXT_OFFICE_CD', 't.EVENT_TYPE_NM'])
                 ->map(function ($event) {
                     return (object) array_merge(
                         (array) $event,
@@ -1111,10 +1149,27 @@ class IpsRepository
             $row->DELIVERY_AGENT_CD = $latestAssignment?->DELIVERY_AGENT_CD !== null
                 ? trim((string) $latestAssignment->DELIVERY_AGENT_CD)
                 : null;
+            $previousOperational = $op
+                ? $history->first(function ($event) use ($op) {
+                    if (in_array((int) $event->EVENT_TYPE_CD, IpsStagePolicy::TECHNICAL_EVENTS, true)) {
+                        return false;
+                    }
+                    $eventAt = Carbon::parse($event->EVENT_GMT_DT, 'UTC');
+                    $operationalAt = Carbon::parse($op->EVENT_GMT_DT, 'UTC');
+
+                    return $eventAt->lessThan($operationalAt)
+                        || ($eventAt->equalTo($operationalAt) && (int) $event->EVENT_TYPE_CD < (int) $op->EVENT_TYPE_CD);
+                })
+                : null;
+            $row->DESTINATION_CUSTOMS_ROUTE = (int) ($op?->EVENT_TYPE_CD ?? 0) === 34
+                && (int) ($op?->EVENT_OFFICE_CD ?? -1) === (int) ($previousOperational?->NEXT_OFFICE_CD ?? -2)
+                && (int) ($previousOperational?->EVENT_TYPE_CD ?? 0) === 1251
+                && (int) ($previousOperational?->EVENT_OFFICE_CD ?? -1) !== (int) ($op?->EVENT_OFFICE_CD ?? -2);
+            $row->CUSTOMS_RELEASE_STATUS_CD = $currentEvent?->CUSTOMS_RELEASE_STATUS_CD;
         }
 
         foreach ($rows as $row) {
-            $row->RECEIPT_OFFICE_CDS = (int) $row->OP_EVENT_CD === 13 && $row->NEXT_OFFICE_CD !== null
+            $row->RECEIPT_OFFICE_CDS = in_array((int) $row->OP_EVENT_CD, [13, 1251], true) && $row->NEXT_OFFICE_CD !== null
                 ? [(int) $row->NEXT_OFFICE_CD]
                 : [];
         }
@@ -1154,6 +1209,8 @@ class IpsRepository
             'mail_class' => trim($item->MAIL_CLASS_CD ?? ''),
             'product_type' => trim($item->PRODUCT_TYPE_CD ?? ''),
             'dutiable_ind' => $item->DUTIABLE_IND ?? null,
+            'customs_release_status_cd' => isset($item->CUSTOMS_RELEASE_STATUS_CD) ? trim((string) $item->CUSTOMS_RELEASE_STATUS_CD) : null,
+            'destination_customs_route' => (bool) ($item->DESTINATION_CUSTOMS_ROUTE ?? false),
             'postal_status_cd' => isset($item->POSTAL_STATUS_CD) ? (int) $item->POSTAL_STATUS_CD : null,
             'id' => $item->MAILITM_PID,
             'codigo' => trim($item->MAILITM_FID),

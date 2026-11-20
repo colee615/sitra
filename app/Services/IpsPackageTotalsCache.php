@@ -13,7 +13,7 @@ class IpsPackageTotalsCache
     {
         $ttl = max(0, (int) config('ips.totals_cache_seconds', 30));
         // Exact searches and all operational data are always read directly from IPS.
-        if ($ttl === 0 || ! empty($filters['q'])) {
+        if ($ttl === 0 || ! empty($filters['q']) || ! empty($filters['recipient_address_q']) || ! empty($filters['local_codes'])) {
             return (int) $count();
         }
         $scope = array_intersect_key($filters, array_flip(['status', 'office_cd', 'event_cd', 'action_cd', 'actor_user_pid', 'delivery_agent_cd', 'from', 'to']));
